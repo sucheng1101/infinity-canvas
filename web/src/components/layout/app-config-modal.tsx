@@ -1,6 +1,6 @@
 import { App, Button, Form, Input, Modal, Progress, Select, Tabs } from "antd";
 import type { TFunction } from "i18next";
-import { Cloud, Download, Pencil, Plus, RefreshCw, Trash2, Upload, Wifi } from "lucide-react";
+import { Cloud, Download, KeyRound, RefreshCw, Upload, Wifi } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -13,7 +13,7 @@ import { exportAppConfig, importAppConfig } from "@/services/config-file";
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
-import { createModelChannel, modelOptionsFromChannels, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore, type AiConfig, type ApiCallFormat, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import { normalizeAiConfig, useConfigStore, type AiConfig, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 
 type ModelGroup = {
     capability: ModelCapability;
@@ -93,20 +93,6 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
 
     const updateChannels = (channels: ModelChannel[]) => saveConfig(withChannels(config, channels));
 
-    const addChannel = () => {
-        const channel = createModelChannel({ name: t("config.channels.numberedName", { count: config.channels.length + 1 }) });
-        updateChannels([...config.channels, channel]);
-        setEditingChannelId(channel.id);
-    };
-
-    const deleteChannel = (id: string) => {
-        if (config.channels.length <= 1) {
-            message.warning(t("config.channels.keepOne"));
-            return;
-        }
-        updateChannels(config.channels.filter((channel) => channel.id !== id));
-    };
-
     const saveChannel = (channel: ModelChannel) => {
         updateChannels(config.channels.map((item) => (item.id === channel.id ? channel : item)));
     };
@@ -184,26 +170,20 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         label: t("config.tabs.channels"),
                         children: (
                             <div>
-                                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                                    <div className="text-xs text-stone-500">{t("config.channels.description")}</div>
-                                    <Button type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>
-                                        {t("config.channels.add")}
-                                    </Button>
-                                </div>
+                                <div className="mb-4 text-xs text-stone-500">{t("config.channels.description")}</div>
                                 <div className="space-y-2">
                                     {config.channels.map((channel) => (
                                         <div key={channel.id} className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-4 py-3 dark:border-stone-800">
                                             <div className="min-w-0">
                                                 <div className="truncate text-sm font-semibold">{channel.name || t("config.channels.unnamed")}</div>
                                                 <div className="mt-1 truncate text-xs text-stone-500">
-                                                    {apiFormatLabel(channel.apiFormat)} · {t("config.channels.modelCount", { count: channel.models.length })} · {channel.baseUrl || t("config.channels.missingUrl")}
+                                                    OpenAI · {t("config.channels.modelCount", { count: channel.models.length })} · {channel.baseUrl}
                                                 </div>
                                             </div>
                                             <div className="flex shrink-0 gap-2">
-                                                <Button size="small" icon={<Pencil className="size-3.5" />} onClick={() => setEditingChannelId(channel.id)}>
+                                                <Button size="small" icon={<KeyRound className="size-3.5" />} onClick={() => setEditingChannelId(channel.id)}>
                                                     {t("common.edit")}
                                                 </Button>
-                                                <Button size="small" danger icon={<Trash2 className="size-3.5" />} onClick={() => deleteChannel(channel.id)} />
                                             </div>
                                         </div>
                                     ))}
@@ -357,36 +337,11 @@ export function AppConfigModal() {
 }
 
 function withChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
-    const next: AiConfig = {
-        ...config,
-        channels,
-        models: modelOptionsFromChannels(channels),
-        baseUrl: channels[0]?.baseUrl || config.baseUrl,
-        apiKey: channels[0]?.apiKey || config.apiKey,
-        apiFormat: channels[0]?.apiFormat || config.apiFormat,
-    };
-    return {
-        ...next,
-        imageModel: pickDefaultModel(next, "image", config.imageModel),
-        videoModel: pickDefaultModel(next, "video", config.videoModel),
-        textModel: pickDefaultModel(next, "text", config.textModel),
-        audioModel: pickDefaultModel(next, "audio", config.audioModel),
-    };
-}
-
-function pickDefaultModel(config: AiConfig, capability: ModelCapability, current: string) {
-    const options = selectableModelsByCapability(config, capability);
-    const normalized = normalizeModelOptionValue(current, config.channels);
-    return options.includes(normalized) ? normalized : options[0] || "";
+    return normalizeAiConfig({ ...config, channels });
 }
 
 function normalizeImageCount(value: string) {
     return String(Math.max(1, Math.min(15, Math.floor(Math.abs(Number(value)) || 3))));
-}
-
-function apiFormatLabel(apiFormat: ApiCallFormat) {
-    if (apiFormat === "gemini") return "Gemini";
-    return "OpenAI";
 }
 
 function formatWebdavTime(value: string, locale: AppLocale) {

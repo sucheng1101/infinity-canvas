@@ -448,7 +448,7 @@ export default {
         saved: "Settings saved",
         savedContinue: "Settings saved. Continue with your previous request.",
         channels: {
-            description: "Choose a protocol for each provider, fetch its models, assign capabilities, and optionally customize request scripts.",
+            description: "Providers are fixed to codex.helpapis.com and helpapis.com. Enter an API key, then fetch models, assign capabilities, or customize request scripts.",
             add: "Add provider",
             unnamed: "Unnamed provider",
             numberedName: "Provider {{count}}",
@@ -480,7 +480,7 @@ export default {
             systemPromptPlaceholder: "For example: You are a visual director specializing in cinematic, photorealistic imagery.",
         },
         channelEditor: {
-            title: "Edit provider",
+            title: "Configure provider",
             name: "Provider name",
             protocol: "Protocol",
             baseUrl: "API endpoint",

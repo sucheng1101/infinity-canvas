@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
-import { createModelChannel, useConfigStore } from "@/stores/use-config-store";
+import { useConfigStore } from "@/stores/use-config-store";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
@@ -28,23 +28,16 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         searchParams.delete("apiKey");
         searchParams.delete("apikey");
         window.history.replaceState(null, "", `${window.location.pathname}${searchParams.size ? `?${searchParams}` : ""}${window.location.hash}`);
-        const firstChannel = config.channels[0];
+        const normalizedBaseUrl = baseUrl?.trim().replace(/\/+$/, "").toLowerCase();
+        const targetIndex = baseUrl ? config.channels.findIndex((channel) => channel.baseUrl.toLowerCase() === normalizedBaseUrl) : 0;
+        if (targetIndex < 0) {
+            openConfigDialog(false);
+            return;
+        }
         updateConfig(
             "channels",
-            firstChannel
-                ? config.channels.map((channel, index) =>
-                      index === 0
-                          ? {
-                                ...channel,
-                                ...(baseUrl ? { baseUrl } : {}),
-                                ...(apiKey ? { apiKey } : {}),
-                            }
-                          : channel,
-                  )
-                : [createModelChannel({ id: "default", name: t("config.channels.defaultName"), baseUrl: baseUrl || undefined, apiKey: apiKey || "" })],
+            config.channels.map((channel, index) => (index === targetIndex && apiKey ? { ...channel, apiKey } : channel)),
         );
-        if (baseUrl) updateConfig("baseUrl", baseUrl);
-        if (apiKey) updateConfig("apiKey", apiKey);
         openConfigDialog(false);
         message.success(t("config.importedDirectConfig"));
     }, [config.channels, message, openConfigDialog, t, updateConfig]);

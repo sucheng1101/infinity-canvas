@@ -448,7 +448,7 @@ export default {
         saved: "配置已保存",
         savedContinue: "配置已保存，请继续刚才的请求",
         channels: {
-            description: "每个渠道选择一个协议并拉取模型，为每个模型指定能力（生图/视频/文本/音频），并可自定义调用脚本。",
+            description: "渠道固定为 codex.helpapis.com 和 helpapis.com，仅需填写 API Key；可继续拉取模型、指定能力和配置调用脚本。",
             add: "新增渠道",
             unnamed: "未命名渠道",
             numberedName: "渠道 {{count}}",
@@ -480,7 +480,7 @@ export default {
             systemPromptPlaceholder: "例如：你是一位擅长电影感写实摄影的视觉导演。",
         },
         channelEditor: {
-            title: "编辑渠道",
+            title: "配置渠道",
             name: "渠道名称",
             protocol: "协议",
             baseUrl: "接口地址",

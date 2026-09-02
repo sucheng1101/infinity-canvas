@@ -64,34 +64,34 @@ export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "webd
 
 export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
-const OPENAI_BASE_URL = "https://api.openai.com";
+const OPENAI_BASE_URL = "https://codex.helpapis.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
+const DEFAULT_CHANNEL_MODELS: ChannelModel[] = [
+    { name: "gpt-image-2", capability: "image" },
+    { name: "grok-imagine-video", capability: "video" },
+    { name: "gpt-5.5", capability: "text" },
+    { name: "gpt-4o-mini-tts", capability: "audio" },
+];
+const FIXED_CHANNELS = [
+    { id: "codex-helpapis", name: "codex.helpapis.com", baseUrl: "https://codex.helpapis.com" },
+    { id: "helpapis", name: "helpapis.com", baseUrl: "https://helpapis.com" },
+] as const;
+
+function defaultFixedChannels(): ModelChannel[] {
+    return FIXED_CHANNELS.map((channel) => ({ ...channel, apiKey: "", apiFormat: "openai", models: DEFAULT_CHANNEL_MODELS.map((model) => ({ ...model })) }));
+}
 
 export const defaultConfig: AiConfig = {
     channelMode: "local",
     baseUrl: OPENAI_BASE_URL,
     apiKey: "",
     apiFormat: "openai",
-    channels: [
-        {
-            id: "default",
-            name: i18n.t("config.channels.defaultName"),
-            baseUrl: OPENAI_BASE_URL,
-            apiKey: "",
-            apiFormat: "openai",
-            models: [
-                { name: "gpt-image-2", capability: "image" },
-                { name: "grok-imagine-video", capability: "video" },
-                { name: "gpt-5.5", capability: "text" },
-                { name: "gpt-4o-mini-tts", capability: "audio" },
-            ],
-        },
-    ],
-    model: "default::gpt-image-2",
-    imageModel: "default::gpt-image-2",
-    videoModel: "default::grok-imagine-video",
-    textModel: "default::gpt-5.5",
-    audioModel: "default::gpt-4o-mini-tts",
+    channels: defaultFixedChannels(),
+    model: "codex-helpapis::gpt-image-2",
+    imageModel: "codex-helpapis::gpt-image-2",
+    videoModel: "codex-helpapis::grok-imagine-video",
+    textModel: "codex-helpapis::gpt-5.5",
+    audioModel: "codex-helpapis::gpt-4o-mini-tts",
     audioVoice: "alloy",
     audioFormat: "mp3",
     audioSpeed: "1",
@@ -102,7 +102,7 @@ export const defaultConfig: AiConfig = {
     videoWatermark: "false",
     systemPrompt: "",
     reasoningEffort: "auto",
-    models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
+    models: defaultFixedChannels().flatMap((channel) => channel.models.map((model) => `${channel.id}${CHANNEL_MODEL_SEPARATOR}${model.name}`)),
     quality: "auto",
     size: "1:1",
     background: "",
@@ -199,10 +199,13 @@ export const useConfigStore = create<ConfigStore>()(
             shouldPromptContinue: false,
             updateConfig: (key, value) =>
                 set((state) => ({
-                    config: {
-                        ...state.config,
-                        [key]: value,
-                    },
+                    config:
+                        key === "channels" || key === "baseUrl" || key === "apiFormat"
+                            ? normalizeAiConfig({
+                                  ...state.config,
+                                  [key]: value,
+                              })
+                            : { ...state.config, [key]: value },
                 })),
             updateWebdavConfig: (key, value) =>
                 set((state) => ({
@@ -223,34 +226,10 @@ export const useConfigStore = create<ConfigStore>()(
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;
                 const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;
                 const persistedWebdav = (persistedState.webdav || {}) as Partial<WebdavSyncConfig>;
-                const config = { ...defaultConfig, ...persistedConfig };
-                if (!Array.isArray(persistedConfig.channels)) config.channels = [];
-                const channels = normalizeChannels(config);
-                const models = modelOptionsFromChannels(channels);
                 return {
                     ...current,
                     webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
-                    config: {
-                        ...config,
-                        channelMode: "local",
-                        apiFormat: normalizeApiFormat(config.apiFormat),
-                        channels,
-                        models,
-                        imageModel: normalizeModelOptionValue(config.imageModel || config.model, channels),
-                        videoModel: normalizeModelOptionValue(config.videoModel, channels),
-                        textModel: normalizeModelOptionValue(config.textModel || config.model, channels),
-                        audioModel: normalizeModelOptionValue(config.audioModel || defaultConfig.audioModel, channels),
-                        audioVoice: config.audioVoice || defaultConfig.audioVoice,
-                        audioFormat: config.audioFormat || defaultConfig.audioFormat,
-                        audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
-                        audioInstructions: config.audioInstructions || "",
-                        reasoningEffort: config.reasoningEffort || "auto",
-                        videoSeconds: config.videoSeconds || "6",
-                        vquality: config.vquality || "720",
-                        videoGenerateAudio: config.videoGenerateAudio || "true",
-                        videoWatermark: config.videoWatermark || "false",
-                        canvasImageCount: config.canvasImageCount || "3",
-                    },
+                    config: normalizeAiConfig(persistedConfig),
                 };
             },
         },
@@ -324,7 +303,9 @@ export function normalizeModelOptionValue(value: string | undefined, channels: M
     const decoded = decodeChannelModel(model);
     if (decoded) {
         const channel = channels.find((item) => item.id === decoded.channelId);
-        return channel && channel.models.some((item) => item.name === decoded.model) ? model : "";
+        if (channel?.models.some((item) => item.name === decoded.model)) return model;
+        const migratedChannel = channels.find((item) => item.models.some((entry) => entry.name === decoded.model));
+        return migratedChannel ? encodeChannelModel(migratedChannel.id, decoded.model) : "";
     }
     const channel = channels.find((item) => item.models.some((entry) => entry.name === model)) || channels[0];
     return channel && channel.models.some((item) => item.name === model) ? encodeChannelModel(channel.id, model) : model;
@@ -334,7 +315,18 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
     const model = decoded?.model || value;
     const matched = decoded ? config.channels.find((channel) => channel.id === decoded.channelId) : config.channels.find((channel) => channel.models.some((item) => item.name === model));
-    return matched || config.channels[0] || createModelChannel({ id: "default", name: i18n.t("config.channels.defaultName"), baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })) });
+    return (
+        matched ||
+        config.channels[0] ||
+        createModelChannel({
+            id: "default",
+            name: i18n.t("config.channels.defaultName"),
+            baseUrl: config.baseUrl,
+            apiKey: config.apiKey,
+            apiFormat: config.apiFormat,
+            models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })),
+        })
+    );
 }
 
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
@@ -350,27 +342,60 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
 
 function normalizeChannels(config: AiConfig) {
     const persistedChannels = Array.isArray(config.channels) ? config.channels : [];
-    const channels = persistedChannels.map((channel, index) =>
-        createModelChannel({
-            ...channel,
-            id: channel.id || (index === 0 ? "default" : `channel-${index + 1}`),
-            name: channel.name || (index === 0 ? i18n.t("config.channels.defaultName") : i18n.t("config.channels.indexedName", { index: index + 1 })),
-            models: normalizeChannelModels(channel.models),
-        }),
-    );
-    if (!channels.length) {
-        channels.push(
-            createModelChannel({
-                id: "default",
-                name: i18n.t("config.channels.defaultName"),
-                baseUrl: config.baseUrl || defaultConfig.baseUrl,
-                apiKey: config.apiKey || "",
-                apiFormat: config.apiFormat || defaultConfig.apiFormat,
-                models: normalizeChannelModels([config.model, config.imageModel, config.videoModel, config.textModel, config.audioModel].map(modelOptionName)),
-            }),
-        );
-    }
-    return channels;
+    return FIXED_CHANNELS.map((fixed) => {
+        const matched = persistedChannels.find((channel) => channel?.id === fixed.id || sameBaseUrl(channel?.baseUrl, fixed.baseUrl));
+        const legacyKey = sameBaseUrl(config.baseUrl, fixed.baseUrl) ? config.apiKey : "";
+        const models = normalizeChannelModels(matched?.models);
+        return {
+            ...fixed,
+            apiKey: matched?.apiKey || legacyKey || "",
+            apiFormat: "openai" as const,
+            models: models.length ? models : DEFAULT_CHANNEL_MODELS.map((model) => ({ ...model })),
+        };
+    });
+}
+
+export function normalizeAiConfig(input: Partial<AiConfig>): AiConfig {
+    const config = { ...defaultConfig, ...input };
+    if (!Array.isArray(input.channels)) config.channels = [];
+    const channels = normalizeChannels(config);
+    const base: AiConfig = {
+        ...config,
+        channelMode: "local",
+        baseUrl: channels[0].baseUrl,
+        apiKey: channels[0].apiKey,
+        apiFormat: "openai",
+        channels,
+        models: modelOptionsFromChannels(channels),
+        audioVoice: config.audioVoice || defaultConfig.audioVoice,
+        audioFormat: config.audioFormat || defaultConfig.audioFormat,
+        audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
+        audioInstructions: config.audioInstructions || "",
+        reasoningEffort: config.reasoningEffort || "auto",
+        videoSeconds: config.videoSeconds || "6",
+        vquality: config.vquality || "720",
+        videoGenerateAudio: config.videoGenerateAudio || "true",
+        videoWatermark: config.videoWatermark || "false",
+        canvasImageCount: config.canvasImageCount || "3",
+    };
+    const pick = (value: string | undefined, capability: ModelCapability) => {
+        const normalized = normalizeModelOptionValue(value, channels);
+        const options = selectableModelsByCapability(base, capability);
+        return options.includes(normalized) ? normalized : options[0] || "";
+    };
+    const imageModel = pick(config.imageModel || config.model, "image");
+    return {
+        ...base,
+        model: imageModel,
+        imageModel,
+        videoModel: pick(config.videoModel, "video"),
+        textModel: pick(config.textModel || config.model, "text"),
+        audioModel: pick(config.audioModel || defaultConfig.audioModel, "audio"),
+    };
+}
+
+function sameBaseUrl(left: string | undefined, right: string) {
+    return (left || "").trim().replace(/\/+$/, "").toLowerCase() === right.toLowerCase();
 }
 
 export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
