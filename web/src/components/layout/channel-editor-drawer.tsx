@@ -1,9 +1,9 @@
 import { Button, Drawer, Input, Segmented, Space } from "antd";
-import { ListPlus, Trash2 } from "lucide-react";
+import { KeyRound, ListPlus, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { guessCapability, normalizeChannelModels, type ChannelModel, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import { createChannelModelApiKey, guessCapability, normalizeChannelModels, type ChannelModel, type ChannelModelApiKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
 import { ModelScriptEditor } from "./model-script-editor";
 import { ModelSelectModal } from "./model-select-modal";
 
@@ -13,6 +13,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
     const { t } = useTranslation();
     const [draft, setDraft] = useState<ModelChannel | null>(channel);
     const [selectOpen, setSelectOpen] = useState(false);
+    const [keyModelTargetId, setKeyModelTargetId] = useState("");
     const [scriptTarget, setScriptTarget] = useState<ScriptTarget | null>(null);
     const capabilityOptions: Array<{ label: string; value: ModelCapability }> = ["image", "video", "text", "audio"].map((value) => ({ label: t(`config.channelEditor.capabilities.${value}`), value: value as ModelCapability }));
 
@@ -24,16 +25,29 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
 
     const patch = (value: Partial<ModelChannel>) => setDraft((current) => (current ? { ...current, ...value } : current));
     const setModels = (models: ChannelModel[]) => patch({ models });
-    const setCapabilityApiKey = (capability: ModelCapability, apiKey: string) => patch({ capabilityApiKeys: { ...draft.capabilityApiKeys, [capability]: apiKey } });
+    const setModelApiKeys = (modelApiKeys: ChannelModelApiKey[]) => patch({ modelApiKeys });
+    const keyModelTarget = draft.modelApiKeys.find((item) => item.id === keyModelTargetId) || null;
 
     const applySelection = (names: string[]) => {
+        const selected = new Set(names);
         const map = new Map(draft.models.map((model) => [model.name, model]));
         setModels(names.map((name) => map.get(name) || { name, capability: guessCapability(name) }));
+        setModelApiKeys(draft.modelApiKeys.map((item) => ({ ...item, models: item.models.filter((name) => selected.has(name)) })));
     };
 
     const setCapability = (name: string, capability: ModelCapability) => setModels(draft.models.map((model) => (model.name === name ? { ...model, capability } : model)));
     const setScript = (name: string, script: string) => setModels(draft.models.map((model) => (model.name === name ? { ...model, script: script || undefined } : model)));
-    const removeModel = (name: string) => setModels(draft.models.filter((model) => model.name !== name));
+    const removeModel = (name: string) => {
+        setModels(draft.models.filter((model) => model.name !== name));
+        setModelApiKeys(draft.modelApiKeys.map((item) => ({ ...item, models: item.models.filter((model) => model !== name) })));
+    };
+    const patchModelApiKey = (id: string, value: Partial<ChannelModelApiKey>) => setModelApiKeys(draft.modelApiKeys.map((item) => (item.id === id ? { ...item, ...value } : item)));
+    const applyKeyModels = (id: string, names: string[]) => {
+        const selected = new Set(names);
+        setModelApiKeys(draft.modelApiKeys.map((item) => ({ ...item, models: item.id === id ? names : item.models.filter((name) => !selected.has(name)) })));
+        const known = new Set(draft.models.map((model) => model.name));
+        setModels([...draft.models, ...names.filter((name) => !known.has(name)).map((name) => ({ name, capability: guessCapability(name) }))]);
+    };
 
     const save = () => {
         onSave({ ...draft, models: normalizeChannelModels(draft.models) });
@@ -74,17 +88,33 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                     <Input.Password value={draft.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} placeholder="sk-..." />
                     <span className="mt-1 block text-xs text-stone-500">{t("config.channelEditor.defaultApiKeyDescription")}</span>
                 </label>
-                <div className="md:col-span-2">
-                    <div className="mb-1 text-sm font-medium">{t("config.channelEditor.capabilityApiKeys")}</div>
-                    <div className="grid gap-3 md:grid-cols-2">
-                        {capabilityOptions.map((option) => (
-                            <label key={option.value} className="block">
-                                <span className="mb-1 block text-xs text-stone-500">{t("config.channelEditor.capabilityApiKey", { capability: option.label })}</span>
-                                <Input.Password value={draft.capabilityApiKeys?.[option.value] || ""} onChange={(event) => setCapabilityApiKey(option.value, event.target.value)} placeholder={t("config.channelEditor.capabilityApiKeyPlaceholder")} />
-                            </label>
-                        ))}
+            </div>
+
+            <div className="mt-5">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                        <div className="text-sm font-semibold">{t("config.channelEditor.modelApiKeys")}</div>
+                        <div className="mt-0.5 text-xs text-stone-500">{t("config.channelEditor.modelApiKeysDescription")}</div>
                     </div>
-                    <div className="mt-1 text-xs text-stone-500">{t("config.channelEditor.capabilityApiKeysDescription")}</div>
+                    <Button size="small" icon={<Plus className="size-3.5" />} onClick={() => setModelApiKeys([...draft.modelApiKeys, createChannelModelApiKey()])}>
+                        {t("config.channelEditor.addModelApiKey")}
+                    </Button>
+                </div>
+                <div className="mt-3 space-y-3">
+                    {draft.modelApiKeys.map((item) => (
+                        <div key={item.id} className="rounded-lg border border-stone-200 p-3 dark:border-stone-800">
+                            <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_auto]">
+                                <Input value={item.name} onChange={(event) => patchModelApiKey(item.id, { name: event.target.value })} placeholder={t("config.channelEditor.modelApiKeyName")} prefix={<KeyRound className="size-3.5 text-stone-400" />} />
+                                <Input.Password value={item.apiKey} onChange={(event) => patchModelApiKey(item.id, { apiKey: event.target.value })} placeholder="sk-..." />
+                                <div className="flex gap-1">
+                                    <Button disabled={!item.apiKey.trim()} onClick={() => setKeyModelTargetId(item.id)}>{t("config.channelEditor.selectKeyModels")}</Button>
+                                    <Button danger type="text" icon={<Trash2 className="size-3.5" />} aria-label={t("common.delete")} onClick={() => setModelApiKeys(draft.modelApiKeys.filter((key) => key.id !== item.id))} />
+                                </div>
+                            </div>
+                            <div className="mt-2 text-xs text-stone-500">{item.models.length ? t("config.channelEditor.boundModels", { count: item.models.length, models: item.models.join(", ") }) : t("config.channelEditor.noBoundModels")}</div>
+                        </div>
+                    ))}
+                    {!draft.modelApiKeys.length ? <div className="rounded-lg border border-dashed border-stone-200 px-3 py-5 text-center text-sm text-stone-500 dark:border-stone-800">{t("config.channelEditor.noModelApiKeys")}</div> : null}
                 </div>
             </div>
 
@@ -120,6 +150,15 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
             </div>
 
             <ModelSelectModal open={selectOpen} channel={draft} selectedNames={draft.models.map((model) => model.name)} onConfirm={applySelection} onClose={() => setSelectOpen(false)} />
+            <ModelSelectModal
+                open={Boolean(keyModelTarget)}
+                channel={draft}
+                apiKey={keyModelTarget?.apiKey}
+                title={t("config.channelEditor.selectKeyModelsTitle", { name: keyModelTarget?.name || "" })}
+                selectedNames={keyModelTarget?.models || []}
+                onConfirm={(names) => keyModelTarget && applyKeyModels(keyModelTarget.id, names)}
+                onClose={() => setKeyModelTargetId("")}
+            />
 
             <ModelScriptEditor
                 open={Boolean(scriptTarget)}

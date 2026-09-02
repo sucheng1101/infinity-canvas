@@ -8,7 +8,7 @@ import i18n from "@/i18n";
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
-export type CapabilityApiKeys = Partial<Record<ModelCapability, string>>;
+type LegacyCapabilityApiKeys = Partial<Record<ModelCapability, string>>;
 
 export type ChannelModel = {
     name: string;
@@ -16,12 +16,19 @@ export type ChannelModel = {
     script?: string;
 };
 
+export type ChannelModelApiKey = {
+    id: string;
+    name: string;
+    apiKey: string;
+    models: string[];
+};
+
 export type ModelChannel = {
     id: string;
     name: string;
     baseUrl: string;
     apiKey: string;
-    capabilityApiKeys: CapabilityApiKeys;
+    modelApiKeys: ChannelModelApiKey[];
     apiFormat: ApiCallFormat;
     models: ChannelModel[];
 };
@@ -68,19 +75,13 @@ export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
 const OPENAI_BASE_URL = "https://codex.helpapis.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
-const DEFAULT_CHANNEL_MODELS: ChannelModel[] = [
-    { name: "gpt-image-2", capability: "image" },
-    { name: "grok-imagine-video", capability: "video" },
-    { name: "gpt-5.5", capability: "text" },
-    { name: "gpt-4o-mini-tts", capability: "audio" },
-];
 const FIXED_CHANNELS = [
     { id: "codex-helpapis", name: "codex.helpapis.com", baseUrl: "https://codex.helpapis.com" },
     { id: "helpapis", name: "helpapis.com", baseUrl: "https://helpapis.com" },
 ] as const;
 
 function defaultFixedChannels(): ModelChannel[] {
-    return FIXED_CHANNELS.map((channel) => ({ ...channel, apiKey: "", capabilityApiKeys: {}, apiFormat: "openai", models: DEFAULT_CHANNEL_MODELS.map((model) => ({ ...model })) }));
+    return FIXED_CHANNELS.map((channel) => ({ ...channel, apiKey: "", modelApiKeys: [], apiFormat: "openai", models: [] }));
 }
 
 export const defaultConfig: AiConfig = {
@@ -89,11 +90,11 @@ export const defaultConfig: AiConfig = {
     apiKey: "",
     apiFormat: "openai",
     channels: defaultFixedChannels(),
-    model: "codex-helpapis::gpt-image-2",
-    imageModel: "codex-helpapis::gpt-image-2",
-    videoModel: "codex-helpapis::grok-imagine-video",
-    textModel: "codex-helpapis::gpt-5.5",
-    audioModel: "codex-helpapis::gpt-4o-mini-tts",
+    model: "",
+    imageModel: "",
+    videoModel: "",
+    textModel: "",
+    audioModel: "",
     audioVoice: "alloy",
     audioFormat: "mp3",
     audioSpeed: "1",
@@ -223,17 +224,18 @@ export const useConfigStore = create<ConfigStore>()(
         }),
         {
             name: CONFIG_STORE_KEY,
-            version: 1,
+            version: 2,
             migrate: (persisted, version) => {
-                const state = (persisted || {}) as Partial<ConfigStore>;
-                if (version >= 1 || !state.config) return state;
+                const state = (persisted || {}) as { config?: Partial<AiConfig>; webdav?: Partial<WebdavSyncConfig> };
+                const config = state.config || {};
                 return {
-                    ...state,
                     config: {
-                        ...state.config,
-                        size: state.config.size === "1:1" ? "3:4" : state.config.size,
-                        canvasImageCount: state.config.canvasImageCount === "3" ? "1" : state.config.canvasImageCount,
+                        ...defaultConfig,
+                        ...config,
+                        size: version < 1 && config.size === "1:1" ? "3:4" : config.size || defaultConfig.size,
+                        canvasImageCount: version < 1 && config.canvasImageCount === "3" ? "1" : config.canvasImageCount || defaultConfig.canvasImageCount,
                     },
+                    webdav: { ...defaultWebdavSyncConfig, ...state.webdav },
                 };
             },
             partialize: (state) => ({ config: state.config, webdav: state.webdav }),
@@ -278,10 +280,14 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
         name: channel?.name?.trim() || i18n.t("config.channels.newName"),
         baseUrl: channel?.baseUrl?.trim() || defaultBaseUrlForApiFormat(apiFormat),
         apiKey: channel?.apiKey || "",
-        capabilityApiKeys: normalizeCapabilityApiKeys(channel?.capabilityApiKeys),
+        modelApiKeys: normalizeModelApiKeys(channel?.modelApiKeys),
         apiFormat,
         models: normalizeChannelModels(channel?.models),
     };
+}
+
+export function createChannelModelApiKey(key?: Partial<ChannelModelApiKey>): ChannelModelApiKey {
+    return { id: key?.id?.trim() || nanoid(), name: key?.name?.trim() || i18n.t("config.channelEditor.newModelApiKey"), apiKey: key?.apiKey || "", models: uniqueModelOptions(key?.models || []) };
 }
 
 export function encodeChannelModel(channelId: string, model: string) {
@@ -347,23 +353,23 @@ export function resolveModelChannel(config: AiConfig, value: string) {
 
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
     const channel = resolveModelChannel(config, value);
-    const capability = modelCapabilityOf(config, value);
+    const model = modelOptionName(value || config.model);
     return {
         ...config,
-        model: modelOptionName(value || config.model),
+        model,
         baseUrl: channel.baseUrl,
-        apiKey: resolveChannelApiKey(channel, capability),
+        apiKey: resolveChannelApiKey(channel, model),
         apiFormat: channel.apiFormat,
     };
 }
 
-export function resolveChannelApiKey(channel: ModelChannel, capability?: ModelCapability) {
-    const capabilityKey = capability ? channel.capabilityApiKeys?.[capability]?.trim() : "";
-    return capabilityKey || channel.apiKey.trim();
+export function resolveChannelApiKey(channel: ModelChannel, model: string) {
+    const modelKey = (channel.modelApiKeys || []).find((item) => item.models.includes(model) && item.apiKey.trim());
+    return modelKey?.apiKey.trim() || channel.apiKey.trim();
 }
 
 export function hasAnyChannelApiKey(channel: ModelChannel) {
-    return Boolean(channel.apiKey.trim() || Object.values(channel.capabilityApiKeys || {}).some((key) => key?.trim()));
+    return Boolean(channel.apiKey.trim() || (channel.modelApiKeys || []).some((item) => item.apiKey.trim()));
 }
 
 function normalizeChannels(config: AiConfig) {
@@ -372,12 +378,14 @@ function normalizeChannels(config: AiConfig) {
         const matched = persistedChannels.find((channel) => channel?.id === fixed.id || sameBaseUrl(channel?.baseUrl, fixed.baseUrl));
         const legacyKey = sameBaseUrl(config.baseUrl, fixed.baseUrl) ? config.apiKey : "";
         const models = normalizeChannelModels(matched?.models);
+        const rawMatched = matched as (ModelChannel & { capabilityApiKeys?: LegacyCapabilityApiKeys }) | undefined;
+        const normalizedModels = models;
         return {
             ...fixed,
             apiKey: matched?.apiKey || legacyKey || "",
-            capabilityApiKeys: normalizeCapabilityApiKeys(matched?.capabilityApiKeys),
+            modelApiKeys: normalizeModelApiKeys(rawMatched?.modelApiKeys, rawMatched?.capabilityApiKeys, normalizedModels),
             apiFormat: "openai" as const,
-            models: models.length ? models : DEFAULT_CHANNEL_MODELS.map((model) => ({ ...model })),
+            models: normalizedModels,
         };
     });
 }
@@ -434,9 +442,29 @@ function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
     return apiFormat === "gemini" ? apiFormat : "openai";
 }
 
-function normalizeCapabilityApiKeys(keys: CapabilityApiKeys | undefined): CapabilityApiKeys {
-    if (!keys) return {};
-    return Object.fromEntries((["image", "video", "text", "audio"] as ModelCapability[]).map((capability) => [capability, keys[capability] || ""]).filter(([, value]) => value)) as CapabilityApiKeys;
+function normalizeModelApiKeys(keys: ChannelModelApiKey[] | undefined, legacyKeys?: LegacyCapabilityApiKeys, models: ChannelModel[] = []): ChannelModelApiKey[] {
+    const source = Array.isArray(keys)
+        ? keys
+        : (["image", "video", "text", "audio"] as ModelCapability[])
+              .filter((capability) => legacyKeys?.[capability]?.trim())
+              .map((capability) => ({
+                  id: `legacy-${capability}`,
+                  name: i18n.t(`config.channelEditor.capabilities.${capability}`),
+                  apiKey: legacyKeys?.[capability] || "",
+                  models: models.filter((model) => model.capability === capability).map((model) => model.name),
+              }));
+    const usedIds = new Set<string>();
+    const assignedModels = new Set<string>();
+    return source.map((item) => {
+        const id = item.id?.trim() && !usedIds.has(item.id.trim()) ? item.id.trim() : nanoid();
+        usedIds.add(id);
+        const modelNames = uniqueModelOptions(item.models).filter((model) => {
+            if (assignedModels.has(model)) return false;
+            assignedModels.add(model);
+            return true;
+        });
+        return { id, name: item.name?.trim() || i18n.t("config.channelEditor.unnamedModelApiKey"), apiKey: item.apiKey || "", models: modelNames };
+    });
 }
 
 function uniqueModelOptions(models: string[]) {
