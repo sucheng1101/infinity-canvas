@@ -24,6 +24,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
 
     const patch = (value: Partial<ModelChannel>) => setDraft((current) => (current ? { ...current, ...value } : current));
     const setModels = (models: ChannelModel[]) => patch({ models });
+    const setCapabilityApiKey = (capability: ModelCapability, apiKey: string) => patch({ capabilityApiKeys: { ...draft.capabilityApiKeys, [capability]: apiKey } });
 
     const applySelection = (names: string[]) => {
         const map = new Map(draft.models.map((model) => [model.name, model]));
@@ -69,9 +70,22 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                     <Input value={draft.baseUrl} readOnly />
                 </label>
                 <label className="block md:col-span-2">
-                    <span className="mb-1 block text-sm font-medium">API Key</span>
+                    <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.defaultApiKey")}</span>
                     <Input.Password value={draft.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} placeholder="sk-..." />
+                    <span className="mt-1 block text-xs text-stone-500">{t("config.channelEditor.defaultApiKeyDescription")}</span>
                 </label>
+                <div className="md:col-span-2">
+                    <div className="mb-1 text-sm font-medium">{t("config.channelEditor.capabilityApiKeys")}</div>
+                    <div className="grid gap-3 md:grid-cols-2">
+                        {capabilityOptions.map((option) => (
+                            <label key={option.value} className="block">
+                                <span className="mb-1 block text-xs text-stone-500">{t("config.channelEditor.capabilityApiKey", { capability: option.label })}</span>
+                                <Input.Password value={draft.capabilityApiKeys?.[option.value] || ""} onChange={(event) => setCapabilityApiKey(option.value, event.target.value)} placeholder={t("config.channelEditor.capabilityApiKeyPlaceholder")} />
+                            </label>
+                        ))}
+                    </div>
+                    <div className="mt-1 text-xs text-stone-500">{t("config.channelEditor.capabilityApiKeysDescription")}</div>
+                </div>
             </div>
 
             <div className="mt-6 mb-3 flex flex-wrap items-center justify-between gap-2">

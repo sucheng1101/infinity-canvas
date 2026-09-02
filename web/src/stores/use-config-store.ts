@@ -8,6 +8,7 @@ import i18n from "@/i18n";
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
+export type CapabilityApiKeys = Partial<Record<ModelCapability, string>>;
 
 export type ChannelModel = {
     name: string;
@@ -20,6 +21,7 @@ export type ModelChannel = {
     name: string;
     baseUrl: string;
     apiKey: string;
+    capabilityApiKeys: CapabilityApiKeys;
     apiFormat: ApiCallFormat;
     models: ChannelModel[];
 };
@@ -78,7 +80,7 @@ const FIXED_CHANNELS = [
 ] as const;
 
 function defaultFixedChannels(): ModelChannel[] {
-    return FIXED_CHANNELS.map((channel) => ({ ...channel, apiKey: "", apiFormat: "openai", models: DEFAULT_CHANNEL_MODELS.map((model) => ({ ...model })) }));
+    return FIXED_CHANNELS.map((channel) => ({ ...channel, apiKey: "", capabilityApiKeys: {}, apiFormat: "openai", models: DEFAULT_CHANNEL_MODELS.map((model) => ({ ...model })) }));
 }
 
 export const defaultConfig: AiConfig = {
@@ -104,10 +106,10 @@ export const defaultConfig: AiConfig = {
     reasoningEffort: "auto",
     models: defaultFixedChannels().flatMap((channel) => channel.models.map((model) => `${channel.id}${CHANNEL_MODEL_SEPARATOR}${model.name}`)),
     quality: "auto",
-    size: "1:1",
+    size: "3:4",
     background: "",
     count: "1",
-    canvasImageCount: "3",
+    canvasImageCount: "1",
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -185,8 +187,8 @@ export function resolveModelScript(config: AiConfig, value: string) {
 }
 
 function isAiConfigReady(config: AiConfig, model: string) {
-    const channel = resolveModelChannel(config, model);
-    return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
+    const requestConfig = resolveModelRequestConfig(config, model);
+    return Boolean(model.trim() && requestConfig.baseUrl.trim() && requestConfig.apiKey.trim());
 }
 
 export const useConfigStore = create<ConfigStore>()(
@@ -221,6 +223,19 @@ export const useConfigStore = create<ConfigStore>()(
         }),
         {
             name: CONFIG_STORE_KEY,
+            version: 1,
+            migrate: (persisted, version) => {
+                const state = (persisted || {}) as Partial<ConfigStore>;
+                if (version >= 1 || !state.config) return state;
+                return {
+                    ...state,
+                    config: {
+                        ...state.config,
+                        size: state.config.size === "1:1" ? "3:4" : state.config.size,
+                        canvasImageCount: state.config.canvasImageCount === "3" ? "1" : state.config.canvasImageCount,
+                    },
+                };
+            },
             partialize: (state) => ({ config: state.config, webdav: state.webdav }),
             merge: (persisted, current) => {
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;
@@ -263,6 +278,7 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
         name: channel?.name?.trim() || i18n.t("config.channels.newName"),
         baseUrl: channel?.baseUrl?.trim() || defaultBaseUrlForApiFormat(apiFormat),
         apiKey: channel?.apiKey || "",
+        capabilityApiKeys: normalizeCapabilityApiKeys(channel?.capabilityApiKeys),
         apiFormat,
         models: normalizeChannelModels(channel?.models),
     };
@@ -331,13 +347,23 @@ export function resolveModelChannel(config: AiConfig, value: string) {
 
 export function resolveModelRequestConfig(config: AiConfig, value: string) {
     const channel = resolveModelChannel(config, value);
+    const capability = modelCapabilityOf(config, value);
     return {
         ...config,
         model: modelOptionName(value || config.model),
         baseUrl: channel.baseUrl,
-        apiKey: channel.apiKey,
+        apiKey: resolveChannelApiKey(channel, capability),
         apiFormat: channel.apiFormat,
     };
+}
+
+export function resolveChannelApiKey(channel: ModelChannel, capability?: ModelCapability) {
+    const capabilityKey = capability ? channel.capabilityApiKeys?.[capability]?.trim() : "";
+    return capabilityKey || channel.apiKey.trim();
+}
+
+export function hasAnyChannelApiKey(channel: ModelChannel) {
+    return Boolean(channel.apiKey.trim() || Object.values(channel.capabilityApiKeys || {}).some((key) => key?.trim()));
 }
 
 function normalizeChannels(config: AiConfig) {
@@ -349,6 +375,7 @@ function normalizeChannels(config: AiConfig) {
         return {
             ...fixed,
             apiKey: matched?.apiKey || legacyKey || "",
+            capabilityApiKeys: normalizeCapabilityApiKeys(matched?.capabilityApiKeys),
             apiFormat: "openai" as const,
             models: models.length ? models : DEFAULT_CHANNEL_MODELS.map((model) => ({ ...model })),
         };
@@ -376,7 +403,7 @@ export function normalizeAiConfig(input: Partial<AiConfig>): AiConfig {
         vquality: config.vquality || "720",
         videoGenerateAudio: config.videoGenerateAudio || "true",
         videoWatermark: config.videoWatermark || "false",
-        canvasImageCount: config.canvasImageCount || "3",
+        canvasImageCount: config.canvasImageCount || "1",
     };
     const pick = (value: string | undefined, capability: ModelCapability) => {
         const normalized = normalizeModelOptionValue(value, channels);
@@ -405,6 +432,11 @@ export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
 
 function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
     return apiFormat === "gemini" ? apiFormat : "openai";
+}
+
+function normalizeCapabilityApiKeys(keys: CapabilityApiKeys | undefined): CapabilityApiKeys {
+    if (!keys) return {};
+    return Object.fromEntries((["image", "video", "text", "audio"] as ModelCapability[]).map((capability) => [capability, keys[capability] || ""]).filter(([, value]) => value)) as CapabilityApiKeys;
 }
 
 function uniqueModelOptions(models: string[]) {
