@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [修复] 修正 Gemini 图像请求的尺寸配置字段，使用 generateContent 要求的 imageConfig 结构。
 + [调整] 偏好设置的默认模型改为单一模型选择器，不再重复显示渠道选择；选项仍保留渠道归属信息。
 + [修复] 对明确的 Gemini 图像模型自动使用 Gemini generateContent 请求，避免误走仅支持 Imagen 的 OpenAI 生图接口。
 + [新增] 固定 AI 渠道支持通用 Key 与任意数量的模型专用 Key，每条 Key 可独立拉取支持列表并手动绑定模型，未绑定模型回退通用 Key。
