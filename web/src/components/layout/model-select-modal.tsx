@@ -7,7 +7,7 @@ import { fetchChannelModels } from "@/services/api/image";
 import type { ModelChannel } from "@/stores/use-config-store";
 
 // Channel model selector: fetch upstream models or add them manually, then include checked models in the channel list.
-export function ModelSelectModal({ open, channel, selectedNames, apiKey, title, onConfirm, onClose }: { open: boolean; channel: ModelChannel | null; selectedNames: string[]; apiKey?: string; title?: string; onConfirm: (names: string[]) => void; onClose: () => void }) {
+export function ModelSelectModal({ open, channel, selectedNames, apiKey, title, hideFetch = false, onConfirm, onClose }: { open: boolean; channel: ModelChannel | null; selectedNames: string[]; apiKey?: string; title?: string; hideFetch?: boolean; onConfirm: (names: string[]) => void; onClose: () => void }) {
     const { message } = App.useApp();
     const { t } = useTranslation();
     const [existing, setExisting] = useState<string[]>([]);
@@ -110,9 +110,7 @@ export function ModelSelectModal({ open, channel, selectedNames, apiKey, title, 
                 <Input className="min-w-[200px] flex-1" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("config.modelSelect.search")} prefix={<Search className="size-4 text-stone-400" />} allowClear />
                 <Input className="min-w-[180px] flex-1" value={manual} onChange={(event) => setManual(event.target.value)} onPressEnter={addManual} placeholder={t("config.modelSelect.modelName")} />
                 <Button onClick={addManual}>{t("config.modelSelect.add")}</Button>
-                <Button icon={<RefreshCw className="size-4" />} loading={loading} onClick={() => void fetchModels()}>
-                    {t("config.modelSelect.fetch")}
-                </Button>
+                {hideFetch ? null : <Button icon={<RefreshCw className="size-4" />} loading={loading} onClick={() => void fetchModels()}>{t("config.modelSelect.fetch")}</Button>}
             </div>
             <div className="mt-2 text-xs text-stone-500">{t("config.modelSelect.description")}</div>
 

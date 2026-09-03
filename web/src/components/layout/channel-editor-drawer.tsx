@@ -1,9 +1,10 @@
-import { Button, Drawer, Input, Segmented, Space } from "antd";
-import { KeyRound, ListPlus, Plus, Trash2 } from "lucide-react";
+import { App, Button, Drawer, Input, Segmented, Space } from "antd";
+import { KeyRound, ListPlus, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { createChannelModelApiKey, guessCapability, normalizeChannelModels, type ChannelModel, type ChannelModelApiKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
+import { fetchChannelModels } from "@/services/api/image";
 import { ModelScriptEditor } from "./model-script-editor";
 import { ModelSelectModal } from "./model-select-modal";
 
@@ -11,10 +12,12 @@ type ScriptTarget = { name: string; capability: ModelCapability; value: string }
 
 export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: boolean; channel: ModelChannel | null; onSave: (channel: ModelChannel) => void; onClose: () => void }) {
     const { t } = useTranslation();
+    const { message } = App.useApp();
     const [draft, setDraft] = useState<ModelChannel | null>(channel);
     const [selectOpen, setSelectOpen] = useState(false);
     const [keyModelTargetId, setKeyModelTargetId] = useState("");
     const [scriptTarget, setScriptTarget] = useState<ScriptTarget | null>(null);
+    const [fetchingAll, setFetchingAll] = useState(false);
     const capabilityOptions: Array<{ label: string; value: ModelCapability }> = ["image", "video", "text", "audio"].map((value) => ({ label: t(`config.channelEditor.capabilities.${value}`), value: value as ModelCapability }));
 
     useEffect(() => {
@@ -47,6 +50,34 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
         setModelApiKeys(draft.modelApiKeys.map((item) => ({ ...item, models: item.id === id ? names : item.models.filter((name) => !selected.has(name)) })));
         const known = new Set(draft.models.map((model) => model.name));
         setModels([...draft.models, ...names.filter((name) => !known.has(name)).map((name) => ({ name, capability: guessCapability(name) }))]);
+    };
+
+    const fetchAllKeyModels = async () => {
+        const keys = draft.modelApiKeys.filter((item) => item.apiKey.trim());
+        if (!keys.length) {
+            message.error(t("config.channelEditor.fetchAllMissingKey"));
+            return;
+        }
+        setFetchingAll(true);
+        const successful: Array<{ item: ChannelModelApiKey; models: string[] }> = [];
+        for (const item of keys) {
+            try {
+                successful.push({ item, models: await fetchChannelModels({ ...draft, apiKey: item.apiKey }) });
+            } catch {
+                // Continue with the remaining keys and report the failed count together.
+            }
+        }
+        const failed = keys.length - successful.length;
+        const modelNames = new Set(draft.models.map((model) => model.name));
+        successful.forEach(({ models }) => models.forEach((name) => modelNames.add(name)));
+        setModelApiKeys(draft.modelApiKeys.map((item) => {
+            const result = successful.find((entry) => entry.item.id === item.id);
+            return result ? { ...item, models: Array.from(new Set([...item.models, ...result.models])) } : item;
+        }));
+        setModels(Array.from(modelNames).map((name) => draft.models.find((model) => model.name === name) || { name, capability: guessCapability(name) }));
+        if (failed) message.warning(t("config.channelEditor.fetchAllPartial", { success: successful.length, failed }));
+        else message.success(t("config.channelEditor.fetchAllSuccess", { count: successful.length }));
+        setFetchingAll(false);
     };
 
     const save = () => {
@@ -83,11 +114,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                     <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.baseUrl")}</span>
                     <Input value={draft.baseUrl} readOnly />
                 </label>
-                <label className="block md:col-span-2">
-                    <span className="mb-1 block text-sm font-medium">{t("config.channelEditor.defaultApiKey")}</span>
-                    <Input.Password value={draft.apiKey} onChange={(event) => patch({ apiKey: event.target.value })} placeholder="sk-..." />
-                    <span className="mt-1 block text-xs text-stone-500">{t("config.channelEditor.defaultApiKeyDescription")}</span>
-                </label>
+                <div className="rounded-lg border border-dashed border-stone-200 px-3 py-2 text-xs text-stone-500 dark:border-stone-800 md:col-span-2">{t("config.channelEditor.noGeneralApiKeyDescription")}</div>
             </div>
 
             <div className="mt-5">
@@ -96,9 +123,10 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                         <div className="text-sm font-semibold">{t("config.channelEditor.modelApiKeys")}</div>
                         <div className="mt-0.5 text-xs text-stone-500">{t("config.channelEditor.modelApiKeysDescription")}</div>
                     </div>
-                    <Button size="small" icon={<Plus className="size-3.5" />} onClick={() => setModelApiKeys([...draft.modelApiKeys, createChannelModelApiKey()])}>
-                        {t("config.channelEditor.addModelApiKey")}
-                    </Button>
+                    <Space size="small" wrap>
+                        <Button size="small" loading={fetchingAll} icon={<RefreshCw className="size-3.5" />} onClick={() => void fetchAllKeyModels()}>{t("config.channelEditor.fetchAllModels")}</Button>
+                        <Button size="small" icon={<Plus className="size-3.5" />} onClick={() => setModelApiKeys([...draft.modelApiKeys, createChannelModelApiKey()])}>{t("config.channelEditor.addModelApiKey")}</Button>
+                    </Space>
                 </div>
                 <div className="mt-3 space-y-3">
                     {draft.modelApiKeys.map((item) => (
@@ -149,7 +177,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 )}
             </div>
 
-            <ModelSelectModal open={selectOpen} channel={draft} selectedNames={draft.models.map((model) => model.name)} onConfirm={applySelection} onClose={() => setSelectOpen(false)} />
+            <ModelSelectModal open={selectOpen} channel={draft} selectedNames={draft.models.map((model) => model.name)} hideFetch onConfirm={applySelection} onClose={() => setSelectOpen(false)} />
             <ModelSelectModal
                 open={Boolean(keyModelTarget)}
                 channel={draft}

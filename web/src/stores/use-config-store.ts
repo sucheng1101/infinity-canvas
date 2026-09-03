@@ -179,7 +179,7 @@ export function resolveModelForCapability(config: AiConfig, currentModel: string
 
 export function selectableModelsByCapability(config: AiConfig, capability?: ModelCapability) {
     if (!capability) return config.models;
-    return config.channels.flatMap((channel) => channel.models.filter((model) => model.capability === capability).map((model) => encodeChannelModel(channel.id, model.name)));
+    return config.channels.flatMap((channel) => channel.models.filter((model) => model.capability === capability && resolveChannelApiKey(channel, model.name)).map((model) => encodeChannelModel(channel.id, model.name)));
 }
 
 /** The user script (if any) attached to a model; empty string means use the system default call. */
@@ -365,11 +365,11 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
 
 export function resolveChannelApiKey(channel: ModelChannel, model: string) {
     const modelKey = (channel.modelApiKeys || []).find((item) => item.models.includes(model) && item.apiKey.trim());
-    return modelKey?.apiKey.trim() || channel.apiKey.trim();
+    return modelKey?.apiKey.trim() || "";
 }
 
 export function hasAnyChannelApiKey(channel: ModelChannel) {
-    return Boolean(channel.apiKey.trim() || (channel.modelApiKeys || []).some((item) => item.apiKey.trim()));
+    return Boolean((channel.modelApiKeys || []).some((item) => item.apiKey.trim() && item.models.length));
 }
 
 function normalizeChannels(config: AiConfig) {

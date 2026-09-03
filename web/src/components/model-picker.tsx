@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 import i18n from "@/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { decodeChannelModel, encodeChannelModel, modelOptionName, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
+import { decodeChannelModel, encodeChannelModel, modelOptionName, resolveChannelApiKey, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 
 type ModelPickerProps = {
     config: AiConfig;
@@ -24,7 +24,10 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
     const pickerId = useId();
     const [openPicker, setOpenPicker] = useState<"channel" | "model" | null>(null);
     const decoded = decodeChannelModel(value || "");
-    const channels = useMemo(() => config.channels.map((channel) => ({ channel, models: channel.models.filter((model) => !capability || model.capability === capability) })), [capability, config.channels]);
+    const channels = useMemo(
+        () => config.channels.map((channel) => ({ channel, models: channel.models.filter((model) => (!capability || model.capability === capability) && Boolean(resolveChannelApiKey(channel, model.name))) })).filter(({ models }) => models.length),
+        [capability, config.channels],
+    );
     const currentChannel = channels.find(({ channel }) => channel.id === decoded?.channelId) || channels.find(({ models }) => models.some((model) => model.name === modelOptionName(value || ""))) || channels[0];
     const channelId = currentChannel?.channel.id || "";
     const models = currentChannel?.models || [];
@@ -116,6 +119,7 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
 
 function emptyModelLabel(config: AiConfig, capability?: ModelCapability) {
     const label = capability ? i18n.t(`settingsPanels.model.capabilities.${capability}`) : "";
+    if (capability && config.channels.some((channel) => channel.models.some((model) => model.capability === capability))) return i18n.t("settingsPanels.model.noReady", { capability: label });
     if (capability && config.models.length) return i18n.t("settingsPanels.model.assign", { capability: label });
     return config.models.length ? i18n.t("settingsPanels.model.noMatch", { capability: label }) : i18n.t("settingsPanels.model.addFirst");
 }
