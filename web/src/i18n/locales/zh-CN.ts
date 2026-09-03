@@ -497,6 +497,7 @@ export default {
             newModelApiKey: "新 Key",
             unnamedModelApiKey: "未命名 Key",
             modelApiKeyName: "Key 备注名",
+            duplicateApiKey: "检测到重复 Key，请删除或更换重复项",
             selectKeyModels: "获取并选择模型",
             selectKeyModelsTitle: "{{name}} 支持的模型",
             boundModels: "已绑定 {{count}} 个：{{models}}",

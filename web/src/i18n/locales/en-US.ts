@@ -497,6 +497,7 @@ export default {
             newModelApiKey: "New key",
             unnamedModelApiKey: "Unnamed key",
             modelApiKeyName: "Key label",
+            duplicateApiKey: "Duplicate key detected. Remove or replace the duplicate entry",
             selectKeyModels: "Fetch and select models",
             selectKeyModelsTitle: "Models supported by {{name}}",
             boundModels: "{{count}} bound: {{models}}",

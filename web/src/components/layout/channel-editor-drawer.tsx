@@ -30,6 +30,11 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
     const setModels = (models: ChannelModel[]) => patch({ models });
     const setModelApiKeys = (modelApiKeys: ChannelModelApiKey[]) => patch({ modelApiKeys });
     const keyModelTarget = draft.modelApiKeys.find((item) => item.id === keyModelTargetId) || null;
+    const duplicateKeyIds = new Set(
+        draft.modelApiKeys
+            .filter((item) => item.apiKey.trim() && draft.modelApiKeys.some((other) => other.id !== item.id && other.apiKey.trim() === item.apiKey.trim()))
+            .map((item) => item.id),
+    );
 
     const applySelection = (names: string[]) => {
         const selected = new Set(names);
@@ -53,6 +58,10 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
     };
 
     const fetchAllKeyModels = async () => {
+        if (duplicateKeyIds.size) {
+            message.error(t("config.channelEditor.duplicateApiKey"));
+            return;
+        }
         const keys = draft.modelApiKeys.filter((item) => item.apiKey.trim());
         if (!keys.length) {
             message.error(t("config.channelEditor.fetchAllMissingKey"));
@@ -88,6 +97,10 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
     };
 
     const save = () => {
+        if (duplicateKeyIds.size) {
+            message.error(t("config.channelEditor.duplicateApiKey"));
+            return;
+        }
         onSave({ ...draft, models: normalizeChannelModels(draft.models) });
         onClose();
     };
@@ -140,7 +153,10 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                         <div key={item.id} className="rounded-lg border border-stone-200 p-3 dark:border-stone-800">
                             <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_auto]">
                                 <Input value={item.name} onChange={(event) => patchModelApiKey(item.id, { name: event.target.value })} placeholder={t("config.channelEditor.modelApiKeyName")} prefix={<KeyRound className="size-3.5 text-stone-400" />} />
-                                <Input.Password value={item.apiKey} onChange={(event) => patchModelApiKey(item.id, { apiKey: event.target.value })} placeholder="sk-..." />
+                                <div>
+                                    <Input.Password status={duplicateKeyIds.has(item.id) ? "error" : undefined} value={item.apiKey} onChange={(event) => patchModelApiKey(item.id, { apiKey: event.target.value })} placeholder="sk-..." />
+                                    {duplicateKeyIds.has(item.id) ? <div className="mt-1 text-xs text-red-500">{t("config.channelEditor.duplicateApiKey")}</div> : null}
+                                </div>
                                 <div className="flex gap-1">
                                     <Button disabled={!item.apiKey.trim()} onClick={() => setKeyModelTargetId(item.id)}>{t("config.channelEditor.selectKeyModels")}</Button>
                                     <Button danger type="text" icon={<Trash2 className="size-3.5" />} aria-label={t("common.delete")} onClick={() => setModelApiKeys(draft.modelApiKeys.filter((key) => key.id !== item.id))} />
