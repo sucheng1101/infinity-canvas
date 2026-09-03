@@ -68,13 +68,20 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
             }
         }
         const failed = keys.length - successful.length;
-        const modelNames = new Set(draft.models.map((model) => model.name));
-        successful.forEach(({ models }) => models.forEach((name) => modelNames.add(name)));
-        setModelApiKeys(draft.modelApiKeys.map((item) => {
+        const assignedModels = new Set<string>();
+        const modelApiKeys = draft.modelApiKeys.map((item) => {
             const result = successful.find((entry) => entry.item.id === item.id);
-            return result ? { ...item, models: Array.from(new Set([...item.models, ...result.models])) } : item;
-        }));
-        setModels(Array.from(modelNames).map((name) => draft.models.find((model) => model.name === name) || { name, capability: guessCapability(name) }));
+            const models = result
+                ? Array.from(new Set(result.models)).filter((name) => {
+                      if (assignedModels.has(name)) return false;
+                      assignedModels.add(name);
+                      return true;
+                  })
+                : [];
+            return { ...item, models };
+        });
+        setModelApiKeys(modelApiKeys);
+        setModels(Array.from(assignedModels).map((name) => draft.models.find((model) => model.name === name) || { name, capability: guessCapability(name) }));
         if (failed) message.warning(t("config.channelEditor.fetchAllPartial", { success: successful.length, failed }));
         else message.success(t("config.channelEditor.fetchAllSuccess", { count: successful.length }));
         setFetchingAll(false);
