@@ -1,0 +1,78 @@
+---
+title: Production Release SOP
+description: Dual-remote synchronization, static deployment, validation, and rollback
+---
+
+# Production Release SOP
+
+This is the Infinite Canvas production-release baseline. The application is a Vite static frontend. A normal release replaces only the static root served for `image.helpapis.com`; the NewAPI process, port, configuration, and data behind `codex.helpapis.com` stay outside the release scope.
+
+## Release gates
+
+1. Push the release commit and tags to the project's own GitHub and Gitee repositories. Keep the upstream repository read-only.
+2. Verify that both release branches resolve to the exact local release commit before production changes begin.
+3. Build locally. The production host receives only a SHA256-verified static archive and does not install dependencies or build the frontend.
+4. Verify the registered hostname and `ssh-ed25519` fingerprint before SSH authentication. Keep host details in private local configuration.
+5. Read the active `image.helpapis.com` Nginx configuration to discover the static root. Replace only that root and leave every other site untouched.
+6. Create a timestamped rollback backup before switching. Restore it immediately if automated or browser validation fails.
+7. Keep passwords, tokens, cookies, environment contents, and private host settings out of Git, artifacts, logs, screenshots, and release records.
+8. After validation, remove local release archives and caches plus the remote upload staging directory. Preserve rollback backups and application data.
+
+## Release record
+
+Record the service, source branch, commit, version/tag, both remote commit IDs, artifact SHA256, verified hostname, static root, rollback backup, validation results, and rollback outcome. Store identifiers and results only—never credentials or private configuration values.
+
+## Source and dual-remote gate
+
+```bash
+git status --short
+git diff --check
+git push github main --follow-tags
+git push gitee main --follow-tags
+
+COMMIT="$(git rev-parse HEAD)"
+test "$(git ls-remote github refs/heads/main | cut -f1)" = "$COMMIT"
+test "$(git ls-remote gitee refs/heads/main | cut -f1)" = "$COMMIT"
+```
+
+Recommended roles:
+
+```text
+origin  read-only upstream
+github  project-owned GitHub release repository
+gitee   project-owned Gitee release repository
+```
+
+## Local build
+
+```bash
+cd web
+bun install --frozen-lockfile
+bun run typecheck
+bun run build
+
+cd dist
+tar -czf ../infinite-canvas-web.tar.gz .
+cd ..
+sha256sum infinite-canvas-web.tar.gz > infinite-canvas-web.tar.gz.sha256
+```
+
+Keep `dist` and release archives untracked. The release commit, `VERSION`, and tag must identify the same version.
+
+## Target verification and backup
+
+Provide `IMAGE_HOST`, `IMAGE_HOSTNAME`, and `IMAGE_HOSTKEY_SHA256` through private local configuration. Verify the SSH fingerprint, assert the hostname, read the active Nginx site, record pre-release health for both domains, upload to an isolated staging directory, verify SHA256 on the server, and then create a timestamped backup of the static root. Resolve and check absolute paths before recursive file operations.
+
+## Atomic switch and rollback
+
+Extract into a new directory on the same filesystem, verify `index.html` and primary assets, preserve the rollback backup, and switch by directory rename instead of overwriting files one by one. A static-only release does not reload Nginx. Restore the pre-release backup and repeat validation if any gate fails.
+
+## Validation
+
+Verify HTTP 200 for both domain roots, `success=true` from `codex.helpapis.com/api/status`, primary JS/CSS assets, and SPA fallback for a nested image route. Browser acceptance covers the home page, settings, canvas, provider/model selection, duplicate-key feedback, one non-sensitive generation request, and the browser console.
+
+## Finish
+
+Complete the release record, delete local archives/checksum files/temporary scripts/generated caches, remove the remote staging directory, preserve rollback backups and application data, and clear credentials and temporary environment variables from the release process.
+
+For other projects, preserve the seven core gates: dual-remote equality, local build, host fingerprint verification, backup before switch, automated validation, rollback on failure, and staging cleanup. Add project-specific build, data-protection, switch, and health-check steps instead of reusing static-site commands for databases, containers, or backend services.
