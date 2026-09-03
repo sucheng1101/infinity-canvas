@@ -366,6 +366,10 @@ function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
     };
 }
 
+function isGeminiImageModel(config: Pick<AiConfig, "apiFormat" | "model">) {
+    return config.apiFormat === "openai" && /gemini/i.test(config.model) && /image/i.test(config.model);
+}
+
 function withSystemMessage<T extends ResponseInputMessage>(config: AiConfig, messages: T[]): ResponseInputMessage[] {
     const systemPrompt = config.systemPrompt.trim();
     return systemPrompt ? [{ role: "system" as const, content: systemPrompt }, ...messages] : messages;
@@ -736,9 +740,9 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
     }
-    if (requestConfig.apiFormat === "gemini") {
+    if (requestConfig.apiFormat === "gemini" || isGeminiImageModel(requestConfig)) {
         try {
-            return await requestGeminiImages(requestConfig, prompt, [], n, options);
+            return await requestGeminiImages({ ...requestConfig, apiFormat: "gemini" }, prompt, [], n, options);
         } catch (error) {
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
@@ -797,9 +801,9 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
     }
-    if (requestConfig.apiFormat === "gemini") {
+    if (requestConfig.apiFormat === "gemini" || isGeminiImageModel(requestConfig)) {
         try {
-            return await requestGeminiImages(requestConfig, requestPrompt, references, n, options);
+            return await requestGeminiImages({ ...requestConfig, apiFormat: "gemini" }, requestPrompt, references, n, options);
         } catch (error) {
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }

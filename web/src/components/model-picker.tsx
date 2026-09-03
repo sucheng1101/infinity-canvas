@@ -16,9 +16,10 @@ type ModelPickerProps = {
     fullWidth?: boolean;
     placeholder?: string;
     onMissingConfig?: () => void;
+    showChannel?: boolean;
 };
 
-export function ModelPicker({ config, value, onChange, capability, className, fullWidth = false, placeholder, onMissingConfig }: ModelPickerProps) {
+export function ModelPicker({ config, value, onChange, capability, className, fullWidth = false, placeholder, onMissingConfig, showChannel = true }: ModelPickerProps) {
     const { t } = useTranslation();
     const pickerId = useId();
     const [openPicker, setOpenPicker] = useState<"channel" | "model" | null>(null);
@@ -28,6 +29,8 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
     const channelId = currentChannel?.channel.id || "";
     const models = currentChannel?.models || [];
     const currentModel = decoded?.channelId === channelId ? decoded.model : models.some((model) => model.name === modelOptionName(value || "")) ? modelOptionName(value || "") : "";
+    const allModels = useMemo(() => channels.flatMap(({ channel, models: channelModels }) => channelModels.map((model) => ({ channel, model }))), [channels]);
+    const currentCombinedModel = decoded && allModels.some(({ channel, model }) => channel.id === decoded.channelId && model.name === decoded.model) ? value || "" : allModels.find(({ model }) => model.name === modelOptionName(value || "")) ? encodeChannelModel(allModels.find(({ model }) => model.name === modelOptionName(value || ""))!.channel.id, modelOptionName(value || "")) : "";
     const pickerPlaceholder = placeholder || t("settingsPanels.model.select");
 
     useEffect(() => {
@@ -49,6 +52,31 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
         if (nextModel) onChange(encodeChannelModel(nextChannelId, nextModel.name));
         else onMissingConfig?.();
     };
+
+    if (!showChannel) {
+        return (
+            <Select
+                open={openPicker === "model"}
+                value={currentCombinedModel}
+                onOpenChange={(open) => {
+                    if (open && !allModels.length) onMissingConfig?.();
+                    setPickerOpen("model", open);
+                }}
+                onValueChange={onChange}
+            >
+                <SelectTrigger className={cn("canvas-composer-model-picker h-8 min-w-0 max-w-full justify-start gap-2 rounded-full border border-input bg-transparent px-3 text-sm font-normal shadow-sm", fullWidth ? "w-full" : "w-fit", !fullWidth && "max-w-[16rem]")} title={currentModel || pickerPlaceholder} onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
+                    <ModelIcon model={currentModel} />
+                    <span className="canvas-model-picker-text min-w-0 flex-1 truncate text-left">{currentModel || pickerPlaceholder}</span>
+                </SelectTrigger>
+                <SelectContent data-canvas-no-zoom className="z-[1200] w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border/70 bg-popover p-1 shadow-xl" position="popper" align="start" side="bottom" sideOffset={6} onPointerDown={(event) => event.stopPropagation()} onMouseDown={(event) => event.stopPropagation()}>
+                    {allModels.length ? allModels.map(({ channel, model }) => {
+                        const encoded = encodeChannelModel(channel.id, model.name);
+                        return <SelectItem key={encoded} value={encoded} textValue={`${model.name} ${channel.name}`}><ModelLabel model={model.name} channelName={channel.name} /></SelectItem>;
+                    }) : <SelectItem value="__empty__" disabled>{emptyModelLabel(config, capability)}</SelectItem>}
+                </SelectContent>
+            </Select>
+        );
+    }
 
     return (
         <div className={cn("flex min-w-0 items-center gap-1.5", fullWidth ? "w-full" : "max-w-full", className)}>
@@ -92,11 +120,12 @@ function emptyModelLabel(config: AiConfig, capability?: ModelCapability) {
     return config.models.length ? i18n.t("settingsPanels.model.noMatch", { capability: label }) : i18n.t("settingsPanels.model.addFirst");
 }
 
-function ModelLabel({ model }: { model: string }) {
+function ModelLabel({ model, channelName }: { model: string; channelName?: string }) {
     return (
         <span className="flex min-w-0 items-center gap-2">
             <ModelIcon model={model} />
-            <span className="truncate">{modelOptionName(model)}</span>
+            <span className="min-w-0 truncate">{modelOptionName(model)}</span>
+            {channelName ? <span className="shrink-0 text-xs text-muted-foreground">({channelName})</span> : null}
         </span>
     );
 }
