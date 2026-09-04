@@ -79,6 +79,10 @@ const FIXED_CHANNELS = [
     { id: "codex-helpapis", name: "codex.helpapis.com", baseUrl: "https://codex.helpapis.com" },
     { id: "helpapis", name: "helpapis.com", baseUrl: "https://helpapis.com" },
 ] as const;
+const PRODUCTION_API_PROXY_PATHS: Record<string, string> = {
+    "https://codex.helpapis.com": "/direct/codex",
+    "https://helpapis.com": "/direct/helpapis",
+};
 
 function defaultFixedChannels(): ModelChannel[] {
     return FIXED_CHANNELS.map((channel) => ({ ...channel, apiKey: "", modelApiKeys: [], apiFormat: "openai", models: [] }));
@@ -471,8 +475,17 @@ function uniqueModelOptions(models: string[]) {
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)));
 }
 
-export function buildApiUrl(baseUrl: string, path: string) {
+export function resolveApiBaseUrl(baseUrl: string) {
     const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
+    if (typeof window !== "undefined" && window.location.protocol === "https:" && window.location.hostname === "image.helpapis.com") {
+        const proxyPath = PRODUCTION_API_PROXY_PATHS[normalizedBaseUrl.toLowerCase()];
+        if (proxyPath) return `${window.location.origin}${proxyPath}`;
+    }
+    return normalizedBaseUrl;
+}
+
+export function buildApiUrl(baseUrl: string, path: string) {
+    const normalizedBaseUrl = resolveApiBaseUrl(baseUrl);
     const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
     const apiBaseUrl = lowerBaseUrl.endsWith("/v1") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
     return `${apiBaseUrl}${path}`;

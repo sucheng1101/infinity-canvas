@@ -1,7 +1,7 @@
 import axios from "axios";
 
 import i18n from "@/i18n";
-import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
+import { buildApiUrl, resolveApiBaseUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 import { normalizePluginImages, runModelPlugin } from "./model-plugin";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
@@ -345,7 +345,7 @@ function aiHeaders(config: AiConfig, contentType?: string) {
 }
 
 function geminiBaseUrl(config: Pick<AiConfig, "baseUrl">) {
-    const normalizedBaseUrl = config.baseUrl.trim().replace(/\/+$/, "");
+    const normalizedBaseUrl = resolveApiBaseUrl(config.baseUrl);
     const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
     return lowerBaseUrl.endsWith("/v1") || lowerBaseUrl.endsWith("/v1beta") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1beta`;
 }

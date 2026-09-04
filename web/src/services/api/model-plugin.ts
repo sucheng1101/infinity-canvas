@@ -1,7 +1,7 @@
 import axios, { type AxiosRequestConfig } from "axios";
 
 import i18n from "@/i18n";
-import { buildApiUrl, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
+import { buildApiUrl, resolveApiBaseUrl, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 
 type RequestOptions = { signal?: AbortSignal };
 
@@ -113,6 +113,7 @@ function createPoll(signal?: AbortSignal) {
  */
 export async function runModelPlugin<T = unknown>(args: RunPluginArgs): Promise<T> {
     const { config } = args;
+    const requestBaseUrl = resolveApiBaseUrl(config.baseUrl);
     const http = createPluginHttp(config, { signal: args.signal });
     const request = createPluginRequest(config, { signal: args.signal });
     const poll = createPoll(args.signal);
@@ -141,7 +142,7 @@ export async function runModelPlugin<T = unknown>(args: RunPluginArgs): Promise<
             args.messages || [],
             args.params || {},
             config.model,
-            config.baseUrl,
+            requestBaseUrl,
             config.apiKey,
             config.systemPrompt || "",
             config.reasoningEffort,
