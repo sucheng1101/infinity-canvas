@@ -21,6 +21,7 @@ import { boolConfig, modelOptionLabel, useConfigStore, useEffectiveConfig, type 
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ReferenceImage } from "@/types/image";
 import i18n from "@/i18n";
+import { isImageFile } from "@/lib/image-format";
 
 type GeneratedVideo = {
     id: string;
@@ -115,9 +116,9 @@ export default function VideoPage() {
 
     const addReferences = async (files?: FileList | null) => {
         const selectedFiles = Array.from(files || []);
-        const unsupported = selectedFiles.filter((file) => !file.type.startsWith("image/"));
+        const unsupported = selectedFiles.filter((file) => !isImageFile(file));
         if (unsupported.length) message.warning(t("videoWorkbench.unsupportedFiles"));
-        const imageFiles = selectedFiles.filter((file) => file.type.startsWith("image/")).slice(0, 7 - references.length);
+        const imageFiles = selectedFiles.filter(isImageFile).slice(0, 7 - references.length);
         const nextReferences = await Promise.all(
             imageFiles.map(async (file) => {
                 const image = await uploadImage(file);
@@ -481,7 +482,7 @@ export default function VideoPage() {
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 multiple
                 className="hidden"
                 onChange={(event) => {

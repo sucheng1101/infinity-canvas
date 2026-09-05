@@ -2,6 +2,7 @@ import localforage from "localforage";
 
 import { nanoid } from "nanoid";
 import i18n from "@/i18n";
+import { normalizeImageBlob } from "@/lib/image-format";
 
 export type UploadedImage = {
     url: string;
@@ -25,7 +26,7 @@ const IMAGE_TIMEOUT_ERROR = "ImageTimeoutError";
 type ImageReadOptions = { signal?: AbortSignal };
 
 export async function uploadImage(input: string | Blob, options?: ImageReadOptions): Promise<UploadedImage> {
-    if (typeof input !== "string") return storeImage(input, options);
+    if (typeof input !== "string") return storeImage(await normalizeImageBlob(input, typeof File !== "undefined" && input instanceof File ? input.name : ""), options);
 
     let blob: Blob;
     try {
@@ -36,7 +37,7 @@ export async function uploadImage(input: string | Blob, options?: ImageReadOptio
         if (!meta) throw error;
         return { url: input, width: meta.width, height: meta.height, bytes: 0, mimeType: "" };
     }
-    return storeImage(blob, options);
+    return storeImage(await normalizeImageBlob(blob, input), options);
 }
 
 async function storeImage(blob: Blob, options?: ImageReadOptions): Promise<UploadedImage> {

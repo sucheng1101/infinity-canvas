@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { formatBytes, readFileAsDataUrl } from "@/lib/image-utils";
 import { uploadImage } from "@/services/image-storage";
+import { isImageFile } from "@/lib/image-format";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type ImageAsset } from "@/stores/use-asset-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
@@ -130,7 +131,7 @@ export default function AssetsPage() {
     };
 
     const readImageFile = async (file?: File) => {
-        if (!file || !file.type.startsWith("image/")) return;
+        if (!file || !isImageFile(file)) return;
         const image = await uploadImage(file);
         const draft = { dataUrl: image.url, storageKey: image.storageKey, width: image.width, height: image.height, bytes: image.bytes, mimeType: image.mimeType };
         setImageDraft(draft);
@@ -369,7 +370,7 @@ export default function AssetsPage() {
                 <input
                     ref={coverInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.heic,.heif"
                     className="hidden"
                     onChange={(event) => {
                         void readCoverFile(event.target.files?.[0]);
@@ -379,7 +380,7 @@ export default function AssetsPage() {
                 <input
                     ref={imageInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.heic,.heif"
                     className="hidden"
                     onChange={(event) => {
                         void readImageFile(event.target.files?.[0]);

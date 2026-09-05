@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type Keyboard
 import { Popover } from "antd";
 import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { isImageFile } from "@/lib/image-format";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { buildCanvasResourceReferences, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
@@ -188,7 +189,7 @@ export function AgentChatPromptInput({ value, disabled, placeholder, theme, onCh
                     syncFromEditor();
                 }}
                 onPaste={(event) => {
-                    const images = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+                    const images = Array.from(event.clipboardData.files).filter(isImageFile);
                     if (images.length && onAddFiles) {
                         event.preventDefault();
                         void onAddFiles(images);

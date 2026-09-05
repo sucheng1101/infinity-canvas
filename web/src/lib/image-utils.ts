@@ -1,5 +1,6 @@
 import i18n from "@/i18n";
 import type { ReferenceImage } from "@/types/image";
+import { normalizeImageBlob } from "@/lib/image-format";
 
 export function formatBytes(bytes: number) {
     if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -31,12 +32,13 @@ export function getDataUrlByteSize(dataUrl: string) {
     return Math.max(0, Math.floor((base64.length * 3) / 4) - padding);
 }
 
-export function readFileAsDataUrl(file: File) {
+export async function readFileAsDataUrl(file: File) {
+    const normalized = await normalizeImageBlob(file, file.name);
     return new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ""));
         reader.onerror = () => reject(new Error(i18n.t("common.imageReadFailed")));
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(normalized);
     });
 }
 

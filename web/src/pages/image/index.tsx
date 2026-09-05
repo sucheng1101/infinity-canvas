@@ -21,6 +21,7 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import type { ReferenceImage } from "@/types/image";
 import i18n from "@/i18n";
+import { isImageFile } from "@/lib/image-format";
 
 type GeneratedImage = {
     id: string;
@@ -116,7 +117,7 @@ export default function ImagePage() {
     }, []);
 
     const addReferences = async (files?: FileList | null) => {
-        const imageFiles = Array.from(files || []).filter((file) => file.type.startsWith("image/"));
+        const imageFiles = Array.from(files || []).filter(isImageFile);
         const nextReferences = await Promise.all(
             imageFiles.map(async (file) => {
                 const image = await uploadImage(file);
@@ -521,7 +522,7 @@ export default function ImagePage() {
             <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 multiple
                 className="hidden"
                 onChange={(event) => {

@@ -12,6 +12,7 @@ import { upscaleDataUrl } from "@/lib/canvas/canvas-image-data";
 import { imageMetadata } from "@/lib/canvas/canvas-node-factory";
 import { fitNodeSize } from "@/lib/canvas/canvas-node-size";
 import { resolveCanvasReferenceImages } from "@/lib/canvas/canvas-resource-references";
+import { isImageFile, normalizeImageBlob } from "@/lib/image-format";
 import { readImageMeta } from "@/lib/image-utils";
 import { randomId } from "@/lib/utils";
 import { uploadImage } from "@/services/image-storage";
@@ -754,16 +755,17 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
 
     const addAttachments = async (files: FileList | File[] | null) => {
         if (!files) return;
-        const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
+        const images = Array.from(files).filter(isImageFile);
         const prev = useAgentStore.getState().attachments;
         try {
             const next = await Promise.all(
                 images.slice(0, Math.max(0, MAX_ATTACHMENTS - prev.length)).map(async (file) => {
-                    const dataUrl = await readDataUrl(file);
+                    const normalized = await normalizeImageBlob(file, file.name);
+                    const dataUrl = await readDataUrl(normalized);
                     const meta = await readImageMeta(dataUrl);
-                    const url = URL.createObjectURL(file);
+                    const url = URL.createObjectURL(normalized);
                     attachmentUrlsRef.current.add(url);
-                    return { id: createId(), name: file.name, type: file.type, size: file.size, width: meta.width, height: meta.height, url, dataUrl };
+                    return { id: createId(), name: file.name, type: normalized.type || "image/jpeg", size: normalized.size, width: meta.width, height: meta.height, url, dataUrl };
                 }),
             );
             const merged = [...prev, ...next];

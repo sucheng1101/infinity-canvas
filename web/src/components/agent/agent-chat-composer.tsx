@@ -80,7 +80,7 @@ export function AgentChatComposer({
                     <div className="flex min-w-0 items-center gap-1">
                         {onAddFiles ? (
                             <>
-                                <input ref={fileInputRef} hidden type="file" accept="image/*" multiple onChange={(event) => {
+                                <input ref={fileInputRef} hidden type="file" accept="image/*,.heic,.heif" multiple onChange={(event) => {
                                     void onAddFiles(event.target.files);
                                     event.target.value = "";
                                 }} />
