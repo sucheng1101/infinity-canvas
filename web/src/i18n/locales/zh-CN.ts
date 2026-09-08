@@ -148,6 +148,11 @@ export default {
         configFirst: "请先完成配置",
         generationFailed: "生成失败",
         retrySuccess: "重试成功",
+        partial: "\u90e8\u5206\u6210\u529f",
+        diagnostics: "\u5931\u8d25\u8bca\u65ad",
+        copyDiagnostics: "\u590d\u5236\u8bca\u65ad",
+        diagnosticsCopied: "\u8bca\u65ad\u5df2\u590d\u5236",
+        attempt: "\u7b2c {{index}} \u5f20\u56fe",
     },
     imageWorkbench: {
         title: "生图工作台",

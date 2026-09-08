@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Copy, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
 import localforage from "localforage";
@@ -56,9 +56,19 @@ type GenerationLog = {
     imageCount: number;
     size: string;
     quality: string;
-    status: "success" | "failed";
+    status: "success" | "partial" | "failed";
     images: GeneratedImage[];
     thumbnails: string[];
+    attempts: GenerationAttempt[];
+    error?: string;
+};
+
+type GenerationAttempt = {
+    id: string;
+    slotIndex: number;
+    status: "success" | "failed";
+    durationMs: number;
+    error?: string;
 };
 
 type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count">;
@@ -186,6 +196,11 @@ export default function ImagePage() {
         const failCount = generationCount - successCount;
         const failed = result.find((item): item is PromiseRejectedResult => item.status === "rejected");
         const error = failed?.reason instanceof Error ? failed.reason.message : failCount ? t("workbench.generationFailed") : undefined;
+        const attempts: GenerationAttempt[] = result.map((item, slotIndex) => {
+            if (item.status === "fulfilled") return { id: item.value.id, slotIndex, status: "success", durationMs: item.value.durationMs };
+            const reason = item.reason as { message?: unknown; durationMs?: unknown };
+            return { id: nanoid(), slotIndex, status: "failed", durationMs: typeof reason.durationMs === "number" ? reason.durationMs : 0, error: typeof reason.message === "string" ? reason.message : t("workbench.generationFailed") };
+        });
         if (agentTaskId) updateAgentTask(agentTaskId, { status: successCount ? "succeeded" : "failed", successCount, failCount, error: successCount ? undefined : error });
 
         try {
@@ -198,8 +213,10 @@ export default function ImagePage() {
                     durationMs: performance.now() - batchStartedAt,
                     successCount,
                     failCount,
-                    status: successCount ? "success" : "failed",
+                    status: successCount === generationCount ? "success" : successCount ? "partial" : "failed",
                     images: successImages,
+                    attempts,
+                    error,
                 }),
             );
             successCount ? message.success(t("imageWorkbench.generated")) : message.error(failed?.reason instanceof Error ? failed.reason.message : t("workbench.generationFailed"));
@@ -302,7 +319,11 @@ export default function ImagePage() {
         if (log.config.quality) updateConfig("quality", log.config.quality);
         if (log.config.size) updateConfig("size", log.config.size);
         if (log.config.count) updateConfig("count", log.config.count);
-        setResults(log.images.map((image) => ({ id: image.id, status: "success", image })));
+        const attempts = log.attempts || [];
+        setResults(attempts.length ? attempts.map((attempt) => {
+            const image = log.images.find((item) => item.id === attempt.id);
+            return image ? { id: image.id, status: "success" as const, image } : { id: attempt.id, status: "failed" as const, error: attempt.error };
+        }) : log.images.map((image) => ({ id: image.id, status: "success" as const, image })));
     };
 
     const buildRequestSnapshot = () => {
@@ -330,7 +351,9 @@ export default function ImagePage() {
             setResults((value) => updateResultAt(value, index, { status: "success", image: nextImage }));
             return nextImage;
         } catch (error) {
+            const durationMs = performance.now() - itemStartedAt;
             setResults((value) => updateResultAt(value, index, { status: "failed", error: error instanceof Error ? error.message : t("workbench.generationFailed") }));
+            if (error instanceof Error) Object.assign(error, { durationMs });
             throw error;
         }
     };
@@ -354,6 +377,7 @@ export default function ImagePage() {
                     failCount: 0,
                     status: "success",
                     images: [image],
+                    attempts: [{ id: image.id, slotIndex: index, status: "success", durationMs: image.durationMs }],
                 }),
             );
             message.success(t("workbench.retrySuccess"));
@@ -498,6 +522,7 @@ export default function ImagePage() {
                             </div>
                             {running ? <Tag className="m-0 px-2 py-1">{t("workbench.waiting", { time: formatDuration(elapsedMs) })}</Tag> : null}
                         </div>
+                        {previewLog ? <LogDiagnostics log={previewLog} /> : null}
                         {results.length ? (
                             <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
                                 {results.map((result, index) =>
@@ -744,6 +769,9 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
                 </div>
                 <div className="grid justify-items-end gap-2">
                     <div className="flex gap-1">
+                        <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color={log.status === "failed" ? "red" : log.status === "partial" ? "orange" : "green"}>
+                            {t(`workbench.${log.status}`)}
+                        </Tag>
                         <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none" color="blue">
                             {t("workbench.successCount", { count: log.successCount ?? log.imageCount })}
                         </Tag>
@@ -762,6 +790,7 @@ function LogCard({ log, selected, active, onSelectedChange, onClick }: { log: Ge
                     <div className="flex justify-end">
                         <Tag className="m-0 flex h-6 items-center rounded-md px-1.5 text-xs leading-none">{log.time}</Tag>
                     </div>
+                    {log.error ? <div className="mt-2 max-w-full truncate text-xs text-red-500" title={log.error}>{log.error}</div> : null}
                 </div>
             </div>
         </button>
@@ -814,6 +843,8 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
         status: log.status || "success",
         images,
         thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
+        attempts: log.attempts || [],
+        error: log.error,
     };
 }
 
@@ -823,6 +854,8 @@ function serializeLog(log: GenerationLog): GenerationLog {
         references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
         images: log.images.map((image) => ({ ...image, dataUrl: image.storageKey ? "" : image.dataUrl })),
         thumbnails: [],
+        attempts: log.attempts || [],
+        error: log.error,
     };
 }
 
@@ -864,6 +897,8 @@ function buildLog({
     failCount,
     status,
     images,
+    attempts,
+    error,
 }: {
     prompt: string;
     model: string;
@@ -874,6 +909,8 @@ function buildLog({
     failCount: number;
     status: GenerationLog["status"];
     images: GeneratedImage[];
+    attempts: GenerationAttempt[];
+    error?: string;
 }): GenerationLog {
     const logConfig = {
         model: config.model,
@@ -900,5 +937,38 @@ function buildLog({
         status,
         images,
         thumbnails: images.map((image) => image.dataUrl).filter(Boolean),
+        attempts,
+        error,
     };
+}
+
+function LogDiagnostics({ log }: { log: GenerationLog }) {
+    const { t } = useTranslation();
+    const { message } = App.useApp();
+    const failedAttempts = (log.attempts || []).filter((attempt) => attempt.status === "failed");
+    if (!failedAttempts.length) return null;
+    const copyDiagnostics = () => {
+        const text = failedAttempts.map((attempt) => `#${attempt.slotIndex + 1} · ${formatDuration(attempt.durationMs)} · ${attempt.error || t("workbench.generationFailed")}`).join("\n");
+        if (!navigator.clipboard) return;
+        void navigator.clipboard.writeText(text).then(() => message.success(t("workbench.diagnosticsCopied")));
+    };
+    return (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50/70 p-3 dark:border-red-950 dark:bg-red-950/20">
+            <div className="mb-2 flex items-center justify-between gap-2">
+                <div className="text-sm font-semibold text-red-700 dark:text-red-300">{t("workbench.diagnostics")}</div>
+                <Button size="small" type="text" icon={<Copy className="size-3.5" />} onClick={copyDiagnostics}>{t("workbench.copyDiagnostics")}</Button>
+            </div>
+            <div className="space-y-2">
+                {failedAttempts.map((attempt) => (
+                    <div key={attempt.id} className="rounded-md border border-red-200/80 bg-white/60 px-2.5 py-2 text-xs dark:border-red-900 dark:bg-black/10">
+                        <div className="mb-1 flex justify-between gap-2 font-medium text-red-700 dark:text-red-300">
+                            <span>{t("workbench.attempt", { index: attempt.slotIndex + 1 })}</span>
+                            <span>{formatDuration(attempt.durationMs)}</span>
+                        </div>
+                        <Typography.Paragraph ellipsis={{ rows: 3, expandable: true }} className="!mb-0 !text-xs !text-red-600 dark:!text-red-300">{attempt.error || t("workbench.generationFailed")}</Typography.Paragraph>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
 }

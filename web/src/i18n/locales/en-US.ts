@@ -148,6 +148,11 @@ export default {
         configFirst: "Complete the configuration first",
         generationFailed: "Generation failed",
         retrySuccess: "Retry succeeded",
+        partial: "Partially succeeded",
+        diagnostics: "Failure diagnostics",
+        copyDiagnostics: "Copy diagnostics",
+        diagnosticsCopied: "Diagnostics copied",
+        attempt: "Image {{index}}",
     },
     imageWorkbench: {
         title: "Image Studio",

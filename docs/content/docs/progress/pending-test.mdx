@@ -5,6 +5,8 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+- 图片工作台生成日志诊断：多图生成出现部分失败时，刷新页面后打开生成记录，应保留失败图片槽位、单张错误信息和耗时；点击“复制诊断”应复制脱敏后的失败摘要，成功图片仍可预览和下载。
+
 The current release needs manual verification in these areas:
 
 - HEIC/HEIF 图片导入：在图片工作台、素材库、画布、视频参考图和 Agent 附件中选择或拖入 `.heic/.heif` 文件，应自动转换为 JPEG，正常读取尺寸、预览、保存和发送；MIME 为空但扩展名为 HEIC/HEIF 的文件也应被接受，转换失败时应显示图片读取失败提示。
