@@ -52,6 +52,7 @@ export type AiConfig = {
     vquality: string;
     videoGenerateAudio: string;
     videoWatermark: string;
+    videoMode: string;
     systemPrompt: string;
     reasoningEffort: ReasoningEffort;
     models: string[];
@@ -60,6 +61,8 @@ export type AiConfig = {
     background: string;
     count: string;
     canvasImageCount: string;
+    proxyEnabled: boolean;
+    proxyUrl: string;
 };
 
 export type WebdavSyncConfig = {
@@ -69,7 +72,7 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "preferences" | "prompt-sources" | "webdav" | "local-storage";
+export type ConfigTabKey = "channels" | "local-proxy" | "preferences" | "prompt-sources" | "webdav" | "local-storage";
 
 export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 const CHANNEL_MODEL_SEPARATOR = "::";
@@ -83,6 +86,8 @@ const PRODUCTION_API_PROXY_PATHS: Record<string, string> = {
     "https://codex.helpapis.com": "/direct/codex",
     "https://helpapis.com": "/direct/helpapis",
 };
+export const LOCAL_PROXY_PACKAGE = "@basketikun/canvas-proxy";
+export const DEFAULT_LOCAL_PROXY_URL = "http://127.0.0.1:23210";
 
 function defaultFixedChannels(): ModelChannel[] {
     return FIXED_CHANNELS.map((channel) => ({ ...channel, apiKey: "", modelApiKeys: [], apiFormat: "openai", models: [] }));
@@ -107,6 +112,7 @@ export const defaultConfig: AiConfig = {
     vquality: "720",
     videoGenerateAudio: "true",
     videoWatermark: "false",
+    videoMode: "frames",
     systemPrompt: "",
     reasoningEffort: "auto",
     models: defaultFixedChannels().flatMap((channel) => channel.models.map((model) => `${channel.id}${CHANNEL_MODEL_SEPARATOR}${model.name}`)),
@@ -115,6 +121,8 @@ export const defaultConfig: AiConfig = {
     background: "",
     count: "1",
     canvasImageCount: "1",
+    proxyEnabled: false,
+    proxyUrl: DEFAULT_LOCAL_PROXY_URL,
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -238,6 +246,9 @@ export const useConfigStore = create<ConfigStore>()(
                         ...config,
                         size: version < 1 && config.size === "1:1" ? "3:4" : config.size || defaultConfig.size,
                         canvasImageCount: version < 1 && config.canvasImageCount === "3" ? "1" : config.canvasImageCount || defaultConfig.canvasImageCount,
+                        videoMode: config.videoMode === "reference" ? "reference" : "frames",
+                        proxyEnabled: Boolean(config.proxyEnabled),
+                        proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
                     },
                     webdav: { ...defaultWebdavSyncConfig, ...state.webdav },
                 };
@@ -416,6 +427,9 @@ export function normalizeAiConfig(input: Partial<AiConfig>): AiConfig {
         videoGenerateAudio: config.videoGenerateAudio || "true",
         videoWatermark: config.videoWatermark || "false",
         canvasImageCount: config.canvasImageCount || "1",
+        videoMode: config.videoMode === "reference" ? "reference" : "frames",
+        proxyEnabled: Boolean(config.proxyEnabled),
+        proxyUrl: normalizeLocalProxyUrl(config.proxyUrl || DEFAULT_LOCAL_PROXY_URL) || DEFAULT_LOCAL_PROXY_URL,
     };
     const pick = (value: string | undefined, capability: ModelCapability) => {
         const normalized = normalizeModelOptionValue(value, channels);
@@ -477,7 +491,7 @@ function uniqueModelOptions(models: string[]) {
 
 export function resolveApiBaseUrl(baseUrl: string) {
     const normalizedBaseUrl = baseUrl.trim().replace(/\/+$/, "");
-    if (typeof window !== "undefined" && window.location.protocol === "https:" && window.location.hostname === "image.helpapis.com") {
+    if (!useConfigStore.getState().config.proxyEnabled && typeof window !== "undefined" && window.location.protocol === "https:" && window.location.hostname === "image.helpapis.com") {
         const proxyPath = PRODUCTION_API_PROXY_PATHS[normalizedBaseUrl.toLowerCase()];
         if (proxyPath) return `${window.location.origin}${proxyPath}`;
     }
@@ -488,5 +502,19 @@ export function buildApiUrl(baseUrl: string, path: string) {
     const normalizedBaseUrl = resolveApiBaseUrl(baseUrl);
     const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
     const apiBaseUrl = lowerBaseUrl.endsWith("/v1") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1`;
-    return `${apiBaseUrl}${path}`;
+    return withLocalProxy(`${apiBaseUrl}${path}`);
+}
+
+export function normalizeLocalProxyUrl(value: string) {
+    const trimmed = value.trim().replace(/\/+$/, "");
+    if (!trimmed) return "";
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
+export function withLocalProxy(url: string) {
+    const { proxyEnabled, proxyUrl } = useConfigStore.getState().config;
+    if (!proxyEnabled || !/^https?:\/\//i.test(url)) return url;
+    const base = normalizeLocalProxyUrl(proxyUrl);
+    if (!base || url.startsWith(`${base}/`)) return url;
+    return `${base}/${url}`;
 }

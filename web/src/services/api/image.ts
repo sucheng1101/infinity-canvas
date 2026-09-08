@@ -1,7 +1,7 @@
 import axios from "axios";
 
 import i18n from "@/i18n";
-import { buildApiUrl, resolveApiBaseUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
+import { buildApiUrl, resolveApiBaseUrl, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 import { normalizePluginImages, runModelPlugin } from "./model-plugin";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
