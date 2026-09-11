@@ -4,6 +4,7 @@
 
 - [Quick Start](/docs/overview/quick-start)
 - [Features](/docs/overview/features)
+- [Ecommerce Prompts and Workflows Research](/docs/overview/ecommerce-workflows)
 - [Deploy on Render](/docs/overview/render)
 - [Docker Deployment](/docs/overview/docker)
 - [Third-party Prompt Sources](/docs/overview/third-party-prompt-repositories)

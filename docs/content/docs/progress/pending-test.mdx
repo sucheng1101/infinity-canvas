@@ -5,6 +5,9 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+- Unified creative workbench: only one Creative Workbench entry should remain in the top navigation. Image and video creation should switch in-page; legacy `/image` and `/video` routes should open the corresponding mode, and refresh should preserve the selected mode.
+- Project management and ecommerce projects: the regular Infinite Canvas entry should remain separate and omit scenario-project creation actions. Project Management currently lists ecommerce projects only. Creating one with multiple reference images should persist its ecommerce type, product brief, realism preset, and reference images; the resulting canvas should include product facts, shot plan, three generation nodes, QA, and reference-image nodes. Each reference image should connect to all three generation nodes, whose prompts should include the photorealism preset; reload and import should retain the project marker and content.
+
 The current release needs manual verification in these areas:
 
 - 图片工作台生成日志诊断：多图生成出现部分失败时，刷新页面后打开生成记录，应保留失败图片槽位、单张错误信息和耗时；点击“复制诊断”应复制脱敏后的失败摘要，成功图片仍可预览和下载。

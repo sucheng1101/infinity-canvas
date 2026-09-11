@@ -1,0 +1,63 @@
+---
+title: Ecommerce Prompts and Workflows Research
+description: Public references and implementation guidance for ecommerce visual production
+---
+
+# Ecommerce Prompts and Workflows Research
+
+This page records public references for ecommerce product images, listing assets, and reusable prompt systems. External repositories are research references only; do not copy their code, prompts, or assets into the product without checking the repository license and attribution requirements.
+
+## Summary
+
+The useful abstraction is a repeatable production loop rather than a universal prompt:
+
+```text
+Product brief/source images -> product facts -> platform and audience -> image-set blueprint -> generation -> QA -> revision -> export
+```
+
+Infinite Canvas already has image, text, configuration, video, reference connections, batch generation, generation records, and error details. The first ecommerce iteration can therefore be built on the existing browser-side generation pipeline without adding a backend or ComfyUI runtime.
+
+## Public references
+
+- [SellerPilot Product Image Industrial](https://github.com/ninemouth/sellerpilot-product-image-industrial): product fact sheets, platform profiles, image-set blueprints, identity locks, QA, manifests, and revision loops. MIT.
+- [Product AI Listing Studio](https://github.com/pkp666/product-ai-listing-studio): product intake, selling points, keywords, SKU matrices, platform fields, listing images, and short-form video stages. MIT.
+- [ComfyUI E-Commerce Workflows](https://github.com/xiaoqahax-ui/comfyui-ecommerce-workflows): background replacement, virtual try-on, detail-page layout, and batch SKU processing. Apache-2.0.
+- [Ecommerce Detail Memory](https://github.com/InspireWu98/ecommerce-detail-memory): platform and audience targeting, product consistency, image roles, and camera planning.
+- [Awesome GPT Image 2 Prompts](https://github.com/cliprise/awesome-gpt-image-2-prompts): structured product photography and editing briefs.
+- [Awesome Seedream 5 Prompts](https://github.com/cliprise/awesome-seedream-5-prompts): layered prompt structure from intent through QA and variants. CC BY 4.0.
+
+## Prompt layers
+
+Use four layers in every reusable template:
+
+1. **Product facts**: confirmed color, silhouette, proportions, material, hardware, markings, accessories, dimensions, use cases, unknowns, and unsupported claims.
+2. **Visual role**: platform, audience, image role, buyer question, primary message, composition, camera, lighting, safe area, and forbidden elements.
+3. **Generation constraints**: source image as identity reference; allowed changes are limited to background, lighting, scene, props, model, crop, and camera angle; preserve product identity.
+4. **QA**: identity, factual claims, role diversity, platform fit, visible text, localization, and required human review.
+
+## First templates
+
+```text
+Clean ecommerce main image for [platform], targeting [audience], featuring [product] as the clear visual center. Preserve [identity traits], accurate color and proportions, clean background, natural shadow, and commercial product photography. Avoid unsupported claims, random props, watermarks, and platform badges.
+```
+
+```text
+Ecommerce selling-point image for [platform] explaining one buying reason: [core point]. Show it through [close-up/action/comparison], preserve [identity traits], use only confirmed facts, and keep a clear product-first hierarchy.
+```
+
+```text
+Ecommerce usage scene for [platform] showing [audience] using [product] in [realistic context]. Preserve scale, structure, and identity. Use people and props only to clarify the interaction; do not obstruct or alter the product.
+```
+
+## Canvas mapping and MVP
+
+- Product brief node: name, category, material, dimensions, selling points, audience, platform, and SKU.
+- Product-facts text node: source-image evidence, confirmed facts, unknowns, and identity lock.
+- Visual-planning node: image roles and per-image blueprints.
+- Existing image/config nodes: execute main, selling-point, and usage-scene templates.
+- QA node or panel: findings, evidence, revision brief, and human review status.
+- Group/export flow: approved assets and a platform-oriented manifest.
+
+The first implementation should formalize the existing `product-grid` concept, add a lightweight product brief node, provide the three templates above, add six platform profiles, and add ecommerce fields to generation records. Defer ComfyUI integration, automatic listing publication, and fully automated competitor research until the canvas workflow is validated.
+
+See the [Chinese research page](/zh-CN/docs/overview/ecommerce-workflows) for the full field contracts, platform guidance, and implementation sequence.

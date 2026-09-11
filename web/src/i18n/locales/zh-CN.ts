@@ -330,6 +330,8 @@ export default {
     },
     navigation: {
         canvas: "我的画布",
+        workbench: "创作工作台",
+        projects: "项目管理",
         image: "生图工作台",
         video: "视频创作台",
         prompts: "提示词库",

@@ -7,9 +7,23 @@ import { localForageStorage } from "@/lib/localforage-storage";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
 
+export type CanvasProjectKind = "general" | "ecommerce";
+
+export type EcommerceProductBrief = {
+    productName: string;
+    category: string;
+    platform: string;
+    audience: string;
+    sellingPoints: string[];
+    referenceImages?: string[];
+    realismPreset?: string;
+};
+
 export type CanvasProject = {
     id: string;
     title: string;
+    kind?: CanvasProjectKind;
+    ecommerceBrief?: EcommerceProductBrief;
     createdAt: string;
     updatedAt: string;
     nodes: CanvasNodeData[];
@@ -30,13 +44,13 @@ type CanvasStore = {
     hydrated: boolean;
     projects: CanvasProject[];
     deletedProjects: CanvasDeletedProject[];
-    createProject: (title?: string) => string;
+    createProject: (title?: string, options?: { kind?: CanvasProjectKind; ecommerceBrief?: EcommerceProductBrief; nodes?: CanvasNodeData[]; connections?: CanvasConnection[] }) => string;
     importProject: (project: Partial<CanvasProject>) => string;
     openProject: (id: string) => CanvasProject | null;
     renameProject: (id: string, title: string) => void;
     deleteProjects: (ids: string[]) => void;
     replaceProjects: (projects: CanvasProject[], deletedProjects?: CanvasDeletedProject[]) => void;
-    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
+    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport" | "kind" | "ecommerceBrief">>) => void;
 };
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
@@ -72,16 +86,18 @@ export const useCanvasStore = create<CanvasStore>()(
             hydrated: false,
             projects: [],
             deletedProjects: [],
-            createProject: (title = i18n.t("canvas.project.untitled")) => {
+            createProject: (title = i18n.t("canvas.project.untitled"), options = {}) => {
                 const now = new Date().toISOString();
                 const id = nanoid();
                 const project: CanvasProject = {
                     id,
                     title,
+                    kind: options.kind || "general",
+                    ecommerceBrief: options.ecommerceBrief,
                     createdAt: now,
                     updatedAt: now,
-                    nodes: [],
-                    connections: [],
+                    nodes: options.nodes || [],
+                    connections: options.connections || [],
                     chatSessions: [],
                     activeChatId: null,
                     backgroundMode: "lines",
@@ -96,6 +112,8 @@ export const useCanvasStore = create<CanvasStore>()(
                 const project: CanvasProject = {
                     id: nanoid(),
                     title: source.title || i18n.t("canvas.project.imported"),
+                    kind: source.kind || "general",
+                    ecommerceBrief: source.ecommerceBrief,
                     createdAt: source.createdAt || now,
                     updatedAt: now,
                     nodes: source.nodes || [],

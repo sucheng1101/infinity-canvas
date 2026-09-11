@@ -54,7 +54,10 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                             open();
                         }}
                     >
-                        <h2 className="truncate text-xl font-semibold">{project.title}</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="truncate text-xl font-semibold">{project.title}</h2>
+                            {project.kind === "ecommerce" ? <span className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">电商</span> : null}
+                        </div>
                         <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-400">
                             {t("canvas.project.stats", { nodes: project.nodes.length, connections: project.connections.length })}
                         </p>

@@ -330,6 +330,8 @@ export default {
     },
     navigation: {
         canvas: "My Canvases",
+        workbench: "Creative Studio",
+        projects: "Projects",
         image: "Image Studio",
         video: "Video Studio",
         prompts: "Prompt Library",
