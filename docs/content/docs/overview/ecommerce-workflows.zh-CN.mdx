@@ -27,6 +27,23 @@ description: 电商商品图、详情页和多平台素材生产的公开方案�
 | [Ecommerce Detail Memory](https://github.com/InspireWu98/ecommerce-detail-memory) | 平台、人群、商品一致性、详情页图片角色、镜头规划和失败回退 | 需按仓库许可证核对后再复用具体文本；本项目只采用抽象方法 |
 | [Awesome GPT Image 2 Prompts](https://github.com/cliprise/awesome-gpt-image-2-prompts) | 产品摄影、商品图编辑、广告创意的结构化 brief，而不是单句形容词堆叠 | 独立教育资源；具体条目使用前核对上游许可证 |
 | [Awesome Seedream 5 Prompts](https://github.com/cliprise/awesome-seedream-5-prompts) | `intent → subject → composition → lighting → restrictions → QA → variants` 的提示词分层方式 | CC BY 4.0；若引用原文或改编内容需按要求署名 |
+| [AnyDoor](https://github.com/ali-vilab/AnyDoor) | 零样本把商品"搬运"到新场景，保持商品外观身份，可用蒙版控制位置和形状 | 研究用途；接入前需单独核对仓库许可证 |
+| [OOTDiffusion](https://huggingface.co/papers/2403.01779) | 开源虚拟试穿（上装/下装/全身），服饰类目模特图能力参考 | 需核对许可证；只借鉴流程思路 |
+| [Photoroom / Pebblely / Flair.ai / Mokker](https://www.photoroom.com) | 商业商拍产品：抠图清理、平台尺寸预设、场景模板批量生成、拖拽式场景编排、一键真实感背景替换 | 商业产品；只对照功能形态，不复制内容 |
+
+## 同类产品功能对照与画布优化建议
+
+结合上述开源项目和 Photoroom、Pebblely、Flair.ai、Mokker 等商业商拍产品的公开功能，对 Infinite Canvas 电商流程的可行优化方向如下（按落地成本从低到高）：
+
+1. **场景模板选择**：Pebblely/Mokker 的核心体验是"选场景模板 + 一键批量"，比手写提示词门槛低。当前弹窗的「补充需求」可升级为场景预设（纯色棚拍、木桌、大理石、户外、生活方式等）+ 自由输入，AI 生成提示词时把选中场景写进视觉角色层。
+2. **商品身份锁定**：AnyDoor 与 SellerPilot 都强调身份一致性。生成执行层提示词应固定包含"只允许改变背景/光线/场景/道具/模特/镜头，必须保持颜色、轮廓、比例、结构、标识"的身份约束段，随模板自动附加（当前实拍质感预设的扩展）。
+3. **平台尺寸适配**：Photoroom 的平台预设（Amazon/Etsy 等）值得借鉴：按平台 profile 在导出环节批量输出 1:1 主图、3:4 详情等比例，而不是让用户逐节点改尺寸。
+4. **服装模特图模板**：OOTDiffusion 类试穿能力对服饰类目是刚需；在现有参考图编辑链路上增加"模特图"生成节点即可低成本支持，无需本地部署试穿模型。
+5. **QA 自动化**：SellerPilot 的 QA 清单可以由文本模型执行：把生成结果图 + 商品事实 + QA 清单发给多模态模型，输出通过项/问题项/修订 brief，QA 节点从静态清单升级为可运行的检查配置。
+6. **套图蓝图扩展**：当前电商模板固定三类节点；后续可按类目输出 3/6/9 张蓝图（每张含角色、构图、比例、必须保留项和禁止项），由 AI 依据商品事实层生成规划节点内容。
+7. **批量 SKU 复用**：ComfyUI 电商工作流的批量能力可借鉴为"复制模板子图 + 批量生成"，同一画布内为多 SKU/多商品并行出图；组节点和批量生成已具备，差一个模板复制入口。
+
+画布侧基础体验（多选批量生成、生成结果避让放置、一键整理排版）已先行落地。
 
 ## 建议的提示词分层
 
@@ -162,3 +179,5 @@ description: 电商商品图、详情页和多平台素材生产的公开方案�
 - [ComfyUI 电商工作流](https://github.com/xiaoqahax-ui/comfyui-ecommerce-workflows)
 - [GPT Image 2 提示词与工作流](https://github.com/cliprise/awesome-gpt-image-2-prompts)
 - [Seedream 5 提示词与工作流](https://github.com/cliprise/awesome-seedream-5-prompts)
+- [AnyDoor：零样本物体级图像定制](https://github.com/ali-vilab/AnyDoor)
+- [OOTDiffusion：开源虚拟试穿](https://huggingface.co/papers/2403.01779)

@@ -258,7 +258,7 @@ export default {
         openAgent: "打开本地 Codex 面板",
         nodeTypes: { image: "图片", text: "文本", config: "生成配置", video: "视频", audio: "音频", group: "组" },
         toolbar: {
-            select: "选择", pan: "移动", text: "文本", image: "图片", video: "视频", audio: "音频", config: "生成配置", group: "组", extensions: "扩展节点", upload: "上传资产", appearance: "画布外观", clear: "清空画布",
+            select: "选择", pan: "移动", text: "文本", image: "图片", video: "视频", audio: "音频", config: "生成配置", group: "组", tidy: "整理排版", generateSet: "生成套图", promptChat: "AI 改词", extensions: "扩展节点", upload: "上传资产", appearance: "画布外观", clear: "清空画布",
             themeMode: "主题模式", light: "浅色", dark: "深色", gridStyle: "网格样式", dots: "点", lines: "线", blank: "空白", imageInfo: "图片信息",
         },
         project: {
@@ -283,7 +283,7 @@ export default {
         },
         assetPicker: { title: "选择资产", insert: "插入", search: "搜索资产", empty: "没有资产" },
         imageTools: { copyPrompt: "复制提示词", copyPromptTitle: "复制生成该图片的提示词", reversePrompt: "反推提示词", reversePromptTitle: "创建反推提示词的文本和配置节点", replace: "替换图片", locked: "锁比例", free: "自由比例", lockTitle: "切换为等比缩放", freeTitle: "切换为自由比例", mask: "局部编辑", maskTitle: "添加蒙版遮罩后局部修改", crop: "裁剪", cropTitle: "裁剪并生成新节点", split: "切图", splitTitle: "按行列切分图片", upscale: "放大", upscaleTitle: "放大图片分辨率", superResolve: "超分", superResolveTitle: "AI 超分", angle: "多角度", angleTitle: "生成角度", view: "查看大图", viewTitle: "查看图片详情", more: "更多", configure: "配置快捷工具", customize: "自定义工具栏", showLabels: "显示按钮文字", description: "选择你想在图片节点编辑栏中使用的快捷工具。", preview: "节点预览", imageNode: "图片节点", quickTools: "快捷工具" },
-        nodeToolbar: { noPrompt: "暂无可复制的提示词", infoTitle: "查看节点信息", info: "信息", removeTitle: "移除节点", retryTitle: "重新生成", queryVideoTask: "获取任务状态", queryVideoTaskTitle: "使用任务 ID 查询视频生成状态", videoTaskId: "任务 ID", saveAsset: "存资产", downloadAudio: "下载音频", downloadVideo: "下载视频", downloadImage: "下载图片", editTextTitle: "编辑文本", editText: "编辑文字", decreaseFont: "减小字号", increaseFont: "增大字号", zoomOut: "缩小", zoomIn: "放大", uploadImage: "上传图片", replaceVideo: "替换视频", uploadVideo: "上传视频", replaceAudio: "替换音频", uploadAudio: "上传音频", nodeInfo: "节点信息", name: "名称", type: "类型", size: "尺寸", position: "位置", status: "状态", imageGroup: "图片组", imageSize: "图片大小", group: "打组", groupTitle: "用组节点包住选中节点", ungroup: "解散组", ungroupTitle: "取消节点分组" },
+        nodeToolbar: { noPrompt: "暂无可复制的提示词", infoTitle: "查看节点信息", info: "信息", removeTitle: "移除节点", retryTitle: "重新生成", queryVideoTask: "获取任务状态", queryVideoTaskTitle: "使用任务 ID 查询视频生成状态", videoTaskId: "任务 ID", saveAsset: "存资产", downloadAudio: "下载音频", downloadVideo: "下载视频", downloadImage: "下载图片", editTextTitle: "编辑文本", editText: "编辑文字", decreaseFont: "减小字号", increaseFont: "增大字号", zoomOut: "缩小", zoomIn: "放大", uploadImage: "上传图片", replaceVideo: "替换视频", uploadVideo: "上传视频", replaceAudio: "替换音频", uploadAudio: "上传音频", nodeInfo: "节点信息", name: "名称", type: "类型", size: "尺寸", position: "位置", status: "状态", imageGroup: "图片组", imageSize: "图片大小", group: "打组", groupTitle: "用组节点包住选中节点", ungroup: "解散组", ungroupTitle: "取消节点分组", batchGenerate: "批量生成", batchGenerateTitle: "依次生成选中的生成配置节点" },
         configNode: { title: "生成配置", image: "生图", text: "文本", video: "视频", audio: "音频", prompt: "提示词", references: "参考图", videoReferences: "参考视频", audioReferences: "参考音频", items: "{{count}} 个", images: "{{count}} 张", compose: "组装提示词", stop: "停止", generate: "开始生成" },
         projectPage: {
             stopTitle: "停止生成？", stopDescription: "当前生成请求会被中断，已经生成完成的内容会保留。", stop: "停止", continue: "继续生成", configConnection: "配置节点之间不能连接", notFound: "未找到当前画布", exporting: "正在导出当前画布…", exported: "已导出当前画布", clipboardText: "剪切板文本", clipboardImageAdded: "已从剪切板添加图片", clipboardTextAdded: "已从剪切板添加文本", noTextToSave: "没有可保存的文本", canvasText: "画布文本", noVideoToSave: "没有可保存的视频", canvasVideo: "画布视频", noImageToSave: "没有可保存的图片", canvasImage: "画布图片", emptyReverse: "图片节点为空，无法反推提示词", reverseTitle: "反推提示词", reverseConfigTitle: "反推提示词配置", splitTitle: "{{name}} {{row}}-{{column}}", splitSuccess: "已切分为 {{count}} 个子节点", maskResult: "局部编辑结果", maskFailed: "局部修改失败", generationFailed: "生成失败", partialFailed: "部分图片生成失败", partialTextFailed: "部分文本生成失败", allFailed: "全部图片生成失败", retryPromptMissing: "找不到提示词，无法重试", referenceMissing: "参考图片已丢失，无法继续重试", emptyTextImage: "文本节点为空，无法生图", untitledCanvas: "未命名画布", superResolve: "AI 超分", notImplemented: "暂未实现", imageDetails: "图片详情", clearTitle: "清空画布？", clear: "清空", clearDescription: "这会删除当前画布上的所有节点和连线。", reversePreset: "请根据参考图片反推一段适合用于 AI 生图的提示词。\n\n要求：\n1. 只输出提示词正文，不要解释。\n2. 覆盖主体、构图、风格、光线、色彩、材质、镜头和氛围。\n3. 尽量写成可直接用于生图模型的完整提示词。", maskPrompt: "参考{{source}}为原图，{{mask}}是在原图上用蓝色半透明标注出的待修改区域。请只修改蓝色标注覆盖的区域，其余区域与原图保持完全一致，输出与原图相同尺寸的完整图片，并且结果中不要保留任何蓝色标注。修改要求：{{prompt}}", maskNodeTitle: "遮罩标注", editTextPrompt: "请根据要求修改以下文本。\n\n原文：\n{{source}}\n\n修改要求：\n{{prompt}}"
@@ -527,7 +527,6 @@ export default {
             name: "渠道名称",
             protocol: "协议",
             baseUrl: "接口地址",
-            defaultApiKey: "通用 API Key",
             defaultApiKeyDescription: "用于渠道模型列表和未绑定专用 Key 的模型请求。",
             modelApiKeys: "模型专用 Key",
             modelApiKeysDescription: "添加专用 Key 后可一键同步全部模型；同步结果会替换旧列表并清理失效模型，只有已绑定可用 Key 的模型才会进入可选列表。",
@@ -535,7 +534,7 @@ export default {
             newModelApiKey: "新 Key",
             unnamedModelApiKey: "未命名 Key",
             modelApiKeyName: "Key 备注名",
-            duplicateApiKey: "检测到重复 Key，请删除或更换重复项",
+            duplicateKeyWarning: "检测到重复条目，请删除或更换重复项",
             selectKeyModels: "获取并选择模型",
             selectKeyModelsTitle: "{{name}} 支持的模型",
             boundModels: "已绑定 {{count}} 个：{{models}}",
@@ -610,7 +609,7 @@ export default {
             directory: "远程目录",
             directoryDescription: "会在该目录下分业务目录保存，每个目录包含 {{manifest}} 和 files/",
             username: "用户名",
-            password: "密码 / 应用密码",
+            webdavPasswordLabel: "WebDAV 账号密码 / 应用专用密码",
             test: "测试连接",
             syncing: "同步中",
             syncNow: "立即同步",

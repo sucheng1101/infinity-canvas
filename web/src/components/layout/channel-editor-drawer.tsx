@@ -59,7 +59,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
 
     const fetchAllKeyModels = async () => {
         if (duplicateKeyIds.size) {
-            message.error(t("config.channelEditor.duplicateApiKey"));
+            message.error(t("config.channelEditor.duplicateKeyWarning"));
             return;
         }
         const keys = draft.modelApiKeys.filter((item) => item.apiKey.trim());
@@ -98,7 +98,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
 
     const save = () => {
         if (duplicateKeyIds.size) {
-            message.error(t("config.channelEditor.duplicateApiKey"));
+            message.error(t("config.channelEditor.duplicateKeyWarning"));
             return;
         }
         onSave({ ...draft, models: normalizeChannelModels(draft.models) });
@@ -155,7 +155,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                                 <Input value={item.name} onChange={(event) => patchModelApiKey(item.id, { name: event.target.value })} placeholder={t("config.channelEditor.modelApiKeyName")} prefix={<KeyRound className="size-3.5 text-stone-400" />} />
                                 <div>
                                     <Input.Password status={duplicateKeyIds.has(item.id) ? "error" : undefined} value={item.apiKey} onChange={(event) => patchModelApiKey(item.id, { apiKey: event.target.value })} placeholder="sk-..." />
-                                    {duplicateKeyIds.has(item.id) ? <div className="mt-1 text-xs text-red-500">{t("config.channelEditor.duplicateApiKey")}</div> : null}
+                                    {duplicateKeyIds.has(item.id) ? <div className="mt-1 text-xs text-red-500">{t("config.channelEditor.duplicateKeyWarning")}</div> : null}
                                 </div>
                                 <div className="flex gap-1">
                                     <Button disabled={!item.apiKey.trim()} onClick={() => setKeyModelTargetId(item.id)}>{t("config.channelEditor.selectKeyModels")}</Button>

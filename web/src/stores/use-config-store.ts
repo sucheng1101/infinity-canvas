@@ -100,9 +100,9 @@ export const defaultConfig: AiConfig = {
     apiFormat: "openai",
     channels: defaultFixedChannels(),
     model: "",
-    imageModel: "",
+    imageModel: "gemini-3.1-flash-image-preview",
     videoModel: "",
-    textModel: "",
+    textModel: "gpt-5.6-sol",
     audioModel: "",
     audioVoice: "alloy",
     audioFormat: "mp3",
@@ -236,7 +236,7 @@ export const useConfigStore = create<ConfigStore>()(
         }),
         {
             name: CONFIG_STORE_KEY,
-            version: 2,
+            version: 3,
             migrate: (persisted, version) => {
                 const state = (persisted || {}) as { config?: Partial<AiConfig>; webdav?: Partial<WebdavSyncConfig> };
                 const config = state.config || {};
@@ -249,6 +249,9 @@ export const useConfigStore = create<ConfigStore>()(
                         videoMode: config.videoMode === "reference" ? "reference" : "frames",
                         proxyEnabled: Boolean(config.proxyEnabled),
                         proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
+                        // v3：全量统一默认模型为 gpt-5.6-sol / gemini-3.1-flash-image-preview。
+                        textModel: version < 3 ? defaultConfig.textModel : config.textModel || defaultConfig.textModel,
+                        imageModel: version < 3 ? defaultConfig.imageModel : config.imageModel || defaultConfig.imageModel,
                     },
                     webdav: { ...defaultWebdavSyncConfig, ...state.webdav },
                 };
@@ -481,7 +484,7 @@ function normalizeModelApiKeys(keys: ChannelModelApiKey[] | undefined, legacyKey
             assignedModels.add(model);
             return true;
         });
-        return { id, name: item.name?.trim() || i18n.t("config.channelEditor.unnamedModelApiKey"), apiKey: item.apiKey || "", models: modelNames };
+        return { id, name: item.name?.trim() || i18n.t("config.channelEditor.unnamedModelKeyLabel"), apiKey: item.apiKey || "", models: modelNames };
     });
 }
 

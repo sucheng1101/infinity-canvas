@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { createAgentLogWriter } from "../utils/agent-runtime.js";
 import { VERSION } from "../config.js";
 import { logger } from "../utils/logger.js";
+import { assertSafeWorkspacePath, isSafeId } from "../utils/safe-input.js";
 import { field, type JsonRecord } from "../utils/value.js";
 import { codexEventHistory, type CodexEventHistory } from "./codex-event-history.js";
 import type { CodexNotificationParams, CodexPlanUpdate, CodexReasoningEffort, CodexRequestMethod, CodexRequestParams, CodexRequestResult, CodexSkillSelector, CodexTurnInput } from "./codex-protocol.js";
@@ -106,6 +107,7 @@ export class CodexAppClient {
 
     /** 创建新的 Codex 线程。 */
     async startThread(cwd?: string, permissionMode: AgentPermissionMode = "request", preheat = false) {
+        if (cwd) assertSafeWorkspacePath(cwd);
         if (preheat) this.pendingPreheatThreadStarts += 1;
         let threadId = "";
         try {
@@ -150,6 +152,7 @@ export class CodexAppClient {
 
     /** 以 app-server 的权威 MCP 清单响应作为预热完成边界。 */
     private async completeMcpPreheat(threadId: string) {
+        if (!isSafeId(threadId)) throw new Error("线程标识无效");
         const result = await this.request("mcpServerStatus/list", { threadId, limit: 100, detail: "toolsAndAuthOnly" });
         this.emit("agent_bootstrap", { type: "mcp.complete", phase: "preheat", threadId, services: result.data.map(({ name, authStatus }) => ({ name, authStatus })) });
     }
@@ -219,6 +222,7 @@ export class CodexAppClient {
 
     /** 启动一个 Codex turn 并等待完成通知。 */
     async startTurn(threadId: string, prompt: string, images: string[], permissionMode: AgentPermissionMode, model?: string, effort?: CodexReasoningEffort, onTurn?: (turnId: string) => void, skill?: CodexSkillSelector, messageText?: string, outputSchema?: JsonRecord) {
+        if (!isSafeId(threadId)) throw new Error("线程标识无效");
         this.preheatingThreadIds.delete(threadId);
         this.currentThreadId = threadId;
         this.currentTurnId = "";

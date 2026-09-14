@@ -280,7 +280,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                         <Form.Item label={t("config.webdav.username")} className="mb-0">
                                             <Input value={webdav.username} autoComplete="username" onChange={(event) => updateWebdavConfig("username", event.target.value)} />
                                         </Form.Item>
-                                        <Form.Item label={t("config.webdav.password")} className="mb-0">
+                                        <Form.Item label={t("config.webdav.webdavPasswordLabel")} className="mb-0">
                                             <Input.Password value={webdav.password} autoComplete="current-password" onChange={(event) => updateWebdavConfig("password", event.target.value)} />
                                         </Form.Item>
                                     </div>

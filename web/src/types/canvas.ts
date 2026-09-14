@@ -48,6 +48,8 @@ export type CanvasNodeMetadata = {
     content?: string;
     composerContent?: string;
     prompt?: string;
+    ecommerceImageSource?: boolean;
+    ecommerceQa?: boolean;
     status?: CanvasNodeStatus;
     errorDetails?: string;
     fontSize?: number;

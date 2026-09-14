@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { assertSafeWorkspacePath } from "./utils/safe-input.js";
+
 export const DEFAULT_PORT = 17371;
 export const CONFIG_DIR = path.join(os.homedir(), ".infinite-canvas");
 export const CONFIG_FILE = path.join(CONFIG_DIR, "canvas-agent.json");
@@ -29,12 +31,15 @@ export function saveConfig(config: CanvasAgentConfig) {
     writeConfigFile(CONFIG_DIR, CONFIG_FILE, config);
 }
 
-/** 写入配置并强制目录 0700、文件 0600，包括纠正已有宽松权限。 */
+/** 写入配置并强制目录 0700、文件 0600，包括纠正已有宽松权限。配置文件必须位于配置目录内。 */
 export function writeConfigFile(dir: string, file: string, config: CanvasAgentConfig) {
-    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(file, JSON.stringify(config, null, 2), { mode: 0o600 });
-    fs.chmodSync(dir, 0o700);
-    fs.chmodSync(file, 0o600);
+    const resolvedDir = path.resolve(dir);
+    const resolvedFile = path.resolve(file);
+    if (!resolvedFile.startsWith(resolvedDir + path.sep)) throw new Error("配置文件路径必须位于配置目录内");
+    fs.mkdirSync(resolvedDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(resolvedFile, JSON.stringify(config, null, 2), { mode: 0o600 });
+    fs.chmodSync(resolvedDir, 0o700);
+    fs.chmodSync(resolvedFile, 0o600);
 }
 
 /** 确保站点级 Codex 工作空间存在并已初始化。 */
@@ -63,8 +68,9 @@ export function updateSiteWorkspace(config: CanvasAgentConfig, patch: Partial<Si
     return config.workspace;
 }
 
-/** 创建工作空间目录并写入默认 AGENTS.md。 */
+/** 创建工作空间目录并写入默认 AGENTS.md。路径必须先通过安全校验。 */
 function initializeWorkspace(workspacePath: string) {
+    assertSafeWorkspacePath(workspacePath);
     if (initializedWorkspaces.has(workspacePath)) return;
     fs.mkdirSync(workspacePath, { recursive: true });
     const instructionsFile = path.join(workspacePath, "AGENTS.md");
@@ -73,11 +79,11 @@ function initializeWorkspace(workspacePath: string) {
     initializedWorkspaces.add(workspacePath);
 }
 
-/** 将用户输入的工作空间路径解析为绝对路径。 */
+/** 将用户输入的工作空间路径解析为绝对路径，并强制通过安全校验。 */
 function resolveWorkspacePath(value: string) {
-    if (value === "~") return os.homedir();
-    if (value.startsWith("~/")) return path.join(os.homedir(), value.slice(2));
-    return path.resolve(value);
+    const resolved = value === "~" ? os.homedir() : value.startsWith("~/") ? path.join(os.homedir(), value.slice(2)) : path.resolve(value);
+    assertSafeWorkspacePath(resolved);
+    return resolved;
 }
 
 /** 从当前包信息中读取 Canvas Agent 版本号。 */

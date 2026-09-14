@@ -1,4 +1,4 @@
-import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type ConnectionHandle } from "@/types/canvas";
+import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type ConnectionHandle, type Position } from "@/types/canvas";
 
 export function nodeBounds(nodes: CanvasNodeData[]) {
     return nodes.reduce(
@@ -147,4 +147,35 @@ export function normalizeConnection(firstNodeId: string, secondNodeId: string, n
     if (first.type === CanvasNodeType.Config && firstHandleType === "target") return { fromNodeId: second.id, toNodeId: first.id };
     if (first.type === CanvasNodeType.Config) return { fromNodeId: first.id, toNodeId: second.id };
     return { fromNodeId: first.id, toNodeId: second.id };
+}
+
+export const TIDY_GAP = 96;
+
+/** Return the first position at or to the right/below `preferred` that does not overlap any existing node. */
+export function findFreePosition(preferred: Position, size: { width: number; height: number }, nodes: CanvasNodeData[]) {
+    const overlaps = (x: number, y: number) => nodes.some((node) => x < node.position.x + node.width && x + size.width > node.position.x && y < node.position.y + node.height && y + size.height > node.position.y);
+    for (let row = 0; row < 24; row += 1) {
+        for (let col = 0; col < 24; col += 1) {
+            const x = preferred.x + col * (size.width + TIDY_GAP);
+            const y = preferred.y + row * (size.height + TIDY_GAP);
+            if (!overlaps(x, y)) return { x, y };
+        }
+    }
+    return preferred;
+}
+
+/** Arrange top-level nodes into a tidy row-major grid around their current bounds; groups carry their children along. */
+export function tidyNodePositions(nodes: CanvasNodeData[]) {
+    const units = nodes.filter((node) => !node.metadata?.groupId);
+    if (units.length < 2) return nodes;
+    const sorted = [...units].sort((a, b) => Math.round((a.position.y - b.position.y) / 120) - Math.round((b.position.y - a.position.y) / 120) || a.position.x - b.position.x);
+    const columns = Math.ceil(Math.sqrt(sorted.length));
+    const cellWidth = Math.max(...sorted.map((node) => node.width)) + TIDY_GAP;
+    const cellHeight = Math.max(...sorted.map((node) => node.height)) + TIDY_GAP;
+    const bounds = nodeBounds(sorted);
+    const deltas = new Map(sorted.map((node, index) => [node.id, { x: bounds.left + (index % columns) * cellWidth - node.position.x, y: bounds.top + Math.floor(index / columns) * cellHeight - node.position.y }] as const));
+    return nodes.map((node) => {
+        const delta = deltas.get(node.id) || (node.metadata?.groupId ? deltas.get(node.metadata.groupId) : undefined);
+        return delta ? { ...node, position: { x: node.position.x + delta.x, y: node.position.y + delta.y } } : node;
+    });
 }

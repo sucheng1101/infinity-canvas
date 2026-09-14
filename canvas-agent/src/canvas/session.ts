@@ -309,7 +309,17 @@ export class CanvasSession {
     updateState(body: unknown, clientId?: string) {
         const targetClientId = clientId || this.activeClientId;
         if (!targetClientId || !this.clients.has(targetClientId)) return;
-        const state = { ...((body && typeof body === "object" && !Array.isArray(body) ? body : {}) as Record<string, unknown>), clientId: targetClientId } as CanvasSnapshot;
+        const raw = (body && typeof body === "object" && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
+        // 显式 allowlist：仅接受画布快照已知字段，避免请求体整块进入会话状态。
+        const state = {
+            ...(raw.projectId === undefined ? {} : { projectId: String(raw.projectId) }),
+            ...(raw.title === undefined ? {} : { title: String(raw.title) }),
+            ...(Array.isArray(raw.nodes) ? { nodes: raw.nodes } : {}),
+            ...(Array.isArray(raw.connections) ? { connections: raw.connections } : {}),
+            ...(Array.isArray(raw.selectedNodeIds) ? { selectedNodeIds: raw.selectedNodeIds } : {}),
+            ...(raw.viewport && typeof raw.viewport === "object" && !Array.isArray(raw.viewport) ? { viewport: raw.viewport } : {}),
+            clientId: targetClientId,
+        } as CanvasSnapshot;
         this.canvasStates.set(targetClientId, state);
         logger.debug("Canvas state updated", { clientId: targetClientId, nodes: state.nodes?.length || 0, connections: state.connections?.length || 0 });
     }

@@ -126,12 +126,20 @@ function buildComposerGenerationContext(inputs: NodeGenerationInput[], prompt: s
 }
 
 export function buildNodeGenerationInputs(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]): NodeGenerationInput[] {
+    const sourceNode = nodes.find((node) => node.id === nodeId);
     return getGenerationResourceNodes(nodeId, nodes, connections).flatMap((node): NodeGenerationInput[] => {
         if (node.type === CanvasNodeType.Group) {
             const children = getGroupResourceNodes(node.id, nodes).flatMap(readNodeGenerationResource);
             return children.length ? [{ nodeId: node.id, type: "group", title: node.title, children }] : [];
         }
-        return readNodeGenerationResource(node);
+        const resources = readNodeGenerationResource(node);
+        // 电商模板：QA 检查节点生成时额外收集带 ecommerceImageSource 标记的生成配置节点的图片子节点；普通画布无此标记，行为不变。
+        if (sourceNode?.metadata?.ecommerceQa) {
+            const sourceIds = new Set(nodes.filter((item) => item.metadata?.ecommerceImageSource).map((item) => item.id));
+            const childIds = new Set(connections.filter((connection) => sourceIds.has(connection.fromNodeId)).map((connection) => connection.toNodeId));
+            return resources.concat(nodes.filter((item) => childIds.has(item.id) && item.type === CanvasNodeType.Image && item.metadata?.content).flatMap(readNodeGenerationResource));
+        }
+        return resources;
     });
 }
 

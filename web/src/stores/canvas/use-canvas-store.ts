@@ -15,6 +15,7 @@ export type EcommerceProductBrief = {
     platform: string;
     audience: string;
     sellingPoints: string[];
+    scene?: string;
     referenceImages?: string[];
     realismPreset?: string;
 };

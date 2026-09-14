@@ -26,6 +26,11 @@ import { NODE_DEFAULT_SIZE, getNodeSpec } from "@/constant/canvas";
 import { ActiveConnectionPath, ConnectionPath } from "@/components/canvas/canvas-connections";
 import { CanvasConfigComposer } from "@/components/canvas/canvas-config-composer";
 import { CanvasConfigNodePanel } from "@/components/canvas/canvas-config-node-panel";
+import { CanvasConfigNodePanel as EcommerceConfigNodePanel } from "@/components/canvas/ecommerce/canvas-config-node-panel";
+import { CanvasSelectionToolbar as EcommerceSelectionToolbar } from "@/components/canvas/ecommerce/canvas-selection-toolbar";
+import { CanvasToolbar as EcommerceCanvasToolbar } from "@/components/canvas/ecommerce/canvas-toolbar";
+import { PromptChatPanel } from "@/components/canvas/ecommerce/prompt-chat-panel";
+import { GeneratePanel } from "@/components/canvas/ecommerce/generate-panel";
 import { CanvasNodeContextMenu } from "@/components/canvas/canvas-context-menu";
 import { CanvasNodeAngleDialog, type CanvasImageAngleParams } from "@/components/canvas/canvas-node-angle-dialog";
 import { CanvasNodeCropDialog, type CanvasImageCropRect } from "@/components/canvas/canvas-node-crop-dialog";
@@ -50,7 +55,7 @@ import { usePluginHost } from "@/pages/canvas/hooks/use-plugin-host";
 import { buildNodeMentionReferences, getGroupResourceNodes, isCanvasReferenceNode, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
 import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, createCanvasNode, imageMetadata, videoMetadata } from "@/lib/canvas/canvas-node-factory";
-import { applyGroupSelection, applyUngroupSelection, canGroupSelectedNodes, canUngroupSelectedNodes, collectGroupMemberNodes, findContainingGroupId, findGroupDropTarget, getConnectionTargetAnchor, getGroupWrapRect, normalizeConnection, snapNodesIntoGroup } from "@/lib/canvas/canvas-node-geometry";
+import { applyGroupSelection, applyUngroupSelection, canGroupSelectedNodes, canUngroupSelectedNodes, collectGroupMemberNodes, findContainingGroupId, findFreePosition, findGroupDropTarget, getConnectionTargetAnchor, getGroupWrapRect, normalizeConnection, snapNodesIntoGroup, tidyNodePositions } from "@/lib/canvas/canvas-node-geometry";
 import {
     audioExtension,
     buildAngleLabel,
@@ -144,7 +149,7 @@ function applyGeneratedVideo(item: CanvasNodeData, video: UploadedFile, extra: C
     };
 }
 
-export default function CanvasPage() {
+export default function CanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerce" } = {}) {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
@@ -153,10 +158,14 @@ export default function CanvasPage() {
 
     if (!mounted) return <CanvasRefreshShell />;
 
-    return <InfiniteCanvasPage />;
+    return <InfiniteCanvasPage canvasKind={canvasKind} />;
 }
 
-function InfiniteCanvasPage() {
+function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerce" }) {
+    const isEcommerce = canvasKind === "ecommerce";
+    const ToolbarComponent = (isEcommerce ? EcommerceCanvasToolbar : CanvasToolbar) as typeof CanvasToolbar;
+    const SelectionToolbarComponent = (isEcommerce ? EcommerceSelectionToolbar : CanvasSelectionToolbar) as typeof CanvasSelectionToolbar;
+    const ConfigPanelComponent = (isEcommerce ? EcommerceConfigNodePanel : CanvasConfigNodePanel) as typeof CanvasConfigNodePanel;
     const { message, modal } = App.useApp();
     const { t } = useTranslation();
     // Subscribe to the registry version so plugin registration changes rerender the canvas.
@@ -2360,10 +2369,11 @@ function InfiniteCanvasPage() {
                         id: rootId,
                         type: CanvasNodeType.Image,
                         title: effectivePrompt.slice(0, 32) || "Generated Image",
-                        position: {
-                            x: isEmptyImageNode ? parentPosition.x : parentPosition.x + parentConfig.width + 96,
-                            y: parentPosition.y + parentConfig.height / 2 - imageConfig.height / 2,
-                        },
+                        position: isEmptyImageNode
+                            ? { x: parentPosition.x, y: parentPosition.y + parentConfig.height / 2 - imageConfig.height / 2 }
+                            : isEcommerce
+                              ? findFreePosition({ x: parentPosition.x + parentConfig.width + 96, y: parentPosition.y + parentConfig.height / 2 - imageConfig.height / 2 }, imageConfig, nodesRef.current)
+                              : { x: parentPosition.x + parentConfig.width + 96, y: parentPosition.y + parentConfig.height / 2 - imageConfig.height / 2 },
                         width: isEmptyImageNode ? sourceNode?.width || imageConfig.width : imageConfig.width,
                         height: isEmptyImageNode ? sourceNode?.height || imageConfig.height : imageConfig.height,
                         metadata: {
@@ -2474,9 +2484,9 @@ function InfiniteCanvasPage() {
                     setNodes((prev) =>
                         prev.map((node) =>
                             node.id === nodeId && isConfigNode
-                                ? { ...node, metadata: { ...node.metadata, status: hasSuccess ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR, errorDetails: hasSuccess ? undefined : t("canvas.projectPage.generationFailed") } }
+                                ? { ...node, metadata: { ...node.metadata, status: hasSuccess ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR, errorDetails: hasSuccess ? undefined : (isEcommerce && firstError) || t("canvas.projectPage.generationFailed") } }
                                 : node.id === rootId
-                                  ? { ...node, metadata: { ...node.metadata, status: hasSuccess ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR, errorDetails: hasSuccess ? undefined : t("canvas.projectPage.allFailed") } }
+                                  ? { ...node, metadata: { ...node.metadata, status: hasSuccess ? NODE_STATUS_SUCCESS : NODE_STATUS_ERROR, errorDetails: hasSuccess ? undefined : (isEcommerce && firstError) || t("canvas.projectPage.allFailed") } }
                                     : node,
                         ),
                     );
@@ -2492,7 +2502,7 @@ function InfiniteCanvasPage() {
                         id: videoId,
                         type: CanvasNodeType.Video,
                         title: effectivePrompt.slice(0, 32) || "Generated Video",
-                        position: isEmptyVideoNode ? sourceNode.position : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y },
+                        position: isEmptyVideoNode ? sourceNode.position : isEcommerce ? findFreePosition({ x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y }, spec, nodesRef.current) : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y },
                         width: isEmptyVideoNode ? sourceNode.width : spec.width,
                         height: isEmptyVideoNode ? sourceNode.height : spec.height,
                         metadata: {
@@ -2541,7 +2551,7 @@ function InfiniteCanvasPage() {
                         id: audioId,
                         type: CanvasNodeType.Audio,
                         title: effectivePrompt.slice(0, 32) || "Generated Audio",
-                        position: isEmptyAudioNode ? sourceNode.position : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y + ((sourceNode?.height || spec.height) - spec.height) / 2 },
+                        position: isEmptyAudioNode ? sourceNode.position : isEcommerce ? findFreePosition({ x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y + ((sourceNode?.height || spec.height) - spec.height) / 2 }, spec, nodesRef.current) : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y + ((sourceNode?.height || spec.height) - spec.height) / 2 },
                         width: isEmptyAudioNode ? sourceNode.width : spec.width,
                         height: isEmptyAudioNode ? sourceNode.height : spec.height,
                         metadata: { prompt: effectivePrompt, status: NODE_STATUS_LOADING, ...buildAudioGenerationMetadata(generationConfig) },
@@ -2575,7 +2585,7 @@ function InfiniteCanvasPage() {
                     id: rootId,
                     type: CanvasNodeType.Text,
                     title: effectivePrompt.slice(0, 32) || "Generated Text",
-                    position: isEmptyTextNode ? sourceNode.position : { x: parentPosition.x + parentConfig.width + 96, y: parentPosition.y + parentConfig.height / 2 - textConfig.height / 2 },
+                    position: isEmptyTextNode ? sourceNode.position : isEcommerce ? findFreePosition({ x: parentPosition.x + parentConfig.width + 96, y: parentPosition.y + parentConfig.height / 2 - textConfig.height / 2 }, textConfig, nodesRef.current) : { x: parentPosition.x + parentConfig.width + 96, y: parentPosition.y + parentConfig.height / 2 - textConfig.height / 2 },
                     width: isEmptyTextNode ? sourceNode.width : textConfig.width,
                     height: isEmptyTextNode ? sourceNode.height : textConfig.height,
                     metadata: {
@@ -3058,7 +3068,7 @@ function InfiniteCanvasPage() {
 
     const renderNodeContentPanel = useCallback(
         (contentNode: CanvasNodeData) => (
-            <CanvasConfigNodePanel
+            <ConfigPanelComponent
                 node={contentNode}
                 isRunning={runningNodeId === contentNode.id}
                 inputSummary={getInputSummary(configInputsById.get(contentNode.id) || [])}
@@ -3071,8 +3081,73 @@ function InfiniteCanvasPage() {
                 }}
             />
         ),
-        [configInputsById, confirmStopGeneration, handleConfigNodeChange, handleGenerateNode, runningNodeId],
+        [configInputsById, confirmStopGeneration, handleConfigNodeChange, handleGenerateNode, isEcommerce, runningNodeId],
     );
+
+    const selectedConfigNodes = isEcommerce ? selectedNodes.filter((node) => node.type === CanvasNodeType.Config) : [];
+    // 电商流程：先生成全部图片节点，全部结束后再跑 QA 检查节点，避免 QA 抢跑。
+    const runGenerationTargets = (targets: CanvasNodeData[]) => {
+        const imageTargets = targets.filter((node) => !node.metadata?.ecommerceQa);
+        const qaTargets = targets.filter((node) => node.metadata?.ecommerceQa);
+        void (async () => {
+            await Promise.allSettled(imageTargets.map((node) => handleGenerateNode(node.id, node.metadata?.generationMode || "image", node.metadata?.composerContent ?? node.metadata?.prompt ?? "")));
+            qaTargets.forEach((node) => void handleGenerateNode(node.id, node.metadata?.generationMode || "text", node.metadata?.composerContent ?? node.metadata?.prompt ?? ""));
+        })();
+    };
+    const batchGenerateSelection = () => runGenerationTargets(selectedConfigNodes);
+    const runEcommerceGenerationSet = () => runGenerationTargets(isEcommerce ? nodesRef.current.filter((node) => node.metadata?.ecommerceImageSource || node.metadata?.ecommerceQa) : []);
+    const [promptChatOpen, setPromptChatOpen] = useState(false);
+    const [generatePanelOpen, setGeneratePanelOpen] = useState(false);
+    const openPromptChat = () => {
+        setGeneratePanelOpen(false);
+        setPromptChatOpen((open) => !open);
+    };
+    const openGeneratePanel = () => {
+        setPromptChatOpen(false);
+        setGeneratePanelOpen(true);
+    };
+    const getEcommerceReferencesFor = (key: string) => {
+        const node = nodesRef.current.find((item) => item.metadata?.ecommerceImageSource && ecommercePromptKey(item.title || "") === key);
+        if (!node) return [];
+        const childIds = new Set(connectionsRef.current.filter((connection) => connection.fromNodeId === node.id).map((connection) => connection.toNodeId));
+        return nodesRef.current.filter((item) => childIds.has(item.id) && item.type === CanvasNodeType.Image && item.metadata?.content).map((item) => item.metadata?.content || "");
+    };
+    const getEcommerceBriefText = () => {
+        const project = useCanvasStore.getState().projects.find((item) => item.id === params.id);
+        const brief = project?.ecommerceBrief;
+        if (!brief) return "";
+        return [
+            brief.category && `类目：${brief.category}`,
+            brief.audience && `人群：${brief.audience}`,
+            brief.scene && `场景：${brief.scene}`,
+            brief.sellingPoints?.length ? `卖点：${brief.sellingPoints.join("、")}` : "",
+        ].filter(Boolean).join(" ｜ ");
+    };
+    const generateEcommerceOne = (key: string, prompt: string) => {
+        const node = nodesRef.current.find((item) => item.metadata?.ecommerceImageSource && ecommercePromptKey(item.title || "") === key);
+        if (!node) return;
+        const finalPrompt = prompt || node.metadata?.composerContent || node.metadata?.prompt || "";
+        void handleGenerateNode(node.id, node.metadata?.generationMode || "image", finalPrompt);
+    };
+    const ecommercePromptKey = (title: string) => (title.includes("主图") ? "main" : title.includes("卖点") ? "selling" : title.includes("场景") ? "scene" : "");
+    const getEcommercePromptTargets = () =>
+        nodesRef.current
+            .filter((node) => node.metadata?.ecommerceImageSource)
+            .map((node) => {
+                const key = ecommercePromptKey(node.title || "");
+                return { key, label: key === "main" ? "主图" : key === "selling" ? "卖点图" : key === "scene" ? "场景图" : node.title || "", prompt: node.metadata?.prompt || "" };
+            })
+            .filter((target) => target.key);
+    const applyEcommercePromptUpdates = (updates: Array<{ key: string; prompt: string }>) => {
+        setNodes((prev) =>
+            prev.map((node) => {
+                if (!node.metadata?.ecommerceImageSource) return node;
+                const key = ecommercePromptKey(node.title || "");
+                const update = updates.find((item) => item.key === key);
+                return update && update.prompt ? { ...node, metadata: { ...node.metadata, prompt: update.prompt, content: `${node.title}\n${update.prompt}` } } : node;
+            }),
+        );
+    };
 
     if (!projectLoaded) return <CanvasRefreshShell />;
 
@@ -3255,8 +3330,22 @@ function InfiniteCanvasPage() {
                     onUngroup={(node) => ungroupSelection(new Set([node.id]))}
                 />
 
+                {isEcommerce && generatePanelOpen ? (
+                    <GeneratePanel
+                        getBrief={getEcommerceBriefText}
+                        onClose={() => setGeneratePanelOpen(false)}
+                        getTargets={getEcommercePromptTargets}
+                        getReferencesFor={getEcommerceReferencesFor}
+                        onApply={applyEcommercePromptUpdates}
+                        onGenerateOne={generateEcommerceOne}
+                        onGenerateAll={runEcommerceGenerationSet}
+                    />
+                ) : null}
+                {isEcommerce && promptChatOpen ? (
+                    <PromptChatPanel onClose={() => setPromptChatOpen(false)} getTargets={getEcommercePromptTargets} onApply={applyEcommercePromptUpdates} />
+                ) : null}
                 {hasMultipleSelectedNodes && !selectionBox ? (
-                    <CanvasSelectionToolbar
+                    <SelectionToolbarComponent
                         nodes={selectedNodes}
                         viewport={viewport}
                         showToolbar={!isNodeDragging && !isNodeResizing}
@@ -3264,10 +3353,11 @@ function InfiniteCanvasPage() {
                         canUngroup={canUngroupSelection}
                         onGroup={groupSelection}
                         onUngroup={ungroupSelection}
+                        {...(isEcommerce ? { canGenerate: selectedConfigNodes.length > 1, onGenerate: batchGenerateSelection } : {})}
                     />
                 ) : null}
 
-                <CanvasToolbar
+                <ToolbarComponent
                     selectedCount={selectedNodeIds.size}
                     canvasTool={canvasTool}
                     canUndo={historyState.canUndo}
@@ -3280,6 +3370,7 @@ function InfiniteCanvasPage() {
                     onAddText={() => createNode(CanvasNodeType.Text)}
                     onAddConfig={() => createNode(CanvasNodeType.Config)}
                     onAddGroup={() => createNode(CanvasNodeType.Group)}
+                    {...(isEcommerce ? { onTidy: () => setNodes((prev) => tidyNodePositions(prev)), onGenerateSet: openGeneratePanel, onPromptChat: openPromptChat } : {})}
                     onAddExtensionNode={(type) => createNode(type)}
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
