@@ -180,3 +180,22 @@ export function tidyNodePositions(nodes: CanvasNodeData[]) {
         return delta ? { ...node, position: { x: node.position.x + delta.x, y: node.position.y + delta.y } } : node;
     });
 }
+
+/** Arrange only ungrouped image nodes into a compact grid, leaving every other node untouched. */
+export function tidyImageNodePositions(nodes: CanvasNodeData[]) {
+    const images = nodes.filter((node) => node.type === CanvasNodeType.Image && !node.metadata?.groupId);
+    if (images.length < 2) return nodes;
+    const columns = Math.ceil(Math.sqrt(images.length));
+    const cellWidth = Math.max(...images.map((node) => node.width)) + TIDY_GAP;
+    const cellHeight = Math.max(...images.map((node) => node.height)) + TIDY_GAP;
+    const bounds = nodeBounds(images);
+    const deltas = new Map(
+        [...images]
+            .sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x)
+            .map((node, index) => [node.id, { x: bounds.left + (index % columns) * cellWidth - node.position.x, y: bounds.top + Math.floor(index / columns) * cellHeight - node.position.y }] as const),
+    );
+    return nodes.map((node) => {
+        const delta = deltas.get(node.id);
+        return delta ? { ...node, position: { x: node.position.x + delta.x, y: node.position.y + delta.y } } : node;
+    });
+}
