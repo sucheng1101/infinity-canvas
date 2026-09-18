@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import { computeMediaSize, inferMediaRatio, inferMediaScale, mediaRatioOptions, mediaScaleOptions, readMediaDimensions } from "@/lib/media-size";
+import { computeMediaSize, computeMediaSizeFromShortSide, inferMediaRatio, inferMediaScale, mediaRatioOptions, mediaScaleOptions, parseAspectRatio, readMediaDimensions } from "@/lib/media-size";
 import type { AiConfig } from "@/stores/use-config-store";
 
 const qualityOptions = [
@@ -39,9 +39,18 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const selectedScale = inferMediaScale(activeSize);
     const selectedRatio = inferMediaRatio(activeSize);
     const dimensions = readMediaDimensions(activeSize, selectedScale, selectedRatio);
+    const shortSide = Math.min(dimensions.width, dimensions.height) || 1024;
     const applySize = (scale: string, ratio: string) => onConfigChange("size", computeMediaSize(scale, ratio));
     const selectScale = (scale: string) => applySize(scale, selectedRatio === "auto" ? "1:1" : selectedRatio);
     const selectRatio = (ratio: string) => applySize(selectedScale, ratio);
+    const selectCustomShortSide = (value: number | null) => {
+        if (!value) return;
+        onConfigChange("size", computeMediaSizeFromShortSide(value, selectedRatio === "auto" ? "1:1" : selectedRatio));
+    };
+    const selectCustomRatio = (ratio: string) => {
+        if (!parseAspectRatio(ratio)) return;
+        onConfigChange("size", computeMediaSizeFromShortSide(shortSide, ratio));
+    };
     const updateDimension = (key: "width" | "height", value: number | null) => {
         const next = Math.max(1, Math.floor(value || dimensions[key] || 1024));
         const width = key === "width" ? next : dimensions.width;
@@ -98,6 +107,12 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                             </OptionPill>
                         ))}
                     </div>
+                    <div className="flex items-center gap-2.5">
+                        <span className="shrink-0 text-xs font-medium" style={{ color: theme.node.muted }}>
+                            {t("settingsPanels.image.customShortSide")}
+                        </span>
+                        <ShortSideInput value={shortSide} theme={theme} onChange={selectCustomShortSide} className="min-w-0 flex-1" />
+                    </div>
                 </div>
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.aspectRatio")}</SettingTitle>
@@ -115,6 +130,12 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                                 <span>{item.value === "auto" ? t("settingsPanels.common.auto") : item.value}</span>
                             </button>
                         ))}
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                        <span className="shrink-0 text-xs font-medium" style={{ color: theme.node.muted }}>
+                            {t("settingsPanels.image.customRatio")}
+                        </span>
+                        <RatioInput theme={theme} onCommit={selectCustomRatio} className="min-w-0 flex-1" />
                     </div>
                 </div>
                 <div className="flex items-center justify-between gap-3">
@@ -226,6 +247,54 @@ function CountInput({ value, max, theme, onChange }: { value: number; max: numbe
                 style={{ color: theme.node.text, WebkitTextFillColor: theme.node.text }}
                 value={value || ""}
                 onChange={(event) => onChange(Number(event.target.value) || null)}
+                onMouseDown={(event) => event.stopPropagation()}
+            />
+        </label>
+    );
+}
+
+function ShortSideInput({ value, theme, onChange, className }: { value: number; theme: CanvasTheme; onChange: (value: number | null) => void; className?: string }) {
+    const commit = (input: HTMLInputElement) => {
+        const next = Math.max(16, Math.floor(Number(input.value) || value || 1024));
+        input.value = String(next);
+        onChange(next);
+    };
+    return (
+        <label className={`flex h-9 overflow-hidden rounded-full border text-sm ${className || ""}`} style={{ borderColor: theme.node.stroke, color: theme.node.text }}>
+            <input
+                type="number"
+                min={16}
+                className="min-w-0 flex-1 bg-transparent px-3 text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                defaultValue={value}
+                key={`short-${value}`}
+                onBlur={(event) => commit(event.currentTarget)}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                }}
+                onMouseDown={(event) => event.stopPropagation()}
+            />
+            <span className="grid w-8 place-items-center pr-1" style={{ color: theme.node.muted }}>
+                px
+            </span>
+        </label>
+    );
+}
+
+function RatioInput({ theme, onCommit, className }: { theme: CanvasTheme; onCommit: (value: string) => void; className?: string }) {
+    const commit = (input: HTMLInputElement) => {
+        const value = input.value.trim();
+        input.value = "";
+        if (value) onCommit(value);
+    };
+    return (
+        <label className={`flex h-9 overflow-hidden rounded-full border text-sm ${className || ""}`} style={{ borderColor: theme.node.stroke, color: theme.node.text }}>
+            <input
+                className="min-w-0 flex-1 bg-transparent px-3 text-center outline-none"
+                placeholder="5:4"
+                onBlur={(event) => commit(event.currentTarget)}
+                onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                }}
                 onMouseDown={(event) => event.stopPropagation()}
             />
         </label>

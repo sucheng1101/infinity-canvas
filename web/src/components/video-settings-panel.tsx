@@ -6,7 +6,8 @@ import i18n from "@/i18n";
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { clampVideoSeconds, computeVideoSize, inferVideoRatio, parseVideoResolution, readVideoDimensions, VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN, videoRatioOptions } from "@/lib/media-size";
-import { type AiConfig } from "@/stores/use-config-store";
+import { isMinimaxH3Model, minimaxH3Resolution, minimaxH3ResolutionOptions, videoResolutionDisplayLabel } from "@/lib/video-model-presets";
+import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
 
 const resolutionOptions = [
     { value: "480", label: "480p" },
@@ -34,7 +35,9 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const { t } = useTranslation();
     const seconds = Number(clampVideoSeconds(config.videoSeconds || "6"));
     const videoMode = normalizeVideoModeValue(config.videoMode);
-    const resolution = parseVideoResolution(config.vquality);
+    const model = modelOptionName(config.model || config.videoModel);
+    const isMinimax = isMinimaxH3Model(model);
+    const resolution = isMinimax ? minimaxH3Resolution(config.vquality).value : parseVideoResolution(config.vquality);
     const selectedRatio = inferVideoRatio(config.size || "auto");
     const dimensions = readVideoDimensions(config.size || "auto", resolution, selectedRatio);
     const applySize = (nextResolution: string, ratio: string) => {
@@ -52,12 +55,22 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 {showTitle ? <div className="text-lg font-semibold">{t("settingsPanels.video.title")}</div> : null}
                 <SettingGroup title={t("settingsPanels.video.quality")} color={theme.node.muted}>
                     <div className="grid grid-cols-4 gap-2.5">
-                        {resolutionOptions.map((item) => (
-                            <OptionPill key={item.value} selected={resolution === item.value} theme={theme} onClick={() => selectResolution(item.value)}>
-                                {item.label}
-                            </OptionPill>
-                        ))}
-                        <ResolutionInput value={resolution} theme={theme} onChange={selectResolution} />
+                        {isMinimax ? (
+                            minimaxH3ResolutionOptions().map((item) => (
+                                <OptionPill key={item.value} selected={resolution === item.value} theme={theme} onClick={() => selectResolution(item.value)}>
+                                    {item.label}
+                                </OptionPill>
+                            ))
+                        ) : (
+                            <>
+                                {resolutionOptions.map((item) => (
+                                    <OptionPill key={item.value} selected={resolution === item.value} theme={theme} onClick={() => selectResolution(item.value)}>
+                                        {item.label}
+                                    </OptionPill>
+                                ))}
+                                <ResolutionInput value={resolution} theme={theme} onChange={selectResolution} />
+                            </>
+                        )}
                     </div>
                 </SettingGroup>
                 <SettingGroup title={t("settingsPanels.video.size")} color={theme.node.muted}>
@@ -105,8 +118,8 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
     );
 }
 
-export function videoResolutionLabel(value: string) {
-    return `${parseVideoResolution(value)}p`;
+export function videoResolutionLabel(value: string, model?: string) {
+    return model ? videoResolutionDisplayLabel(model, value) : `${parseVideoResolution(value)}p`;
 }
 
 export function videoSizeLabel(value: string) {

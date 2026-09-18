@@ -1,4 +1,4 @@
-export const mediaScaleOptions = ["1k", "2k", "4k", "auto"] as const;
+export const mediaScaleOptions = ["1k", "2k", "4k", "8k", "auto"] as const;
 export const mediaRatioOptions = [
     { value: "1:1", width: 1, height: 1 },
     { value: "2:3", width: 2, height: 3 },
@@ -16,6 +16,7 @@ export const imageSizePresets: Record<string, Record<string, string>> = {
     "1k": { "1:1": "1024x1024", "2:3": "1024x1536", "3:2": "1536x1024", "4:3": "1024x768", "3:4": "768x1024", "16:9": "1536x864", "9:16": "864x1536", "21:9": "2016x864", "9:21": "864x2016" },
     "2k": { "1:1": "2048x2048", "2:3": "1360x2048", "3:2": "2048x1360", "4:3": "2048x1536", "3:4": "1536x2048", "16:9": "2048x1152", "9:16": "1152x2048", "21:9": "2688x1152", "9:21": "1152x2688" },
     "4k": { "1:1": "2880x2880", "2:3": "2336x3520", "3:2": "3520x2336", "4:3": "3312x2480", "3:4": "2480x3312", "16:9": "3840x2160", "9:16": "2160x3840", "21:9": "3840x1648", "9:21": "1648x3840" },
+    "8k": { "1:1": "7680x7680", "2:3": "5120x7680", "3:2": "7680x5120", "4:3": "7680x5760", "3:4": "5760x7680", "16:9": "7680x4320", "9:16": "4320x7680", "21:9": "7680x3296", "9:21": "3296x7680" },
 };
 
 export function parsePixelSize(value: string) {
@@ -50,6 +51,7 @@ export function normalizeMediaScale(value: string | undefined) {
     const scale = String(value || "").trim().toLowerCase();
     if (scale === "2k" || scale === "2048") return "2k";
     if (scale === "4k" || scale === "3840") return "4k";
+    if (scale === "8k" || scale === "7680") return "8k";
     if (scale === "auto") return "auto";
     if (mediaScaleOptions.includes(scale as (typeof mediaScaleOptions)[number])) return scale;
     return "1k";
@@ -64,6 +66,7 @@ export function inferMediaScale(size: string, storedScale?: string) {
     const presetScale = Object.keys(imageSizePresets).find((scale) => Object.values(imageSizePresets[scale]).includes(`${pixels.width}x${pixels.height}`));
     if (presetScale) return presetScale;
     const longSide = Math.max(pixels.width, pixels.height);
+    if (longSide >= 6144) return "8k";
     if (longSide >= 3072) return "4k";
     if (longSide >= 1536) return "2k";
     return "1k";
@@ -92,6 +95,17 @@ export function computeMediaSize(scale: string, ratio: string) {
     return imageSizePresets[normalizedScale][ratio];
 }
 
+/** 以短边像素为锚点、按宽高比推算 WxH（用于自定义分辨率/自定义宽高比）。 */
+export function computeMediaSizeFromShortSide(shortSide: number, ratio: string) {
+    const parsed = parseAspectRatio(ratio);
+    if (!parsed) return "auto";
+    const short = Math.max(16, Math.round((shortSide || 1024) / 16) * 16);
+    const longRatio = Math.max(parsed.width, parsed.height) / Math.min(parsed.width, parsed.height);
+    const long = Math.round((short * longRatio) / 16) * 16;
+    const landscape = parsed.width >= parsed.height;
+    return `${landscape ? long : short}x${landscape ? short : long}`;
+}
+
 export function readMediaDimensions(size: string, scale: string, ratio: string) {
     const pixels = parsePixelSize(size);
     if (pixels) return pixels;
@@ -108,6 +122,8 @@ export function parseVideoResolution(value: string | undefined) {
     const raw = String(value || "").trim().toLowerCase();
     if (raw === "low") return "480";
     if (raw === "auto" || raw === "high" || raw === "medium") return "720";
+    if (raw === "2k") return "1440";
+    if (raw === "4k") return "2160";
     const number = raw.replace(/p$/i, "");
     return /^\d+$/.test(number) && Number(number) > 0 ? number : "720";
 }
