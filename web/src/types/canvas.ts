@@ -35,6 +35,7 @@ export type CanvasNodeImage = {
     naturalHeight: number;
     bytes: number;
     mimeType: string;
+    actualQuality?: string;
 };
 
 export type CanvasNodeText = {
@@ -59,6 +60,7 @@ export type CanvasNodeMetadata = {
     reasoningEffort?: "auto" | "low" | "medium" | "high" | "xhigh";
     size?: string;
     quality?: string;
+    actualQuality?: string;
     background?: string;
     count?: number;
     textCount?: number;

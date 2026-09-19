@@ -266,6 +266,12 @@ export function CanvasNodeInfoModal({ node, open, onClose }: { node: CanvasNodeD
                             <InfoRow label={t("canvas.nodeToolbar.size")} value={`${Math.round(node.width)} x ${Math.round(node.height)}`} />
                             <InfoRow label={t("canvas.nodeToolbar.position")} value={`${Math.round(node.position.x)}, ${Math.round(node.position.y)}`} />
                             <InfoRow label={t("canvas.nodeToolbar.status")} value={node.metadata?.status || "idle"} />
+                            {node.type === CanvasNodeType.Image && node.metadata?.quality ? (
+                                <InfoRow
+                                    label={t("canvas.nodeToolbar.quality")}
+                                    value={node.metadata.actualQuality && node.metadata.actualQuality !== node.metadata.quality ? t("canvas.nodeToolbar.qualityMismatch", { requested: node.metadata.quality, quality: node.metadata.actualQuality }) : node.metadata.quality}
+                                />
+                            ) : null}
                             {batchCount > 1 ? <InfoRow label={t("canvas.nodeToolbar.imageGroup")} value={t("canvas.configNode.images", { count: batchCount })} /> : null}
                             {node.metadata?.prompt ? <InfoRow label={t("canvas.configNode.prompt")} value={node.metadata.prompt} /> : null}
                             {node.metadata?.videoTaskId ? <InfoRow label={t("canvas.nodeToolbar.videoTaskId")} value={node.metadata.videoTaskId} /> : null}

@@ -72,6 +72,12 @@ type ResponseStreamState = { buffer: string; text: string; payload?: ResponseApi
 
 type ImageApiResponse = {
     data?: Array<Record<string, unknown>>;
+    images?: Array<Record<string, unknown>>;
+    results?: Array<Record<string, unknown>>;
+    metadata?: unknown;
+    quality?: unknown;
+    actual_quality?: unknown;
+    output_quality?: unknown;
     error?: { message?: string };
     code?: number;
     msg?: string;
@@ -246,19 +252,47 @@ function resolveImageSource(item: Record<string, unknown>) {
     return null;
 }
 
+function normalizeActualImageQuality(value: unknown) {
+    if (typeof value !== "string") return undefined;
+    const quality = value.trim().toLowerCase();
+    return ["auto", "low", "medium", "high", "xhigh", "max", "standard", "hd"].includes(quality) ? quality : undefined;
+}
+
+function readActualImageQuality(value: unknown): string | undefined {
+    if (!value) return undefined;
+    if (typeof value === "string") {
+        const normalized = normalizeActualImageQuality(value);
+        if (normalized) return normalized;
+        try {
+            return readActualImageQuality(JSON.parse(value));
+        } catch {
+            return undefined;
+        }
+    }
+    if (typeof value !== "object" || Array.isArray(value)) return undefined;
+    const record = value as Record<string, unknown>;
+    for (const key of ["actual_quality", "actualQuality", "output_quality", "outputQuality", "quality"]) {
+        const quality = normalizeActualImageQuality(record[key]);
+        if (quality) return quality;
+    }
+    return readActualImageQuality(record.metadata);
+}
+
 function parseImagePayload(payload: ImageApiResponse) {
     if (typeof payload.code === "number" && payload.code !== 0) {
         throw new Error(payload.msg || apiText("requestFailed"));
     }
     // Support data, images, and results response fields used by different APIs.
-    const imageList = payload.data
-        || (payload as Record<string, unknown>).images as Array<Record<string, unknown>> | undefined
-        || (payload as Record<string, unknown>).results as Array<Record<string, unknown>> | undefined
-        || [];
+    const imageList = payload.data || payload.images || payload.results || [];
+    const payloadQuality = readActualImageQuality(payload);
     const images = imageList
-        .map(resolveImageSource)
-        .filter((value): value is string => Boolean(value))
-        .map((dataUrl) => ({ id: nanoid(), dataUrl }));
+        .map((item) => {
+            const dataUrl = resolveImageSource(item);
+            if (!dataUrl) return null;
+            const actualQuality = readActualImageQuality(item) || payloadQuality;
+            return { id: nanoid(), dataUrl, ...(actualQuality ? { actualQuality } : {}) };
+        })
+        .filter((item): item is { id: string; dataUrl: string; actualQuality?: string } => Boolean(item));
 
     if (images.length === 0) {
         // Check whether the response contains data in an unrecognized format.
@@ -739,7 +773,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
                 params: { size: requestSize, quality, count: n, ...(background ? { background } : {}) },
                 signal: options?.signal,
             });
-            return normalizePluginImages(result).map((dataUrl) => ({ id: nanoid(), dataUrl }));
+            return normalizePluginImages(result).map((image) => ({ id: nanoid(), ...image }));
         } catch (error) {
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }
@@ -801,7 +835,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
                 params: { size: requestSize, quality, count: n, ...(background ? { background } : {}) },
                 signal: options?.signal,
             });
-            return normalizePluginImages(result).map((dataUrl) => ({ id: nanoid(), dataUrl }));
+            return normalizePluginImages(result).map((image) => ({ id: nanoid(), ...image }));
         } catch (error) {
             throw new Error(readAxiosError(error, apiText("requestFailed")));
         }

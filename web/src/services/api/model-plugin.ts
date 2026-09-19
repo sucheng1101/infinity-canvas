@@ -244,7 +244,7 @@ export function getPluginTemplates(): Record<ModelCapability, PluginTemplate[]> 
  * @param {string} baseUrl
  * @param {string} apiKey
  * @param {function} request - raw HTTP helper; relative urls join baseUrl without /v1
- * @returns {Promise<string[]>} image URLs or data URLs
+ * @returns {Promise<Array<{dataUrl: string, actualQuality?: string}>>} image URLs or data URLs with returned quality
  */
 async function generateImage({
   prompt,
@@ -280,7 +280,7 @@ async function generateImage({
     });
     const urls = [];
     for (const item of data.data || []) {
-      urls.push(item.b64_json ? \`data:image/png;base64,\${item.b64_json}\` : item.url);
+      urls.push({ dataUrl: item.b64_json ? \`data:image/png;base64,\${item.b64_json}\` : item.url, actualQuality: item.quality || data.quality });
     }
     return urls;
   }
@@ -307,7 +307,7 @@ async function generateImage({
   });
   const urls = [];
   for (const item of edited.data || []) {
-    urls.push(item.b64_json ? \`data:image/png;base64,\${item.b64_json}\` : item.url);
+    urls.push({ dataUrl: item.b64_json ? \`data:image/png;base64,\${item.b64_json}\` : item.url, actualQuality: item.quality || edited.quality });
   }
   return urls;
 }
@@ -975,20 +975,32 @@ return await generateText({
 }
 
 /** Normalize whatever an image script returns into the app's generated-image shape. */
-export function normalizePluginImages(result: unknown): string[] {
-    const items = Array.isArray(result) ? result : [result];
-    const urls = items
+export function normalizePluginImages(result: unknown): Array<{ dataUrl: string; actualQuality?: string }> {
+    const root = result && typeof result === "object" && !Array.isArray(result) ? (result as Record<string, unknown>) : undefined;
+    const items = Array.isArray(result) ? result : Array.isArray(root?.data) ? root.data : Array.isArray(root?.images) ? root.images : Array.isArray(root?.results) ? root.results : [result];
+    const normalizeQuality = (value: unknown) => {
+        if (typeof value !== "string") return undefined;
+        const quality = value.trim().toLowerCase();
+        return ["auto", "low", "medium", "high", "xhigh", "max", "standard", "hd"].includes(quality) ? quality : undefined;
+    };
+    const readQuality = (value: unknown) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+        const record = value as Record<string, unknown>;
+        return normalizeQuality(record.actualQuality ?? record.actual_quality ?? record.outputQuality ?? record.output_quality ?? record.quality);
+    };
+    const rootQuality = readQuality(root);
+    const images = items
         .map((item) => {
-            if (typeof item === "string") return item;
+            if (typeof item === "string") return { dataUrl: item };
             if (item && typeof item === "object") {
                 const record = item as Record<string, unknown>;
-                if (typeof record.dataUrl === "string") return record.dataUrl;
-                if (typeof record.url === "string") return record.url;
-                if (typeof record.b64_json === "string") return `data:image/png;base64,${record.b64_json}`;
+                const dataUrl = typeof record.dataUrl === "string" ? record.dataUrl : typeof record.url === "string" ? record.url : typeof record.b64_json === "string" ? `data:image/png;base64,${record.b64_json}` : "";
+                const actualQuality = readQuality(item) || rootQuality;
+                return dataUrl ? { dataUrl, ...(actualQuality ? { actualQuality } : {}) } : null;
             }
-            return "";
+            return null;
         })
-        .filter(Boolean);
-    if (!urls.length) throw new Error(i18n.t("modelPlugin.noImages"));
-    return urls;
+        .filter((item): item is { dataUrl: string; actualQuality?: string } => Boolean(item));
+    if (!images.length) throw new Error(i18n.t("modelPlugin.noImages"));
+    return images;
 }
