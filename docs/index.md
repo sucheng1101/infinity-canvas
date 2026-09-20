@@ -37,6 +37,16 @@
 - [Pending Tests](/docs/progress/pending-test)
 - [TODO](/docs/progress/todo)
 
+## Internal Specifications
+
+- [Independent Operation Platform Spec](./specs/independent-operation-platform-spec.md)
+- [New API Component Extraction Plan](./specs/newapi-component-extraction-plan.md)
+- [New API Source Baseline](./specs/newapi-source-baseline.md)
+- [New API M0 Component Inventory](./specs/newapi-m0-component-inventory.md)
+- [Platform Schema and State Machines](./specs/independent-operation-platform-schema.md)
+- [Platform API Contract](./specs/independent-operation-platform-api.md)
+- [Implementation Decision Checklist](./specs/independent-operation-decision-checklist.md)
+
 ## Notes
 
 - Canvas projects and My Assets are primarily stored in the browser. WebDAV can be configured for cross-device synchronization.
