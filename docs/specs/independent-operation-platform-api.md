@@ -17,6 +17,7 @@
 | --- | --- | --- | --- | --- |
 | POST | `/auth/register` | 公开 | `email`, `password`, `captcha` | `user`, `verificationRequired` |
 | POST | `/auth/verify-email` | 公开 | `token` | `user`, `session` |
+| POST | `/auth/verify-email/resend` | 公开 | `email` | 固定受理结果 |
 | POST | `/auth/login` | 公开 | `email`, `password`, `captcha` | `user`, `session`, `quota` |
 | POST | `/auth/logout` | 登录 | 无 | `ok` |
 | GET | `/auth/me` | 登录 | 无 | `user`, `quota` |
