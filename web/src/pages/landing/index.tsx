@@ -1,54 +1,287 @@
-import { ArrowRight, AudioLines, Image as ImageIcon, Layers3, Play, Type, Video } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Alert, Button, Form, Input } from "antd";
+import { ArrowRight, CheckCircle2, Layers3, LockKeyhole, Mail } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
-import { UserStatusActions } from "@/components/layout/user-status-actions";
-import { useEffect } from "react";
+import { authApi, AuthApiError } from "@/services/api/auth";
 import { useAuthStore } from "@/stores/use-auth-store";
 
-const capabilities = [
-    { icon: ImageIcon, label: "图片生成" },
-    { icon: Video, label: "视频创作" },
-    { icon: Type, label: "智能文案" },
-    { icon: AudioLines, label: "音频生成" },
-];
+type Point = { x: number; y: number; depth: number; phase: number; speed: number };
+type Credentials = { email: string; password: string; confirmPassword?: string };
+
+const text = {
+    login: "\u767b\u5f55",
+    register: "\u6ce8\u518c",
+    loginTitle: "\u767b\u5f55\u4f60\u7684\u521b\u4f5c\u7a7a\u95f4",
+    registerTitle: "\u521b\u5efa\u4f60\u7684\u521b\u4f5c\u8d26\u53f7",
+    email: "\u90ae\u7bb1",
+    emailPlaceholder: "\u90ae\u7bb1\u5730\u5740",
+    password: "\u5bc6\u7801",
+    passwordPlaceholder: "\u8bf7\u8f93\u5165\u5bc6\u7801",
+    confirmPassword: "\u786e\u8ba4\u5bc6\u7801",
+    submitLogin: "\u8fdb\u5165\u753b\u5e03",
+    submitRegister: "\u521b\u5efa\u8d26\u53f7",
+    forgot: "\u5fd8\u8bb0\u5bc6\u7801\uff1f",
+    requiredEmail: "\u8bf7\u8f93\u5165\u90ae\u7bb1",
+    invalidEmail: "\u8bf7\u8f93\u5165\u6709\u6548\u90ae\u7bb1",
+    requiredPassword: "\u8bf7\u8f93\u5165\u5bc6\u7801",
+    shortPassword: "\u5bc6\u7801\u81f3\u5c11 8 \u4f4d",
+    confirmRequired: "\u8bf7\u518d\u6b21\u8f93\u5165\u5bc6\u7801",
+    mismatch: "\u4e24\u6b21\u8f93\u5165\u7684\u5bc6\u7801\u4e0d\u4e00\u81f4",
+    verifyTitle: "\u68c0\u67e5\u4f60\u7684\u90ae\u7bb1",
+    verifyDescription: "\u9a8c\u8bc1\u94fe\u63a5\u5df2\u53d1\u9001\uff0c\u5b8c\u6210\u9a8c\u8bc1\u540e\u5373\u53ef\u767b\u5f55\u3002",
+    backLogin: "\u8fd4\u56de\u767b\u5f55",
+    resend: "\u91cd\u65b0\u53d1\u9001\u9a8c\u8bc1\u90ae\u4ef6",
+    resendSuccess: "\u9a8c\u8bc1\u90ae\u4ef6\u5df2\u91cd\u65b0\u53d1\u9001",
+};
+
+const seeded = (index: number, salt: number) => {
+    const value = Math.sin(index * 9283.17 + salt * 2971.43) * 43758.5453;
+    return value - Math.floor(value);
+};
+
+function InfiniteField() {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        const context = canvas?.getContext("2d");
+        if (!canvas || !context) return;
+        const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const points: Point[] = Array.from({ length: 68 }, (_, index) => ({ x: seeded(index, 1), y: seeded(index, 2), depth: 0.25 + seeded(index, 3) * 0.75, phase: seeded(index, 4) * Math.PI * 2, speed: 0.25 + seeded(index, 5) * 0.55 }));
+        const pointer = { x: 0, y: 0 };
+        let frame = 0;
+        let width = 0;
+        let height = 0;
+        let pixelRatio = 1;
+
+        const resize = () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+            canvas.width = Math.round(width * pixelRatio);
+            canvas.height = Math.round(height * pixelRatio);
+            canvas.style.width = `${width}px`;
+            canvas.style.height = `${height}px`;
+            context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+        };
+        const onPointerMove = (event: PointerEvent) => {
+            pointer.x = event.clientX / width - 0.5;
+            pointer.y = event.clientY / height - 0.5;
+        };
+        const draw = (time = 0) => {
+            const t = reduceMotion ? 0 : time * 0.001;
+            const desktop = width >= 860;
+            const centerX = width * (desktop ? 0.33 : 0.5) + pointer.x * 22;
+            const centerY = height * (desktop ? 0.54 : 0.35) + pointer.y * 15;
+            const base = Math.min(width, height) * (desktop ? 0.25 : 0.22);
+            context.fillStyle = "#020408";
+            context.fillRect(0, 0, width, height);
+
+            context.strokeStyle = "rgba(34,211,238,.075)";
+            context.lineWidth = 1;
+            const horizon = height * 0.72;
+            for (let index = -12; index <= 12; index += 1) {
+                context.beginPath();
+                context.moveTo(centerX, horizon);
+                context.lineTo(centerX + index * width * 0.105, height + 40);
+                context.stroke();
+            }
+            for (let index = 0; index < 10; index += 1) {
+                const progress = index / 9;
+                const y = horizon + Math.pow(progress, 1.8) * (height - horizon);
+                context.beginPath();
+                context.moveTo(0, y);
+                context.lineTo(width, y);
+                context.stroke();
+            }
+
+            const positions = points.map((point) => ({ x: point.x * width + pointer.x * 24 * point.depth, y: point.y * height + pointer.y * 18 * point.depth, radius: 0.6 + point.depth * 2.1, alpha: 0.2 + (Math.sin(t * point.speed + point.phase) + 1) * 0.22 }));
+            context.lineWidth = 0.55;
+            for (let index = 0; index < positions.length; index += 1) {
+                const from = positions[index];
+                const to = positions[(index * 7 + 13) % positions.length];
+                const distance = Math.hypot(from.x - to.x, from.y - to.y);
+                if (distance > width * 0.3) continue;
+                context.strokeStyle = `rgba(34,211,238,${Math.max(0.02, 0.1 - distance / width / 3)})`;
+                context.beginPath();
+                context.moveTo(from.x, from.y);
+                context.quadraticCurveTo(centerX, centerY, to.x, to.y);
+                context.stroke();
+            }
+            for (const point of positions) {
+                context.save();
+                context.fillStyle = `rgba(103,232,249,${point.alpha})`;
+                context.shadowColor = "rgba(34,211,238,.85)";
+                context.shadowBlur = point.radius * 7;
+                context.beginPath();
+                context.arc(point.x, point.y, point.radius, 0, Math.PI * 2);
+                context.fill();
+                context.restore();
+            }
+
+            context.save();
+            context.translate(centerX, centerY);
+            context.rotate(t * 0.045);
+            for (let ring = 0; ring < 5; ring += 1) {
+                const radius = base * (0.62 + ring * 0.25);
+                context.strokeStyle = `rgba(${ring % 2 ? "59,130,246" : "34,211,238"},${0.22 - ring * 0.028})`;
+                context.lineWidth = ring === 0 ? 1.4 : 0.8;
+                context.setLineDash(ring % 2 ? [2, 12 + ring * 2] : []);
+                context.beginPath();
+                context.arc(0, 0, radius, ring * 0.44, Math.PI * (1.25 + ring * 0.17));
+                context.stroke();
+            }
+            context.setLineDash([]);
+            context.rotate(-t * 0.1);
+            context.strokeStyle = "rgba(103,232,249,.38)";
+            context.beginPath();
+            context.moveTo(-base * 1.25, 0);
+            context.lineTo(base * 1.25, 0);
+            context.moveTo(0, -base * 1.25);
+            context.lineTo(0, base * 1.25);
+            context.stroke();
+            context.restore();
+
+            context.save();
+            context.translate(centerX, centerY);
+            context.rotate(-0.58);
+            context.strokeStyle = "rgba(34,211,238,.2)";
+            context.lineWidth = Math.max(5, base * 0.055);
+            context.shadowColor = "rgba(34,211,238,.45)";
+            context.shadowBlur = 28;
+            context.beginPath();
+            context.ellipse(0, 0, base * 1.55, base * 0.36, 0, 0, Math.PI * 2);
+            context.stroke();
+            context.restore();
+
+            if (!reduceMotion) frame = window.requestAnimationFrame(draw);
+        };
+
+        resize();
+        draw();
+        window.addEventListener("resize", resize);
+        window.addEventListener("pointermove", onPointerMove, { passive: true });
+        return () => {
+            window.cancelAnimationFrame(frame);
+            window.removeEventListener("resize", resize);
+            window.removeEventListener("pointermove", onPointerMove);
+        };
+    }, []);
+
+    return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 size-full" aria-hidden="true" />;
+}
 
 export default function LandingPage() {
+    const navigate = useNavigate();
+    const [form] = Form.useForm<Credentials>();
+    const [mode, setMode] = useState<"login" | "register">("login");
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState("");
+    const [registeredEmail, setRegisteredEmail] = useState("");
+    const [unverifiedEmail, setUnverifiedEmail] = useState("");
+    const [resendSent, setResendSent] = useState(false);
     const status = useAuthStore((state) => state.status);
     const bootstrap = useAuthStore((state) => state.bootstrap);
+    const setUser = useAuthStore((state) => state.setUser);
+
     useEffect(() => { if (status === "idle") void bootstrap(); }, [bootstrap, status]);
-    const authenticated = status === "authenticated";
+    useEffect(() => { if (status === "authenticated") navigate("/app", { replace: true }); }, [navigate, status]);
+
+    const switchMode = (next: "login" | "register") => {
+        setMode(next);
+        setError("");
+        setRegisteredEmail("");
+        setUnverifiedEmail("");
+        setResendSent(false);
+        form.resetFields();
+    };
+    const submit = async ({ email, password }: Credentials) => {
+        setLoading(true);
+        setError("");
+        setUnverifiedEmail("");
+        try {
+            if (mode === "login") {
+                const result = await authApi.login(email, password);
+                setUser(result.user);
+                navigate("/app", { replace: true });
+            } else {
+                const result = await authApi.register(email, password);
+                setRegisteredEmail(result.user.email);
+            }
+        } catch (requestError) {
+            const authError = requestError as AuthApiError;
+            setError(authError.message);
+            if (authError.code === "AUTH_EMAIL_NOT_VERIFIED") setUnverifiedEmail(email);
+        } finally {
+            setLoading(false);
+        }
+    };
+    const resend = async () => {
+        setLoading(true);
+        setError("");
+        try {
+            await authApi.resendVerification(unverifiedEmail);
+            setResendSent(true);
+        } catch (requestError) {
+            setError((requestError as Error).message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     return (
-        <main className="min-h-dvh overflow-x-hidden bg-[#f7f7f5] text-stone-950 dark:bg-[#111110] dark:text-stone-50">
-            <header className="fixed inset-x-0 top-0 z-30 border-b border-black/5 bg-[#f7f7f5]/85 backdrop-blur-xl dark:border-white/10 dark:bg-[#111110]/85">
-                <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-8">
-                    <Link to="/" className="flex items-center gap-2.5 text-sm font-semibold"><span className="grid size-8 place-items-center rounded-lg bg-stone-950 text-white dark:bg-stone-100 dark:text-stone-950"><Layers3 className="size-4" /></span>无限画布</Link>
-                    <div className="flex items-center gap-2"><UserStatusActions showConfig={false} />{authenticated ? <Link to="/app" className="inline-flex h-9 items-center bg-stone-950 px-4 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-950">进入创作空间</Link> : <><Link to="/login" className="hidden px-3 py-2 text-sm sm:block">登录</Link><Link to="/register" className="inline-flex h-9 items-center bg-stone-950 px-4 text-sm font-medium text-white dark:bg-stone-100 dark:text-stone-950">免费开始</Link></>}</div>
-                </div>
-            </header>
+        <main className="relative min-h-dvh overflow-hidden bg-[#020408] text-white">
+            <InfiniteField />
+            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,transparent_0%,transparent_47%,rgba(2,4,8,.4)_60%,rgba(2,4,8,.9)_100%)] max-md:bg-[linear-gradient(180deg,transparent_0%,rgba(2,4,8,.4)_36%,rgba(2,4,8,.96)_58%)]" />
 
-            <section className="relative min-h-[92dvh] overflow-hidden pt-16">
-                <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(rgba(120,113,108,.15)_1px,transparent_1px),linear-gradient(90deg,rgba(120,113,108,.15)_1px,transparent_1px)] [background-size:52px_52px] [mask-image:linear-gradient(to_bottom,black,transparent_88%)]" />
-                <div className="relative mx-auto flex min-h-[calc(92dvh-4rem)] max-w-7xl flex-col px-5 pt-[10vh] sm:px-8 lg:pt-[12vh]">
-                    <div className="max-w-4xl">
-                        <p className="mb-5 flex items-center gap-3 text-xs font-medium uppercase tracking-[.2em] text-orange-600 dark:text-orange-400"><span className="h-px w-8 bg-current" /> 一站式 AI 创作空间</p>
-                        <h1 className="text-balance text-[clamp(3rem,8vw,7.5rem)] font-semibold leading-[.9] tracking-[-.055em]">无限画布</h1>
-                        <p className="mt-7 max-w-2xl text-balance text-lg leading-8 text-stone-600 sm:text-xl dark:text-stone-400">登录、选择模型、开始创作。图片、视频、文本与音频能力由平台统一管理，你只需要关注额度和结果。</p>
-                        <div className="mt-9 flex flex-wrap items-center gap-3">{authenticated ? <Link to="/app" className="inline-flex h-12 items-center gap-2 bg-stone-950 px-6 text-sm font-medium text-white transition hover:bg-black dark:bg-stone-100 dark:text-stone-950 dark:hover:bg-white">进入创作空间 <ArrowRight className="size-4" /></Link> : <><Link to="/register" className="inline-flex h-12 items-center gap-2 bg-stone-950 px-6 text-sm font-medium text-white transition hover:bg-black dark:bg-stone-100 dark:text-stone-950 dark:hover:bg-white">创建免费账号 <ArrowRight className="size-4" /></Link><Link to="/login" className="inline-flex h-12 items-center px-5 text-sm font-medium">已有账号，登录</Link></>}</div>
-                    </div>
+            <Link to="/" aria-label="Canvas" className="absolute left-6 top-6 z-30 grid size-11 place-items-center border border-cyan-200/20 bg-[#071017]/70 text-cyan-100 backdrop-blur-md transition hover:border-cyan-200/50 hover:bg-[#0a1821] sm:left-10 sm:top-8">
+                <Layers3 className="size-5" />
+            </Link>
 
-                    <div className="relative mt-auto translate-y-16 overflow-hidden border border-stone-200 bg-[#1b1b19] shadow-[0_40px_100px_rgba(28,25,23,.22)] dark:border-stone-800">
-                        <div className="flex h-12 items-center justify-between border-b border-white/10 px-4 text-white"><div className="flex items-center gap-2 text-sm font-medium"><Layers3 className="size-4" /> 新建创作</div><div className="text-xs text-white/50">可用额度 128.60</div></div>
-                        <div className="grid min-h-[300px] md:grid-cols-[180px_1fr_260px]">
-                            <div className="hidden border-r border-white/10 p-4 md:block"><p className="mb-4 text-[11px] uppercase tracking-[.18em] text-white/35">创作能力</p>{capabilities.map(({ icon: Icon, label }, index) => <div key={label} className={`mb-1 flex h-9 items-center gap-2 px-2 text-xs ${index === 0 ? "bg-white/10 text-white" : "text-white/45"}`}><Icon className="size-3.5" />{label}</div>)}</div>
-                            <div className="relative min-h-[300px] overflow-hidden bg-[radial-gradient(circle_at_48%_42%,rgba(249,115,22,.30),transparent_27%),linear-gradient(135deg,#252522,#111110)]"><div className="absolute left-[16%] top-[20%] h-36 w-48 border border-white/15 bg-white/5 p-3"><div className="h-full bg-[linear-gradient(135deg,#ea580c,#fbbf24_52%,#334155)] opacity-80" /></div><div className="absolute left-[48%] top-[43%] w-52 border border-orange-400/70 bg-[#222] p-3 text-white"><div className="mb-3 flex items-center justify-between text-[11px]"><span>图片生成</span><span className="text-white/40">4:3 · 高清</span></div><div className="h-14 border border-white/10 p-2 text-[10px] leading-4 text-white/45">一组具有电影质感的产品视觉，柔和自然光...</div><button className="mt-3 flex h-8 w-full items-center justify-center gap-2 bg-orange-500 text-[11px] font-medium text-white"><Play className="size-3" />开始生成</button></div></div>
-                            <div className="hidden border-l border-white/10 p-4 text-white md:block"><p className="text-[11px] uppercase tracking-[.18em] text-white/35">模型与参数</p><p className="mt-5 text-xs text-white/50">图像模型</p><div className="mt-2 border border-white/10 px-3 py-2 text-xs">视觉创作 Pro</div><p className="mt-5 text-xs text-white/50">本次预计</p><p className="mt-2 text-2xl font-medium">0.42</p><p className="mt-1 text-[11px] text-white/35">约可再生成 306 张</p></div>
+            <section className="relative z-20 ml-auto flex min-h-dvh w-full items-center px-5 py-24 md:w-[48%] md:min-w-[520px] md:px-12 lg:px-[5vw]">
+                <div className="mx-auto w-full max-w-[430px] md:mx-0">
+                    {registeredEmail ? (
+                        <div className="border border-cyan-100/15 bg-[#071017]/72 p-8 text-center backdrop-blur-xl">
+                            <CheckCircle2 className="mx-auto size-10 text-cyan-300" />
+                            <h1 className="mt-5 text-2xl font-semibold tracking-tight">{text.verifyTitle}</h1>
+                            <p className="mt-3 text-sm leading-6 text-cyan-50/45">{text.verifyDescription}</p>
+                            <Button className="mt-7 !h-11" block onClick={() => switchMode("login")}>{text.backLogin}</Button>
                         </div>
-                    </div>
+                    ) : (
+                        <>
+                            <h1 className="mb-7 text-3xl font-semibold tracking-[-.035em] text-white">{mode === "login" ? text.loginTitle : text.registerTitle}</h1>
+                            <div className="mb-7 grid grid-cols-2 border border-cyan-100/15 bg-[#071017]/55 p-1 backdrop-blur-lg">
+                                <button type="button" onClick={() => switchMode("login")} className={`h-10 text-sm transition ${mode === "login" ? "bg-cyan-50 !text-[#031015]" : "text-cyan-50/45 hover:text-white"}`}>{text.login}</button>
+                                <button type="button" onClick={() => switchMode("register")} className={`h-10 text-sm transition ${mode === "register" ? "bg-cyan-50 !text-[#031015]" : "text-cyan-50/45 hover:text-white"}`}>{text.register}</button>
+                            </div>
+
+                            {error ? <Alert className="mb-5" type="error" showIcon title={error} /> : null}
+                            {resendSent ? <Alert className="mb-5" type="success" showIcon title={text.resendSuccess} /> : null}
+
+                            <Form form={form} layout="vertical" requiredMark={false} onFinish={submit}>
+                                <Form.Item label={<span className="text-cyan-50/65">{text.email}</span>} name="email" rules={[{ required: true, message: text.requiredEmail }, { type: "email", message: text.invalidEmail }]}>
+                                    <Input size="large" className="!h-12 !rounded-none !border-cyan-100/15 !bg-[#071017]/65 !text-white backdrop-blur-lg" prefix={<Mail className="size-4 text-cyan-100/35" />} placeholder={text.emailPlaceholder} autoComplete="email" />
+                                </Form.Item>
+                                <Form.Item label={<span className="text-cyan-50/65">{text.password}</span>} name="password" rules={[{ required: true, message: text.requiredPassword }, ...(mode === "register" ? [{ min: 8, message: text.shortPassword }] : [])]}>
+                                    <Input.Password size="large" className="!h-12 !rounded-none !border-cyan-100/15 !bg-[#071017]/65 !text-white backdrop-blur-lg" prefix={<LockKeyhole className="size-4 text-cyan-100/35" />} placeholder={text.passwordPlaceholder} autoComplete={mode === "login" ? "current-password" : "new-password"} />
+                                </Form.Item>
+                                {mode === "register" ? (
+                                    <Form.Item label={<span className="text-cyan-50/65">{text.confirmPassword}</span>} name="confirmPassword" dependencies={["password"]} rules={[{ required: true, message: text.confirmRequired }, ({ getFieldValue }) => ({ validator(_, value) { return !value || getFieldValue("password") === value ? Promise.resolve() : Promise.reject(new Error(text.mismatch)); } })]}>
+                                        <Input.Password size="large" className="!h-12 !rounded-none !border-cyan-100/15 !bg-[#071017]/65 !text-white backdrop-blur-lg" prefix={<LockKeyhole className="size-4 text-cyan-100/35" />} placeholder={text.confirmPassword} autoComplete="new-password" />
+                                    </Form.Item>
+                                ) : null}
+                                <Button htmlType="submit" type="primary" size="large" block loading={loading} className="mt-2 !h-12 !rounded-none !border-cyan-100 !bg-cyan-50 !text-[#031015]">
+                                    <span className="inline-flex items-center gap-2">{mode === "login" ? text.submitLogin : text.submitRegister}<ArrowRight className="size-4" /></span>
+                                </Button>
+                            </Form>
+
+                            {unverifiedEmail ? <Button className="mt-3" type="text" block disabled={loading} onClick={() => void resend()}>{text.resend}</Button> : null}
+                            {mode === "login" ? <div className="mt-5 text-right"><Link to="/forgot-password" className="text-xs text-cyan-50/45 transition hover:text-cyan-100">{text.forgot}</Link></div> : null}
+                        </>
+                    )}
                 </div>
             </section>
-
-            <section className="border-t border-stone-200 bg-white pb-24 pt-28 dark:border-stone-800 dark:bg-[#171716]"><div className="mx-auto max-w-7xl px-5 sm:px-8"><div className="grid gap-8 lg:grid-cols-[.8fr_1.2fr]"><div><p className="text-xs font-medium uppercase tracking-[.2em] text-orange-600 dark:text-orange-400">专注创作本身</p><h2 className="mt-4 text-4xl font-semibold tracking-[-.04em]">少一点配置，<br />多一点完成。</h2></div><div className="grid gap-px overflow-hidden border border-stone-200 bg-stone-200 sm:grid-cols-2 dark:border-stone-800 dark:bg-stone-800">{capabilities.map(({ icon: Icon, label }, index) => <div key={label} className="bg-white p-7 dark:bg-[#171716]"><Icon className="size-5 text-orange-500" /><h3 className="mt-6 text-base font-medium">{label}</h3><p className="mt-2 text-sm leading-6 text-stone-500 dark:text-stone-400">{index === 0 ? "从灵感、参考图到最终成片，都在同一块画布中完成。" : index === 1 ? "选择已发布模型与参数，任务状态清晰可见。" : index === 2 ? "生成、改写和整理内容，直接连接到创作流程。" : "生成的音频素材可以继续加入画布组合使用。"}</p></div>)}</div></div></div></section>
         </main>
     );
 }
