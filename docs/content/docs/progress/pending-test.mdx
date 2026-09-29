@@ -9,6 +9,7 @@ description: Implemented changes that still need manual verification
 
 - `start-local.ps1` 在 MySQL 或 Redis 未监听时应显示对应地址并停止启动；不应关闭或重启其他进程。
 - MySQL、Redis 正常且 `1010/1011` 可用时，脚本应等待 `1011/healthz` 中 MySQL/Redis 均为 `ok` 后再启动 Vite，并在 `1010` 前端探测成功后显示入口地址。
+- 本机安装 MySQL 且项目专用数据目录已初始化时，停止 MySQL 后重新执行启动脚本应自动拉起 `127.0.0.1:3306`；其他主机、端口或数据目录不存在时仍应保留明确的依赖错误。
 - 登录请求连接失败、HTTP 502/503/504、账户服务其他 5xx、结构化业务错误应显示各自对应的提示，不再共用“账户服务尚未连接”。
 
 

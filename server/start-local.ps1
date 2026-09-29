@@ -26,6 +26,52 @@ function Test-TcpEndpoint($HostName, [int]$Port) {
     }
 }
 
+function Find-LocalMySqlServer {
+    $programFiles = [Environment]::GetFolderPath("ProgramFiles")
+    $mysqlRoot = Join-Path $programFiles "MySQL"
+    $candidates = Get-ChildItem -LiteralPath $mysqlRoot -Directory -Filter "MySQL Server *" -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName "bin\mysqld.exe" }
+    return $candidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+}
+
+function Start-ProjectMySql([string]$HostName, [int]$Port) {
+    if ($HostName -notin @("127.0.0.1", "localhost") -or $Port -ne 3306) {
+        return $false
+    }
+
+    $mysqlServer = Find-LocalMySqlServer
+    $dataDir = Join-Path $env:LOCALAPPDATA "InfiniteCanvas\mysql-data"
+    if (-not $mysqlServer -or -not (Test-Path -LiteralPath (Join-Path $dataDir "mysql"))) {
+        return $false
+    }
+
+    $logDir = Join-Path $env:TEMP "infinite-canvas-local"
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    $outLog = Join-Path $logDir "mysql.out.log"
+    $errLog = Join-Path $logDir "mysql.err.log"
+    $mysqlHome = Split-Path (Split-Path $mysqlServer -Parent) -Parent
+    $process = Start-Process -FilePath $mysqlServer -ArgumentList @(
+        "--basedir=`"$mysqlHome`"",
+        "--datadir=`"$dataDir`"",
+        "--port=$Port",
+        "--bind-address=$HostName",
+        "--console"
+    ) -PassThru -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+
+    for ($attempt = 0; $attempt -lt 30; $attempt++) {
+        if (Test-TcpEndpoint $HostName $Port) {
+            return $true
+        }
+        $process.Refresh()
+        if ($process.HasExited) {
+            return $false
+        }
+        Start-Sleep -Seconds 1
+    }
+    return (Test-TcpEndpoint $HostName $Port)
+}
+
 $databaseDsn = if ($env:DATABASE_DSN) { $env:DATABASE_DSN } else { "root:password@tcp(127.0.0.1:3306)/infinite_canvas?charset=utf8mb4&parseTime=True&loc=UTC" }
 if ($databaseDsn -notmatch "@tcp\((?<host>[^:()]+):(?<port>\d+)\)/") {
     throw "DATABASE_DSN must use a TCP MySQL address for local startup."
@@ -33,7 +79,9 @@ if ($databaseDsn -notmatch "@tcp\((?<host>[^:()]+):(?<port>\d+)\)/") {
 $databaseHost = $Matches.host
 $databasePort = [int]$Matches.port
 if (-not (Test-TcpEndpoint $databaseHost $databasePort)) {
-    throw "MySQL is not accepting connections at ${databaseHost}:${databasePort}. Start MySQL and check DATABASE_DSN; its credentials are not displayed."
+    if (-not (Start-ProjectMySql $databaseHost $databasePort)) {
+        throw "MySQL is not accepting connections at ${databaseHost}:${databasePort}. Start MySQL and check DATABASE_DSN; its credentials are not displayed."
+    }
 }
 
 $redisAddress = if ($env:REDIS_ADDR) { $env:REDIS_ADDR } else { "127.0.0.1:6379" }
