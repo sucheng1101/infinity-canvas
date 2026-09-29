@@ -31,7 +31,46 @@ func migrate(db *gorm.DB) error {
 					&model.EmailVerificationToken{},
 					&model.PasswordResetToken{},
 					&model.AuditLog{},
+					&model.QuotaAccount{},
+					&model.QuotaLedger{},
+					&model.OperationSetting{},
+					&model.InvitationRelation{},
+					&model.InvitationReward{},
 				)
+			},
+		},
+		{
+			version: "20260921_m4_usernames_and_registration_codes",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.User{}, &model.EmailVerificationToken{}, &model.RegistrationCode{})
+			},
+		},
+		{
+			version: "20260921_m2_recharge",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(
+					&model.TopupProduct{},
+					&model.TopupOrder{},
+					&model.PaymentEvent{},
+				)
+			},
+		},
+		{
+			version: "20260921_m3_published_models",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.PublishedModel{})
+			},
+		},
+		{
+			version: "20260921_m3_channels_and_routes",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.UpstreamChannel{}, &model.ModelRoute{})
+			},
+		},
+		{
+			version: "20260921_m3_pricing_and_quotes",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.PricingVersion{}, &model.Quote{}, &model.QuotaReservation{}, &model.GenerationTask{})
 			},
 		},
 	}

@@ -17,4 +17,4 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY web/docker-entrypoint.sh /docker-entrypoint.d/40-runtime-config.sh
 RUN chmod +x /docker-entrypoint.d/40-runtime-config.sh
 
-EXPOSE 3000
+EXPOSE 1010

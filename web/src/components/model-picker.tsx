@@ -6,6 +6,8 @@ import i18n from "@/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { decodeChannelModel, encodeChannelModel, modelOptionName, resolveChannelApiKey, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
+import { isHostedMode } from "@/lib/app-mode";
+import { hostedApi, type PublishedModel } from "@/services/api/hosted";
 
 type ModelPickerProps = {
     config: AiConfig;
@@ -23,6 +25,7 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
     const { t } = useTranslation();
     const pickerId = useId();
     const [openPicker, setOpenPicker] = useState<"channel" | "model" | null>(null);
+    const [hostedModels, setHostedModels] = useState<PublishedModel[]>([]);
     const decoded = decodeChannelModel(value || "");
     const channels = useMemo(
         () => config.channels.map((channel) => ({ channel, models: channel.models.filter((model) => (!capability || model.capability === capability) && Boolean(resolveChannelApiKey(channel, model.name))) })).filter(({ models }) => models.length),
@@ -44,6 +47,11 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
         return () => window.removeEventListener("model-picker-open", closeOtherPicker);
     }, [pickerId]);
 
+    useEffect(() => {
+        if (!isHostedMode) return;
+        void hostedApi.models(capability).then((result) => setHostedModels(result.items)).catch(() => setHostedModels([]));
+    }, [capability]);
+
     const setPickerOpen = (picker: "channel" | "model", open: boolean) => {
         if (open) window.dispatchEvent(new CustomEvent("model-picker-open", { detail: pickerId }));
         setOpenPicker(open ? picker : null);
@@ -55,6 +63,21 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
         if (nextModel) onChange(encodeChannelModel(nextChannelId, nextModel.name));
         else onMissingConfig?.();
     };
+
+    if (isHostedMode) {
+        const hostedValue: string = (hostedModels.some((item) => item.displayName === value) ? value : hostedModels[0]?.displayName || value) || "";
+        return (
+            <Select value={hostedValue || undefined} onValueChange={onChange}>
+                <SelectTrigger className={cn("canvas-composer-model-picker h-8 min-w-0 max-w-full justify-start gap-2 rounded-full border border-input bg-transparent px-3 text-sm font-normal shadow-sm", fullWidth ? "w-full" : "w-fit", !fullWidth && "max-w-[16rem]", className)} title={hostedValue || pickerPlaceholder}>
+                    <ModelIcon model={hostedValue} />
+                    <span className="canvas-model-picker-text min-w-0 flex-1 truncate text-left">{hostedValue || pickerPlaceholder}</span>
+                </SelectTrigger>
+                <SelectContent data-canvas-no-zoom className="z-[1200] w-80 max-w-[calc(100vw-24px)] rounded-xl border border-border/70 bg-popover p-1 shadow-xl">
+                    {hostedModels.length ? hostedModels.map((item) => <SelectItem key={item.id} value={item.displayName} textValue={item.displayName}><ModelLabel model={item.displayName} /></SelectItem>) : <SelectItem value="__empty__" disabled>管理员暂未发布模型</SelectItem>}
+                </SelectContent>
+            </Select>
+        );
+    }
 
     if (!showChannel) {
         return (

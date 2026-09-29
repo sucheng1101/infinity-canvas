@@ -5,20 +5,21 @@ import { AnalyticsTracker } from "@/components/layout/analytics-tracker";
 import UserLayout from "@/layouts/user-layout";
 import { isHostedMode } from "@/lib/app-mode";
 import AssetsPage from "@/pages/assets";
+import BillingPage from "@/pages/billing";
 import CanvasPage from "@/pages/canvas";
 import CanvasProjectPage from "@/pages/canvas/project";
 import EcommerceCanvasProjectPage from "@/pages/canvas/ecommerce-project";
 import ConfigPage from "@/pages/config";
 import HomePage from "@/pages/home";
-import LandingPage from "@/pages/landing";
 import { ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage, VerifyEmailPage } from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 import PromptsPage from "@/pages/prompts";
 import WorkbenchPage from "@/pages/workbench";
 import ProjectsPage from "@/pages/projects";
+import AdminPage from "@/pages/admin";
 
 export const router = createBrowserRouter([
-    { path: "/", element: isHostedMode ? <LandingPage /> : <Navigate to="/app" replace /> },
+    { path: "/", element: isHostedMode ? <LoginPage /> : <Navigate to="/app" replace /> },
     {
         element: <HostedGuestRoute />,
         children: [
@@ -47,6 +48,8 @@ export const router = createBrowserRouter([
                     { path: "/projects", element: <ProjectsPage /> },
                     { path: "/projects/:id", element: <EcommerceCanvasProjectPage /> },
                     { path: "/assets", element: <AssetsPage /> },
+                    { path: "/billing", element: <BillingPage /> },
+                    { path: "/admin", element: <AdminPage /> },
                     { path: "/prompts", element: <PromptsPage /> },
                     { path: "/canvas", element: <CanvasPage /> },
                     { path: "/canvas/:id", element: <CanvasProjectPage /> },

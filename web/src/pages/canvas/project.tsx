@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 
 import { requestEdit, requestGeneration, requestImageQuestion } from "@/services/api/image";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
-import { createVideoGenerationTask, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
+import { cancelHostedVideoTask, createVideoGenerationTask, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { ensureImagePreview, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
@@ -319,7 +319,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         async (nodeId: string, config: Parameters<typeof buildGenerationConfig>[0], prompt: string, images: Parameters<typeof createVideoGenerationTask>[2], signal: AbortSignal, extra: CanvasNodeData["metadata"] = {}, videos: ReferenceVideo[] = [], audios: ReferenceAudio[] = []) => {
             const task = await createVideoGenerationTask(config, prompt, images, { signal, videos, audios });
             if (task.provider !== "plugin") {
-                setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, videoTaskId: task.id, videoTaskProvider: task.provider === "gemini" ? "gemini" : "openai", model: config.model } } : item)));
+                setNodes((prev) => prev.map((item) => (item.id === nodeId ? { ...item, metadata: { ...item.metadata, videoTaskId: task.id, videoTaskProvider: task.provider === "gemini" ? "gemini" : task.provider === "hosted" ? "hosted" : "openai", model: config.model } } : item)));
             }
             const video = await storeGeneratedVideo(await waitForVideoGenerationTask(config, task, { signal }));
             setNodes((prev) => prev.map((item) => (item.id === nodeId ? applyGeneratedVideo(item, video, { prompt, model: config.model, ...extra }) : item)));
@@ -346,7 +346,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                 setRunningNodeId(node.id);
                 setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, status: NODE_STATUS_LOADING, errorDetails: undefined } } : item)));
                 controller = startGenerationRequest(node.id, node.id, node.id);
-                const video = await storeGeneratedVideo(await waitForVideoGenerationTask(generationConfig, { id: taskId, provider: node.metadata?.videoTaskProvider === "gemini" ? "gemini" : "openai", model: generationConfig.model }, { signal: controller.signal }));
+                const video = await storeGeneratedVideo(await waitForVideoGenerationTask(generationConfig, { id: taskId, provider: node.metadata?.videoTaskProvider || "openai", model: generationConfig.model }, { signal: controller.signal }));
                 setNodes((prev) =>
                     prev.map((item) =>
                         item.id === node.id
@@ -401,6 +401,11 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
             generationRequestsRef.current.delete(request.targetNodeId);
             affectedNodeIds.add(request.targetNodeId);
             affectedNodeIds.add(request.originNodeId);
+        });
+        nodesRef.current.forEach((node) => {
+            if (!affectedNodeIds.has(node.id)) return;
+            const taskId = node.metadata?.videoTaskId;
+            if (taskId && node.metadata?.videoTaskProvider === "hosted") cancelHostedVideoTask({ id: taskId, provider: "hosted", model: node.metadata?.model || "" });
         });
         setRunningNodeId((current) => (current === runningId ? null : current));
         if (!affectedNodeIds.size) return;

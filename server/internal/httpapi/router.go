@@ -3,32 +3,60 @@ package httpapi
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/mail"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/go-redis/redis/v8"
+	"github.com/google/uuid"
 	"github.com/sucheng1101/infinity-canvas/server/internal/auth"
+	"github.com/sucheng1101/infinity-canvas/server/internal/channelcatalog"
 	"github.com/sucheng1101/infinity-canvas/server/internal/config"
+	"github.com/sucheng1101/infinity-canvas/server/internal/generation"
+	"github.com/sucheng1101/infinity-canvas/server/internal/invitation"
 	"github.com/sucheng1101/infinity-canvas/server/internal/mailer"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
+	"github.com/sucheng1101/infinity-canvas/server/internal/modelcatalog"
+	"github.com/sucheng1101/infinity-canvas/server/internal/payment"
+	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
+	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
+	"github.com/sucheng1101/infinity-canvas/server/internal/relay"
 	"gorm.io/gorm"
 )
 
 type Router struct {
-	Cfg  config.Config
-	DB   *gorm.DB
-	Auth *auth.Service
-	Redis *redis.Client
-	Mailer mailer.Mailer
+	Cfg            config.Config
+	DB             *gorm.DB
+	Auth           *auth.Service
+	Quota          *quota.Service
+	Invitation     *invitation.Service
+	Payment        *payment.Service
+	Pricing        *pricing.Service
+	Generation     *generation.Service
+	Relay          *relay.Service
+	ModelCatalog   *modelcatalog.Service
+	ChannelCatalog *channelcatalog.Service
+	Redis          *redis.Client
+	Mailer         mailer.Mailer
 }
 
 func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbound mailer.Mailer) *gin.Engine {
 	service := &auth.Service{DB: db, Cfg: cfg}
-	app := &Router{Cfg: cfg, DB: db, Auth: service, Redis: redisClient, Mailer: outbound}
+	quotaService := &quota.Service{DB: db}
+	invitationService := &invitation.Service{DB: db, Cfg: cfg, Quota: quotaService}
+	paymentService := &payment.Service{DB: db, Cfg: cfg, Quota: quotaService}
+	pricingService := &pricing.Service{DB: db, QuoteTTL: cfg.QuoteTTL}
+	generationService := &generation.Service{DB: db, Quota: quotaService, Pricing: pricingService}
+	relayService := &relay.Service{DB: db, Generation: generationService, Client: &http.Client{Timeout: cfg.RelayTimeout}}
+	modelCatalogService := &modelcatalog.Service{DB: db}
+	channelCatalogService := &channelcatalog.Service{DB: db}
+	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Redis: redisClient, Mailer: outbound}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(requestID())
@@ -36,6 +64,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 
 	v1 := r.Group("/api/v1")
 	v1.POST("/auth/register", app.register)
+	v1.POST("/auth/register/code", app.registrationCode)
 	v1.POST("/auth/verify-email", app.verifyEmail)
 	v1.POST("/auth/verify-email/resend", app.resendVerification)
 	v1.POST("/auth/login", app.login)
@@ -43,13 +72,61 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.POST("/auth/password/reset", app.resetPassword)
 	v1.POST("/auth/logout", app.logout)
 	v1.GET("/auth/me", app.requireAuth(), app.me)
+	v1.GET("/models", app.models)
+	v1.POST("/quotes", app.requireAuth(), app.createQuote)
+	v1.POST("/generation-tasks", app.requireAuth(), app.createGenerationTask)
+	v1.GET("/generation-tasks/:id", app.requireAuth(), app.getGenerationTask)
+	v1.POST("/generation-tasks/:id/execute", app.requireAuth(), app.executeGenerationTask)
+	v1.POST("/generation-tasks/:id/cancel", app.requireAuth(), app.cancelGenerationTask)
+	v1.GET("/account/quota", app.requireAuth(), app.accountQuota)
+	v1.GET("/account/ledger", app.requireAuth(), app.accountLedger)
+	v1.GET("/recharge/products", app.requireAuth(), app.rechargeProducts)
+	v1.POST("/recharge/orders", app.requireAuth(), app.allowGuard("recharge-order", 10, time.Minute), app.createRechargeOrder)
+	v1.GET("/recharge/orders/:id", app.requireAuth(), app.rechargeOrder)
+	v1.POST("/payments/epay/webhook", app.allowGuard("epay-webhook", 120, time.Minute), app.epayWebhook)
+	v1.GET("/payments/epay/webhook", app.allowGuard("epay-webhook", 120, time.Minute), app.epayWebhook)
+	v1.POST("/payments/epay/return", app.allowGuard("epay-return", 120, time.Minute), app.epayReturn)
+	v1.GET("/payments/epay/return", app.allowGuard("epay-return", 120, time.Minute), app.epayReturn)
+	v1.GET("/invitation/self", app.requireAuth(), app.invitationSelf)
+	v1.GET("/invitation/rewards", app.requireAuth(), app.invitationRewards)
+	v1.GET("/invitation/referrals", app.requireAuth(), app.invitationReferrals)
 	v1.GET("/admin/health", app.requireAdmin(), func(c *gin.Context) { successJSON(c, http.StatusOK, gin.H{"status": "ok"}) })
+	v1.GET("/admin/invitation-settings", app.requireAdmin(), app.adminInvitationSettings)
+	v1.PUT("/admin/invitation-settings", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.updateAdminInvitationSettings)
+	v1.POST("/admin/quota-adjustments", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminQuotaAdjustment)
+	v1.GET("/admin/recharge-products", app.requireAdmin(), app.adminRechargeProducts)
+	v1.POST("/admin/recharge-products", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateRechargeProduct)
+	v1.PUT("/admin/recharge-products/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateRechargeProduct)
+	v1.GET("/admin/payment-settings", app.requireAdmin(), app.adminPaymentSettings)
+	v1.PUT("/admin/payment-settings", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.updateAdminPaymentSettings)
+	v1.GET("/admin/email-settings", app.requireAdmin(), app.adminEmailSettings)
+	v1.PUT("/admin/email-settings", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.updateAdminEmailSettings)
+	v1.POST("/admin/email-settings/test", app.requireAdmin(), app.testAdminEmailSettings)
+	v1.GET("/admin/models", app.requireAdmin(), app.adminModels)
+	v1.POST("/admin/models", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateModel)
+	v1.PUT("/admin/models/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateModel)
+	v1.DELETE("/admin/models/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminDeleteModel)
+	v1.GET("/admin/channels", app.requireAdmin(), app.adminChannels)
+	v1.POST("/admin/channels", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateChannel)
+	v1.PUT("/admin/channels/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateChannel)
+	v1.DELETE("/admin/channels/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminDeleteChannel)
+	v1.GET("/admin/model-routes", app.requireAdmin(), app.adminModelRoutes)
+	v1.POST("/admin/model-routes", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateModelRoute)
+	v1.PUT("/admin/model-routes/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateModelRoute)
+	v1.DELETE("/admin/model-routes/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminDeleteModelRoute)
+	v1.GET("/admin/pricing", app.requireAdmin(), app.adminPricing)
+	v1.POST("/admin/pricing", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreatePricing)
+	v1.POST("/admin/pricing/:id/publish", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminPublishPricing)
+	v1.POST("/admin/pricing/:id/retire", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminRetirePricing)
 	return r
 }
 
 type credentialsRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Username         string `json:"username"`
+	Email            string `json:"email"`
+	Password         string `json:"password"`
+	VerificationCode string `json:"verificationCode"`
+	InviteCode       string `json:"inviteCode"`
 }
 
 type tokenRequest struct {
@@ -57,6 +134,10 @@ type tokenRequest struct {
 }
 
 func (a *Router) register(c *gin.Context) {
+	if !a.Cfg.RegistrationEnabled {
+		errorJSON(c, http.StatusForbidden, "REGISTRATION_DISABLED", "当前暂未开放注册")
+		return
+	}
 	if !a.allow(c, "register", 5, 15*time.Minute) {
 		return
 	}
@@ -65,30 +146,109 @@ func (a *Router) register(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
 		return
 	}
-	if !a.Cfg.DevExposeTokens && (a.Mailer == nil || !a.Mailer.Ready()) {
+	if a.Cfg.EmailEnabled && a.Cfg.EmailVerificationRequired && !a.Cfg.DevExposeTokens && (a.Mailer == nil || !a.Mailer.Ready()) {
 		errorJSON(c, http.StatusServiceUnavailable, "EMAIL_SERVICE_UNAVAILABLE", "邮件服务尚未配置")
 		return
 	}
-	result, err := a.Auth.Register(req.Email, req.Password)
+	result, err := a.Auth.Register(req.Username, req.Email, req.Password, req.VerificationCode, req.InviteCode)
 	if err != nil {
 		if errors.Is(err, gorm.ErrDuplicatedKey) {
-			errorJSON(c, http.StatusConflict, "EMAIL_EXISTS", "邮箱已注册")
+			errorJSON(c, http.StatusConflict, "ACCOUNT_EXISTS", "用户名或邮箱已注册")
+			return
+		}
+		if errors.Is(err, auth.ErrVerificationCodeInvalid) {
+			errorJSON(c, http.StatusBadRequest, "VERIFICATION_CODE_INVALID", "验证码无效或已过期")
+			return
+		}
+		if errors.Is(err, auth.ErrInvitationCodeInvalid) {
+			errorJSON(c, http.StatusBadRequest, "INVITATION_CODE_INVALID", "邀请码无效")
+			return
+		}
+		if errors.Is(err, auth.ErrInvitationAlreadyBound) {
+			errorJSON(c, http.StatusBadRequest, "INVITATION_ALREADY_BOUND", "该账号已经绑定邀请码")
+			return
+		}
+		if errors.Is(err, auth.ErrInvitationSelfUse) {
+			errorJSON(c, http.StatusBadRequest, "INVITATION_SELF_USE", "不能使用自己的邀请码")
+			return
+		}
+		if errors.Is(err, auth.ErrEmailAliasNotAllowed) {
+			errorJSON(c, http.StatusBadRequest, "EMAIL_ALIAS_NOT_ALLOWED", "email alias is not allowed")
+			return
+		}
+		if errors.Is(err, auth.ErrRegistrationDisabled) {
+			errorJSON(c, http.StatusForbidden, "REGISTRATION_DISABLED", "registration is disabled")
+			return
+		}
+		if errors.Is(err, auth.ErrEmailDomainNotAllowed) {
+			errorJSON(c, http.StatusBadRequest, "EMAIL_DOMAIN_NOT_ALLOWED", "该邮箱域名不在允许范围内")
 			return
 		}
 		errorJSON(c, http.StatusBadRequest, "REGISTER_FAILED", "注册信息无效")
 		return
 	}
-	data := gin.H{"user": publicUser(result.User), "verificationRequired": true}
+	data := gin.H{"user": publicUser(result.User), "verificationRequired": result.VerificationRequired}
 	if a.Cfg.DevExposeTokens {
 		data["verificationToken"] = result.VerificationToken
 	}
-	if a.Mailer != nil {
+	if result.VerificationRequired && a.Mailer != nil {
 		if err := a.Mailer.SendVerification(result.User.Email, result.VerificationToken); err != nil && !a.Cfg.DevExposeTokens {
 			errorJSON(c, http.StatusBadGateway, "EMAIL_DELIVERY_FAILED", "验证邮件发送失败，请稍后重新发送")
 			return
 		}
 	}
 	successJSON(c, http.StatusCreated, data)
+}
+
+func (a *Router) registrationCode(c *gin.Context) {
+	if !a.Cfg.RegistrationEnabled {
+		errorJSON(c, http.StatusForbidden, "REGISTRATION_DISABLED", "当前暂未开放注册")
+		return
+	}
+	if !a.Cfg.EmailEnabled || !a.Cfg.EmailVerificationRequired {
+		errorJSON(c, http.StatusBadRequest, "EMAIL_VERIFICATION_DISABLED", "当前未开启邮箱验证")
+		return
+	}
+	if !a.allow(c, "register-code", 5, 15*time.Minute) {
+		return
+	}
+	var req credentialsRequest
+	if c.ShouldBindJSON(&req) != nil || strings.TrimSpace(req.Email) == "" {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "邮箱格式无效")
+		return
+	}
+	if a.Cfg.EmailEnabled && !a.Cfg.DevExposeTokens && (a.Mailer == nil || !a.Mailer.Ready()) {
+		errorJSON(c, http.StatusServiceUnavailable, "EMAIL_SERVICE_UNAVAILABLE", "邮件服务尚未配置")
+		return
+	}
+	code, err := a.Auth.IssueRegistrationCode(req.Email)
+	if err != nil {
+		if errors.Is(err, auth.ErrEmailAliasNotAllowed) {
+			errorJSON(c, http.StatusBadRequest, "EMAIL_ALIAS_NOT_ALLOWED", "email alias is not allowed")
+			return
+		}
+		if errors.Is(err, auth.ErrRegistrationDisabled) {
+			errorJSON(c, http.StatusForbidden, "REGISTRATION_DISABLED", "registration is disabled")
+			return
+		}
+		if errors.Is(err, auth.ErrEmailDomainNotAllowed) {
+			errorJSON(c, http.StatusBadRequest, "EMAIL_DOMAIN_NOT_ALLOWED", "该邮箱域名不在允许范围内")
+			return
+		}
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "邮箱格式无效")
+		return
+	}
+	if a.Mailer != nil {
+		if err := a.Mailer.SendRegistrationCode(req.Email, code); err != nil && !a.Cfg.DevExposeTokens {
+			errorJSON(c, http.StatusBadGateway, "EMAIL_DELIVERY_FAILED", "验证码发送失败，请稍后重试")
+			return
+		}
+	}
+	data := gin.H{"accepted": true}
+	if a.Cfg.DevExposeTokens {
+		data["verificationCode"] = code
+	}
+	successJSON(c, http.StatusOK, data)
 }
 
 func (a *Router) verifyEmail(c *gin.Context) {
@@ -103,6 +263,10 @@ func (a *Router) verifyEmail(c *gin.Context) {
 		return
 	}
 	if verifiedNow {
+		if err := a.Invitation.RewardVerified(user.ID); err != nil {
+			errorJSON(c, http.StatusInternalServerError, "INVITATION_REWARD_FAILED", "邀请奖励处理失败")
+			return
+		}
 		sessionToken, err := a.Auth.CreateSession(user.ID, c.ClientIP(), c.GetHeader("User-Agent"))
 		if err != nil {
 			errorJSON(c, http.StatusInternalServerError, "SESSION_CREATE_FAILED", "登录会话创建失败")
@@ -114,6 +278,10 @@ func (a *Router) verifyEmail(c *gin.Context) {
 }
 
 func (a *Router) resendVerification(c *gin.Context) {
+	if !a.Cfg.EmailEnabled || !a.Cfg.EmailVerificationRequired {
+		errorJSON(c, http.StatusBadRequest, "EMAIL_VERIFICATION_DISABLED", "当前未开启邮箱验证")
+		return
+	}
 	if !a.allow(c, "verify-email-resend", 5, 15*time.Minute) {
 		return
 	}
@@ -122,7 +290,7 @@ func (a *Router) resendVerification(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
 		return
 	}
-	if !a.Cfg.DevExposeTokens && (a.Mailer == nil || !a.Mailer.Ready()) {
+	if a.Cfg.EmailEnabled && !a.Cfg.DevExposeTokens && (a.Mailer == nil || !a.Mailer.Ready()) {
 		errorJSON(c, http.StatusServiceUnavailable, "EMAIL_SERVICE_UNAVAILABLE", "邮件服务尚未配置")
 		return
 	}
@@ -170,6 +338,10 @@ func (a *Router) login(c *gin.Context) {
 }
 
 func (a *Router) forgotPassword(c *gin.Context) {
+	if !a.Cfg.EmailEnabled {
+		errorJSON(c, http.StatusBadRequest, "EMAIL_SERVICE_DISABLED", "当前未启用邮箱服务")
+		return
+	}
 	if !a.allow(c, "password-forgot", 5, 15*time.Minute) {
 		return
 	}
@@ -178,7 +350,7 @@ func (a *Router) forgotPassword(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
 		return
 	}
-	if !a.Cfg.DevExposeTokens && (a.Mailer == nil || !a.Mailer.Ready()) {
+	if a.Cfg.EmailEnabled && !a.Cfg.DevExposeTokens && (a.Mailer == nil || !a.Mailer.Ready()) {
 		errorJSON(c, http.StatusServiceUnavailable, "EMAIL_SERVICE_UNAVAILABLE", "邮件服务尚未配置")
 		return
 	}
@@ -230,7 +402,828 @@ func (a *Router) logout(c *gin.Context) {
 
 func (a *Router) me(c *gin.Context) {
 	user, _ := currentUser(c)
-	successJSON(c, http.StatusOK, gin.H{"user": publicUser(user)})
+	data := gin.H{"user": publicUser(user)}
+	if summary, err := a.Quota.Summary(user.ID); err == nil {
+		data["quota"] = summary
+	}
+	successJSON(c, http.StatusOK, data)
+}
+
+func (a *Router) models(c *gin.Context) {
+	items, err := a.ModelCatalog.List(c.Query("capability"), false)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "MODELS_READ_FAILED", "模型目录读取失败")
+		return
+	}
+	for index := range items {
+		if summary, ok := a.Pricing.Summary(items[index].ID); ok {
+			items[index].PriceSummary = gin.H{"type": summary.Type, "unitAmount": summary.UnitAmount, "currency": summary.Currency}
+		}
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) createQuote(c *gin.Context) {
+	user, _ := currentUser(c)
+	var input pricing.QuoteInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	quote, err := a.Pricing.Quote(user.ID, input)
+	if errors.Is(err, pricing.ErrQuoteParameter) {
+		errorJSON(c, http.StatusBadRequest, "QUOTE_PARAMETER_MISMATCH", "报价参数无效")
+		return
+	}
+	if errors.Is(err, pricing.ErrPricingUnavailable) {
+		errorJSON(c, http.StatusBadRequest, "MODEL_UNAVAILABLE", "模型暂不可用")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "QUOTE_FAILED", "报价生成失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, quote)
+}
+
+func (a *Router) createGenerationTask(c *gin.Context) {
+	user, _ := currentUser(c)
+	var input generation.CreateInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	if strings.TrimSpace(input.IdempotencyKey) == "" {
+		input.IdempotencyKey = strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	}
+	task, err := a.Generation.Create(user.ID, input)
+	if errors.Is(err, pricing.ErrQuoteNotFound) || errors.Is(err, pricing.ErrQuoteExpired) {
+		errorJSON(c, http.StatusConflict, "QUOTE_INVALID", "报价已失效，请重新获取")
+		return
+	}
+	if errors.Is(err, pricing.ErrQuoteParameter) {
+		errorJSON(c, http.StatusBadRequest, "QUOTE_PARAMETER_MISMATCH", "报价参数与任务参数不一致")
+		return
+	}
+	if errors.Is(err, quota.ErrInsufficient) {
+		errorJSON(c, http.StatusConflict, "QUOTA_INSUFFICIENT", "可用额度不足")
+		return
+	}
+	if errors.Is(err, generation.ErrInvalidTask) {
+		errorJSON(c, http.StatusBadRequest, "TASK_INVALID", "任务参数无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "TASK_CREATE_FAILED", "生成任务创建失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, task)
+}
+
+func (a *Router) getGenerationTask(c *gin.Context) {
+	user, _ := currentUser(c)
+	task, err := a.Generation.Get(user.ID, c.Param("id"))
+	if errors.Is(err, generation.ErrTaskNotFound) {
+		errorJSON(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "TASK_READ_FAILED", "生成任务读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, task)
+}
+
+func (a *Router) executeGenerationTask(c *gin.Context) {
+	user, _ := currentUser(c)
+	task, err := a.Relay.Execute(c.Request.Context(), user.ID, c.Param("id"))
+	if errors.Is(err, relay.ErrTaskNotFound) {
+		errorJSON(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
+		return
+	}
+	if errors.Is(err, relay.ErrRouteUnavailable) {
+		errorJSON(c, http.StatusServiceUnavailable, "ROUTE_UNAVAILABLE", "模型暂时没有可用渠道")
+		return
+	}
+	if errors.Is(err, relay.ErrUnsupported) {
+		errorJSON(c, http.StatusBadRequest, "CAPABILITY_UNSUPPORTED", "当前模型能力暂不支持托管生成")
+		return
+	}
+	if err != nil {
+		// The task has already been marked failed by Relay. Return the task view
+		// so the client can display the persisted failure state and error code.
+		if task.ID != "" {
+			successJSON(c, http.StatusOK, task)
+			return
+		}
+		errorJSON(c, http.StatusBadGateway, "UPSTREAM_GENERATION_FAILED", "上游模型生成失败")
+		return
+	}
+	successJSON(c, http.StatusOK, task)
+}
+
+func (a *Router) cancelGenerationTask(c *gin.Context) {
+	user, _ := currentUser(c)
+	task, err := a.Generation.Cancel(user.ID, c.Param("id"))
+	if errors.Is(err, generation.ErrTaskNotFound) {
+		errorJSON(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
+		return
+	}
+	if errors.Is(err, generation.ErrInvalidTransition) {
+		errorJSON(c, http.StatusConflict, "TASK_NOT_CANCELLABLE", "当前任务状态不允许取消")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "TASK_CANCEL_FAILED", "生成任务取消失败")
+		return
+	}
+	successJSON(c, http.StatusOK, task)
+}
+
+func (a *Router) adminPricing(c *gin.Context) {
+	items, err := a.Pricing.List(true)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "PRICING_READ_FAILED", "定价版本读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminCreatePricing(c *gin.Context) {
+	var input pricing.Input
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	operator, _ := currentUser(c)
+	item, err := a.Pricing.Create(operator.ID, input)
+	if errors.Is(err, pricing.ErrInvalidPricing) {
+		errorJSON(c, http.StatusBadRequest, "PRICING_INVALID", "定价规则无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "PRICING_CREATE_FAILED", "定价版本创建失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+}
+
+func (a *Router) adminPublishPricing(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "定价版本编号无效")
+		return
+	}
+	operator, _ := currentUser(c)
+	item, err := a.Pricing.Publish(operator.ID, uint(id))
+	if errors.Is(err, pricing.ErrPricingNotFound) {
+		errorJSON(c, http.StatusNotFound, "PRICING_NOT_FOUND", "定价版本不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "PRICING_PUBLISH_FAILED", "定价版本发布失败")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+}
+
+func (a *Router) adminRetirePricing(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "定价版本编号无效")
+		return
+	}
+	operator, _ := currentUser(c)
+	if err := a.Pricing.Retire(operator.ID, uint(id)); err != nil {
+		if errors.Is(err, pricing.ErrPricingNotFound) {
+			errorJSON(c, http.StatusNotFound, "PRICING_NOT_FOUND", "定价版本不存在")
+			return
+		}
+		errorJSON(c, http.StatusBadRequest, "PRICING_RETIRE_FAILED", "定价版本停用失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"ok": true})
+}
+
+func (a *Router) adminModels(c *gin.Context) {
+	items, err := a.ModelCatalog.List(c.Query("capability"), true)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "MODELS_READ_FAILED", "模型目录读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminCreateModel(c *gin.Context) {
+	var input modelcatalog.Input
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	item, err := a.ModelCatalog.Create(input)
+	if errors.Is(err, modelcatalog.ErrInvalidModel) {
+		errorJSON(c, http.StatusBadRequest, "MODEL_INVALID", "模型配置无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "MODEL_CREATE_FAILED", "模型创建失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+	_ = model.RecordAudit(a.DB, operatorID(c), "model.create", "published_model", item.ID)
+}
+
+func (a *Router) adminUpdateModel(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "模型编号无效")
+		return
+	}
+	var input modelcatalog.Input
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	item, err := a.ModelCatalog.Update(uint(id), input)
+	if errors.Is(err, modelcatalog.ErrModelNotFound) {
+		errorJSON(c, http.StatusNotFound, "MODEL_NOT_FOUND", "模型不存在")
+		return
+	}
+	if errors.Is(err, modelcatalog.ErrInvalidModel) {
+		errorJSON(c, http.StatusBadRequest, "MODEL_INVALID", "模型配置无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "MODEL_UPDATE_FAILED", "模型更新失败")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+	_ = model.RecordAudit(a.DB, operatorID(c), "model.update", "published_model", item.ID)
+}
+
+func (a *Router) adminDeleteModel(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "模型编号无效")
+		return
+	}
+	if err := a.ModelCatalog.Hide(uint(id)); err != nil {
+		if errors.Is(err, modelcatalog.ErrModelNotFound) {
+			errorJSON(c, http.StatusNotFound, "MODEL_NOT_FOUND", "模型不存在")
+			return
+		}
+		errorJSON(c, http.StatusBadRequest, "MODEL_DELETE_FAILED", "模型下线失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"ok": true})
+	_ = model.RecordAudit(a.DB, operatorID(c), "model.hide", "published_model", uint(id))
+}
+
+func (a *Router) adminChannels(c *gin.Context) {
+	items, err := a.ChannelCatalog.ListChannels(true)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "CHANNELS_READ_FAILED", "渠道列表读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminCreateChannel(c *gin.Context) {
+	var input channelcatalog.ChannelInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	item, err := a.ChannelCatalog.CreateChannel(input)
+	if errors.Is(err, channelcatalog.ErrInvalidChannel) {
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_INVALID", "渠道配置无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_CREATE_FAILED", "渠道创建失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+	_ = model.RecordAudit(a.DB, operatorID(c), "channel.create", "upstream_channel", item.ID)
+}
+
+func (a *Router) adminUpdateChannel(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道编号无效")
+		return
+	}
+	var input channelcatalog.ChannelInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	item, err := a.ChannelCatalog.UpdateChannel(uint(id), input)
+	if errors.Is(err, channelcatalog.ErrChannelNotFound) {
+		errorJSON(c, http.StatusNotFound, "CHANNEL_NOT_FOUND", "渠道不存在")
+		return
+	}
+	if errors.Is(err, channelcatalog.ErrInvalidChannel) {
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_INVALID", "渠道配置无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_UPDATE_FAILED", "渠道更新失败")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+	_ = model.RecordAudit(a.DB, operatorID(c), "channel.update", "upstream_channel", item.ID)
+}
+
+func (a *Router) adminDeleteChannel(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道编号无效")
+		return
+	}
+	if err := a.ChannelCatalog.HideChannel(uint(id)); err != nil {
+		if errors.Is(err, channelcatalog.ErrChannelNotFound) {
+			errorJSON(c, http.StatusNotFound, "CHANNEL_NOT_FOUND", "渠道不存在")
+			return
+		}
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_DELETE_FAILED", "渠道下线失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"ok": true})
+	_ = model.RecordAudit(a.DB, operatorID(c), "channel.hide", "upstream_channel", uint(id))
+}
+
+func (a *Router) adminModelRoutes(c *gin.Context) {
+	items, err := a.ChannelCatalog.ListRoutes(true)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "MODEL_ROUTES_READ_FAILED", "模型路由读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminCreateModelRoute(c *gin.Context) {
+	var input channelcatalog.RouteInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	item, err := a.ChannelCatalog.CreateRoute(input)
+	if errors.Is(err, channelcatalog.ErrInvalidRoute) || errors.Is(err, channelcatalog.ErrPublishedNotFound) || errors.Is(err, channelcatalog.ErrChannelNotFound) {
+		errorJSON(c, http.StatusBadRequest, "MODEL_ROUTE_INVALID", "模型路由配置无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "MODEL_ROUTE_CREATE_FAILED", "模型路由创建失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+	_ = model.RecordAudit(a.DB, operatorID(c), "model_route.create", "model_route", item.ID)
+}
+
+func (a *Router) adminUpdateModelRoute(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "路由编号无效")
+		return
+	}
+	var input channelcatalog.RouteInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	item, err := a.ChannelCatalog.UpdateRoute(uint(id), input)
+	if errors.Is(err, channelcatalog.ErrRouteNotFound) {
+		errorJSON(c, http.StatusNotFound, "MODEL_ROUTE_NOT_FOUND", "模型路由不存在")
+		return
+	}
+	if errors.Is(err, channelcatalog.ErrInvalidRoute) || errors.Is(err, channelcatalog.ErrPublishedNotFound) || errors.Is(err, channelcatalog.ErrChannelNotFound) {
+		errorJSON(c, http.StatusBadRequest, "MODEL_ROUTE_INVALID", "模型路由配置无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "MODEL_ROUTE_UPDATE_FAILED", "模型路由更新失败")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+	_ = model.RecordAudit(a.DB, operatorID(c), "model_route.update", "model_route", item.ID)
+}
+
+func (a *Router) adminDeleteModelRoute(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "路由编号无效")
+		return
+	}
+	if err := a.ChannelCatalog.HideRoute(uint(id)); err != nil {
+		if errors.Is(err, channelcatalog.ErrRouteNotFound) {
+			errorJSON(c, http.StatusNotFound, "MODEL_ROUTE_NOT_FOUND", "模型路由不存在")
+			return
+		}
+		errorJSON(c, http.StatusBadRequest, "MODEL_ROUTE_DELETE_FAILED", "模型路由下线失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"ok": true})
+	_ = model.RecordAudit(a.DB, operatorID(c), "model_route.hide", "model_route", uint(id))
+}
+
+func (a *Router) accountQuota(c *gin.Context) {
+	user, _ := currentUser(c)
+	summary, err := a.Quota.Summary(user.ID)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "QUOTA_READ_FAILED", "额度读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, summary)
+}
+
+func (a *Router) accountLedger(c *gin.Context) {
+	user, _ := currentUser(c)
+	limit, offset := pageParams(c)
+	items, hasMore, err := a.Quota.Ledger(user.ID, limit, offset)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "QUOTA_LEDGER_READ_FAILED", "额度流水读取失败")
+		return
+	}
+	nextCursor := ""
+	if hasMore {
+		nextCursor = fmt.Sprintf("%d", offset+len(items))
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items, "nextCursor": nextCursor})
+}
+
+func (a *Router) rechargeProducts(c *gin.Context) {
+	products, err := a.Payment.Products(false)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "RECHARGE_PRODUCTS_READ_FAILED", "充值套餐读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": products})
+}
+
+func (a *Router) createRechargeOrder(c *gin.Context) {
+	user, _ := currentUser(c)
+	var req struct {
+		ProductID       uint   `json:"productId"`
+		PaymentProvider string `json:"paymentProvider"`
+		PaymentMethod   string `json:"paymentMethod"`
+		IdempotencyKey  string `json:"idempotencyKey"`
+	}
+	if c.ShouldBindJSON(&req) != nil || req.ProductID == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	if idempotencyKey == "" {
+		idempotencyKey = strings.TrimSpace(req.IdempotencyKey)
+	}
+	order, checkout, err := a.Payment.CreateOrder(user.ID, req.ProductID, req.PaymentProvider, req.PaymentMethod, idempotencyKey)
+	if err != nil {
+		status := http.StatusBadRequest
+		code := "RECHARGE_ORDER_CREATE_FAILED"
+		message := "\u5145\u503c\u8ba2\u5355\u521b\u5efa\u5931\u8d25"
+		if errors.Is(err, payment.ErrProviderUnavailable) {
+			status, code = http.StatusServiceUnavailable, "PAYMENT_PROVIDER_UNAVAILABLE"
+		}
+		if errors.Is(err, payment.ErrCallbackUnavailable) {
+			status, code = http.StatusServiceUnavailable, "PAYMENT_CALLBACK_UNAVAILABLE"
+			message = "\u652f\u4ed8\u56de\u8c03\u5730\u5740\u9700\u8981\u4f7f\u7528\u652f\u4ed8\u7f51\u5173\u53ef\u4ee5\u8bbf\u95ee\u7684\u516c\u7f51\u5730\u5740\uff0c\u8bf7\u5728\u652f\u4ed8\u8bbe\u7f6e\u4e2d\u586b\u5199\u57df\u540d\u5730\u5740"
+		}
+		if errors.Is(err, payment.ErrProductUnavailable) {
+			status, code = http.StatusConflict, "RECHARGE_PRODUCT_UNAVAILABLE"
+		}
+		errorJSON(c, status, code, message)
+		return
+	}
+	successJSON(c, http.StatusCreated, gin.H{"order": order, "checkout": checkout})
+}
+
+func (a *Router) rechargeOrder(c *gin.Context) {
+	user, _ := currentUser(c)
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "订单编号无效")
+		return
+	}
+	order, checkout, err := a.Payment.Order(user.ID, uint(id))
+	if err != nil {
+		errorJSON(c, http.StatusNotFound, "RECHARGE_ORDER_NOT_FOUND", "充值订单不存在")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"order": order, "checkout": checkout})
+}
+
+func (a *Router) epayWebhook(c *gin.Context) {
+	if err := c.Request.ParseForm(); err != nil {
+		c.String(http.StatusBadRequest, "fail")
+		return
+	}
+	if err := a.Payment.HandleEpayWebhook(c.Request.Form); err != nil {
+		if errors.Is(err, payment.ErrSignatureInvalid) {
+			c.String(http.StatusUnauthorized, "fail")
+			return
+		}
+		c.String(http.StatusBadRequest, "fail")
+		return
+	}
+	c.String(http.StatusOK, "success")
+}
+
+func (a *Router) epayReturn(c *gin.Context) {
+	if err := c.Request.ParseForm(); err != nil {
+		c.Redirect(http.StatusFound, strings.TrimRight(a.Cfg.PublicWebURL, "/")+"/billing?payment=fail")
+		return
+	}
+	status := "pending"
+	if err := a.Payment.HandleEpayWebhook(c.Request.Form); err != nil {
+		status = "fail"
+	} else if strings.EqualFold(c.Request.Form.Get("trade_status"), "TRADE_SUCCESS") || strings.EqualFold(c.Request.Form.Get("trade_status"), "success") {
+		status = "success"
+	}
+	c.Redirect(http.StatusFound, strings.TrimRight(a.Cfg.PublicWebURL, "/")+"/billing?payment="+status)
+}
+
+func (a *Router) invitationSelf(c *gin.Context) {
+	user, _ := currentUser(c)
+	self, err := a.Invitation.Self(user.ID)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "INVITATION_READ_FAILED", "邀请信息读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, self)
+}
+
+func (a *Router) invitationRewards(c *gin.Context) {
+	user, _ := currentUser(c)
+	limit, offset := pageParams(c)
+	items, hasMore, err := a.Invitation.Rewards(user.ID, limit, offset)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "INVITATION_REWARDS_READ_FAILED", "邀请奖励读取失败")
+		return
+	}
+	nextCursor := ""
+	if hasMore {
+		nextCursor = fmt.Sprintf("%d", offset+len(items))
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items, "nextCursor": nextCursor})
+}
+
+func (a *Router) invitationReferrals(c *gin.Context) {
+	user, _ := currentUser(c)
+	limit, offset := pageParams(c)
+	items, hasMore, err := a.Invitation.Referrals(user.ID, limit, offset)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "INVITATION_REFERRALS_READ_FAILED", "邀请关系读取失败")
+		return
+	}
+	nextCursor := ""
+	if hasMore {
+		nextCursor = fmt.Sprintf("%d", offset+len(items))
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items, "nextCursor": nextCursor})
+}
+
+func (a *Router) adminInvitationSettings(c *gin.Context) {
+	settings, err := a.Invitation.Settings()
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "INVITATION_SETTINGS_READ_FAILED", "邀请奖励配置读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, settings)
+}
+
+func (a *Router) updateAdminInvitationSettings(c *gin.Context) {
+	operator, _ := currentUser(c)
+	var settings invitation.Settings
+	if c.ShouldBindJSON(&settings) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	updated, err := a.Invitation.UpdateSettings(operator.ID, settings)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVITATION_SETTINGS_UPDATE_FAILED", "邀请奖励配置更新失败")
+		return
+	}
+	successJSON(c, http.StatusOK, updated)
+}
+
+func (a *Router) adminQuotaAdjustment(c *gin.Context) {
+	operator, _ := currentUser(c)
+	var req struct {
+		UserID         uint   `json:"userId"`
+		Delta          int64  `json:"delta"`
+		Source         string `json:"source"`
+		Reason         string `json:"reason"`
+		IdempotencyKey string `json:"idempotencyKey"`
+	}
+	if c.ShouldBindJSON(&req) != nil || req.UserID == 0 || req.Delta == 0 || strings.TrimSpace(req.IdempotencyKey) == "" {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	if strings.TrimSpace(req.Source) == "" {
+		req.Source = "admin"
+	}
+	businessID := fmt.Sprintf("%d:%d", operator.ID, time.Now().UnixNano())
+	if err := a.Quota.Adjust(req.UserID, req.Delta, req.Source, businessID, strings.TrimSpace(req.IdempotencyKey)); err != nil {
+		if errors.Is(err, quota.ErrAccountNotFound) {
+			errorJSON(c, http.StatusNotFound, "QUOTA_ACCOUNT_NOT_FOUND", "目标用户不存在或尚未开通额度账户")
+			return
+		}
+		if errors.Is(err, quota.ErrInsufficient) {
+			errorJSON(c, http.StatusConflict, "QUOTA_INSUFFICIENT", "额度不足")
+			return
+		}
+		errorJSON(c, http.StatusBadRequest, "QUOTA_ADJUSTMENT_FAILED", "额度调整失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operator.ID, "quota.adjust", "user", req.UserID)
+	successJSON(c, http.StatusOK, gin.H{"ok": true, "operatorId": operator.ID, "reason": req.Reason})
+}
+
+func (a *Router) adminRechargeProducts(c *gin.Context) {
+	products, err := a.Payment.Products(true)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "RECHARGE_PRODUCTS_READ_FAILED", "充值套餐读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": products})
+}
+
+func (a *Router) adminCreateRechargeProduct(c *gin.Context) {
+	var product model.TopupProduct
+	if c.ShouldBindJSON(&product) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	created, err := a.Payment.UpsertProduct(product)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "RECHARGE_PRODUCT_INVALID", "充值套餐配置无效")
+		return
+	}
+	successJSON(c, http.StatusCreated, created)
+	_ = model.RecordAudit(a.DB, operatorID(c), "recharge_product.create", "topup_product", created.ID)
+}
+
+func (a *Router) adminUpdateRechargeProduct(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "套餐编号无效")
+		return
+	}
+	var product model.TopupProduct
+	if c.ShouldBindJSON(&product) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	product.ID = uint(id)
+	updated, err := a.Payment.UpsertProduct(product)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "RECHARGE_PRODUCT_INVALID", "充值套餐配置无效")
+		return
+	}
+	successJSON(c, http.StatusOK, updated)
+	_ = model.RecordAudit(a.DB, operatorID(c), "recharge_product.update", "topup_product", updated.ID)
+}
+
+func (a *Router) adminPaymentSettings(c *gin.Context) {
+	settings, err := a.Payment.EpaySettings()
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "PAYMENT_SETTINGS_READ_FAILED", "支付配置读取失败")
+		return
+	}
+	settings.Key = ""
+	successJSON(c, http.StatusOK, settings)
+}
+
+func (a *Router) updateAdminPaymentSettings(c *gin.Context) {
+	operator, _ := currentUser(c)
+	var settings payment.EpaySettings
+	if c.ShouldBindJSON(&settings) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	updated, err := a.Payment.UpdateEpaySettings(operator.ID, settings)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "PAYMENT_SETTINGS_UPDATE_FAILED", "支付配置更新失败")
+		return
+	}
+	updated.Key = ""
+	successJSON(c, http.StatusOK, updated)
+	_ = model.RecordAudit(a.DB, operator.ID, "payment.settings.update", "payment_settings", "")
+}
+
+func (a *Router) adminEmailSettings(c *gin.Context) {
+	settings := a.Cfg.EmailSettings()
+	var row model.OperationSetting
+	if err := a.DB.Where("`key` = ?", "email.smtp").First(&row).Error; err == nil {
+		if jsonErr := json.Unmarshal([]byte(row.Value), &settings); jsonErr != nil {
+			errorJSON(c, http.StatusInternalServerError, "EMAIL_SETTINGS_READ_FAILED", "邮箱配置读取失败")
+			return
+		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		errorJSON(c, http.StatusInternalServerError, "EMAIL_SETTINGS_READ_FAILED", "邮箱配置读取失败")
+		return
+	}
+	settings.SMTPPassword = ""
+	successJSON(c, http.StatusOK, settings)
+}
+
+func (a *Router) updateAdminEmailSettings(c *gin.Context) {
+	operator, _ := currentUser(c)
+	var settings config.EmailSettings
+	if c.ShouldBindJSON(&settings) != nil || settings.SMTPPort < 1 || settings.SMTPPort > 65535 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "邮箱配置无效")
+		return
+	}
+	current := a.Cfg.EmailSettings()
+	settings.AllowedDomains = normalizeEmailDomains(settings.AllowedDomains)
+	settings.BlockedDomains = normalizeEmailDomains(settings.BlockedDomains)
+	if settings.DomainRestrictionEnabled && len(settings.AllowedDomains) == 0 {
+		errorJSON(c, http.StatusBadRequest, "EMAIL_ALLOWED_DOMAINS_REQUIRED", "allowed domains are required when restriction is enabled")
+		return
+	}
+	if strings.TrimSpace(settings.SMTPPassword) == "" {
+		settings.SMTPPassword = current.SMTPPassword
+	}
+	payload, err := json.Marshal(settings)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "邮箱配置无效")
+		return
+	}
+	if err = a.DB.Transaction(func(tx *gorm.DB) error {
+		var row model.OperationSetting
+		findErr := tx.Where("`key` = ?", "email.smtp").First(&row).Error
+		if errors.Is(findErr, gorm.ErrRecordNotFound) {
+			return tx.Create(&model.OperationSetting{Key: "email.smtp", Value: string(payload), Version: 1, UpdatedBy: &operator.ID}).Error
+		}
+		if findErr != nil {
+			return findErr
+		}
+		row.Value, row.Version, row.UpdatedBy = string(payload), row.Version+1, &operator.ID
+		return tx.Save(&row).Error
+	}); err != nil {
+		errorJSON(c, http.StatusBadRequest, "EMAIL_SETTINGS_UPDATE_FAILED", "邮箱配置更新失败")
+		return
+	}
+	a.Cfg.ApplyEmailSettings(settings)
+	a.Auth.Cfg.ApplyEmailSettings(settings)
+	a.Invitation.Cfg.ApplyEmailSettings(settings)
+	if smtp, ok := a.Mailer.(*mailer.SMTP); ok {
+		smtp.UpdateConfig(a.Cfg)
+	}
+	settings.SMTPPassword = ""
+	successJSON(c, http.StatusOK, settings)
+	_ = model.RecordAudit(a.DB, operator.ID, "email.settings.update", "email_settings", "")
+}
+
+func (a *Router) testAdminEmailSettings(c *gin.Context) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if c.ShouldBindJSON(&req) != nil || strings.TrimSpace(req.Email) == "" {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请输入测试收件邮箱")
+		return
+	}
+	address, err := mail.ParseAddress(strings.TrimSpace(req.Email))
+	if err != nil || address.Address != strings.TrimSpace(req.Email) {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "测试收件邮箱格式无效")
+		return
+	}
+	if !a.Cfg.EmailEnabled || a.Mailer == nil || !a.Mailer.Ready() {
+		errorJSON(c, http.StatusServiceUnavailable, "EMAIL_SERVICE_UNAVAILABLE", "请先完成 SMTP 配置")
+		return
+	}
+	if err := a.Mailer.SendTest(address.Address); err != nil {
+		errorJSON(c, http.StatusBadGateway, "EMAIL_DELIVERY_FAILED", "测试邮件发送失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"sent": true})
+}
+
+func normalizeEmailDomains(domains []string) []string {
+	result := make([]string, 0, len(domains))
+	seen := make(map[string]struct{}, len(domains))
+	for _, value := range domains {
+		domain := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(value, "@")))
+		if domain == "" {
+			continue
+		}
+		if _, exists := seen[domain]; exists {
+			continue
+		}
+		seen[domain] = struct{}{}
+		result = append(result, domain)
+	}
+	return result
+}
+
+func pageParams(c *gin.Context) (int, int) {
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	offset, _ := strconv.Atoi(c.Query("cursor"))
+	if limit <= 0 {
+		limit = 50
+	}
+	return limit, offset
 }
 
 func (a *Router) requireAuth() gin.HandlerFunc {
@@ -276,6 +1269,15 @@ func (a *Router) authenticate(c *gin.Context) bool {
 	return true
 }
 
+func (a *Router) allowGuard(action string, limit int64, window time.Duration) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if !a.allow(c, action, limit, window) {
+			return
+		}
+		c.Next()
+	}
+}
+
 func (a *Router) allow(c *gin.Context, action string, limit int64, window time.Duration) bool {
 	if a.Redis == nil {
 		return true
@@ -305,13 +1307,20 @@ func currentUser(c *gin.Context) (model.User, bool) {
 	return user, ok
 }
 
+// operatorID returns the acting administrator's id for audit records; admin
+// routes are already behind requireAdmin so a missing user is not expected.
+func operatorID(c *gin.Context) uint {
+	user, _ := currentUser(c)
+	return user.ID
+}
+
 func (a *Router) setSessionCookie(c *gin.Context, token string) {
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(a.Cfg.SessionCookie, token, int(a.Cfg.SessionTTL.Seconds()), "/", "", a.Cfg.CookieSecure, true)
 }
 
 func publicUser(user model.User) gin.H {
-	return gin.H{"id": user.ID, "email": user.Email, "status": user.Status, "role": user.Role, "emailVerifiedAt": user.EmailVerifiedAt}
+	return gin.H{"id": user.ID, "username": user.Username, "email": user.Email, "status": user.Status, "role": user.Role, "emailVerifiedAt": user.EmailVerifiedAt}
 }
 
 func errorJSON(c *gin.Context, status int, code, message string) {

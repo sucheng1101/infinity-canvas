@@ -7,6 +7,16 @@ description: Frontend-first local development
 
 The main application lives in `web/`. The browser sends AI requests directly to the user's OpenAI-compatible endpoint.
 
+## Hosted account service
+
+To verify login, quota, or payment flows, run the unified bootstrap from the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-local.ps1
+```
+
+It checks MySQL, Redis, and ports `1010`/`1011`, starts the account service, waits for `/healthz`, and then starts Vite. Account-service logs are written to `%TEMP%\infinite-canvas-local`. Missing MySQL or Redis is reported with its address and stops startup without closing other processes.
+
 ## Start the frontend
 
 ```bash
@@ -15,7 +25,7 @@ bun install
 bun run dev
 ```
 
-Open `http://localhost:3000`, then enter your `Base URL`, `API Key`, and model names in Settings. Prompt sources and WebDAV are also accessed directly by the browser.
+Open `http://localhost:1010`, then enter your `Base URL`, `API Key`, and model names in Settings. Prompt sources and WebDAV are also accessed directly by the browser.
 
 ## Start the documentation site
 

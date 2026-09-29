@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/sucheng1101/infinity-canvas/server/internal/config"
-	"github.com/sucheng1101/infinity-canvas/server/internal/model"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )

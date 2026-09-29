@@ -4,6 +4,7 @@ import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
+import { isHostedMode } from "@/lib/app-mode";
 
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
@@ -200,6 +201,7 @@ export function resolveModelScript(config: AiConfig, value: string) {
 }
 
 function isAiConfigReady(config: AiConfig, model: string) {
+    if (isHostedMode) return true;
     const requestConfig = resolveModelRequestConfig(config, model);
     return Boolean(model.trim() && requestConfig.baseUrl.trim() && requestConfig.apiKey.trim());
 }

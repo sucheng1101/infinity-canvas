@@ -5,6 +5,8 @@ description: Planned follow-up work
 
 # TODO
 
+- Hosted commercial platform: the M1 backend skeleton and account flow are in place and need MySQL/Redis/SMTP verification. The admin console, wallet and quota, invite rewards, epay recharge, model channels and routes, server-side pricing, and the relay execution entry are implemented and need acceptance. Canvas projects and assets are still stored in the browser.
+- Hosted commercial platform follow-up: hosted video generation still executes upstream synchronously, so cancelling only marks the task and releases quota without interrupting the upstream call; move to a task-keyed cancellable execution context. Cleanup of completed tasks, expired quotes, and expired orders is still missing.
 - Replace the Claude Code CLI adapter with a Claude Agent SDK adapter and improve the tool queue, following the [Local Agent Integration Plan](/docs/progress/local-agent-integration-plan).
 - Add Skill installation from web search, Skill resource-file management, and controlled local-memory persistence.
 - Add studio project templates for photo enhancement, wedding portraits, and ID-photo workflows.

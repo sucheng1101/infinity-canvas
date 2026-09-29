@@ -11,6 +11,9 @@ import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, re
 import { runModelPlugin } from "./model-plugin";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
+import { isHostedMode } from "@/lib/app-mode";
+import { createHostedVideoTask as createHostedTask, readHostedVideoTask } from "./hosted-generation";
+import { hostedApi } from "./hosted";
 
 type VideoResponse = { id: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
@@ -20,7 +23,7 @@ type VideoMediaOptions = RequestOptions & { videos?: ReferenceVideo[]; audios?: 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
-export type VideoGenerationTask = { id: string; provider: "openai" | "gemini" | "plugin"; model: string };
+export type VideoGenerationTask = { id: string; provider: "openai" | "gemini" | "plugin" | "hosted"; model: string };
 type GeminiInlineData = { bytesBase64Encoded: string; mimeType: string };
 type GeminiVideoOperation = {
     name?: string;
@@ -71,6 +74,7 @@ function videoTaskFailed(message: string) {
 }
 
 export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    if (isHostedMode) return createHostedVideoTask(config, prompt, references, options);
     const selectedModel = (config.model || config.videoModel).trim();
     const requestConfig = resolveModelRequestConfig(config, selectedModel);
     const script = resolveModelScript(config, selectedModel);
@@ -85,10 +89,31 @@ export async function pollVideoGenerationTask(config: AiConfig, task: VideoGener
         const result = pluginVideoResults.get(task.id);
         return result ? { status: "completed", result } : { status: "failed", error: apiText("pluginVideoExpired") };
     }
+    if (task.provider === "hosted") {
+        try {
+            return await readHostedVideoTask(await hostedApi.getGenerationTask(task.id));
+        } catch (error) {
+            throw new Error(readAxiosError(error, apiText("videoTaskQueryFailed")));
+        }
+    }
     const requestConfig = resolveModelRequestConfig(config, task.model);
     assertVideoConfig(requestConfig, requestConfig.model);
     if (task.provider === "gemini") return pollGeminiVideoTask(requestConfig, task, options);
     return pollOpenAIVideoTask(requestConfig, task, options);
+}
+
+async function createHostedVideoTask(config: AiConfig, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    const task = await createHostedTask(config, prompt, references, options?.signal);
+    const controller = new AbortController();
+    options?.signal?.addEventListener("abort", () => controller.abort(), { once: true });
+    void hostedApi.executeGenerationTask(task.id, controller.signal).catch(() => undefined);
+    return { id: task.id, provider: "hosted", model: task.model };
+}
+
+/** Marks the hosted task cancelled and releases its reserved quota. */
+export function cancelHostedVideoTask(task: VideoGenerationTask) {
+    if (task.provider !== "hosted") return;
+    void hostedApi.cancelGenerationTask(task.id).catch(() => undefined);
 }
 
 async function createPluginVideoTask(config: AiConfig, model: string, script: string, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
