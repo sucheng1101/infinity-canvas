@@ -169,21 +169,26 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                 items={[
                     {
                         key: "channels",
-                        label: t("config.tabs.channels"),
+                        label: isHostedMode ? "自定义渠道" : t("config.tabs.channels"),
                         children: (
                             <div>
-                                <div className="mb-4 text-xs text-stone-500">{t("config.channels.description")}</div>
+                                {isHostedMode ? (
+                                    <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">自定义渠道不可使用，开通套餐后可使用。</div>
+                                ) : (
+                                    <div className="mb-4 text-xs text-stone-500">{t("config.channels.description")}</div>
+                                )}
                                 <div className="space-y-2">
                                     {config.channels.map((channel) => (
                                         <div key={channel.id} className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-4 py-3 dark:border-stone-800">
                                             <div className="min-w-0">
                                                 <div className="truncate text-sm font-semibold">{channel.name || t("config.channels.unnamed")}</div>
+                                                {isHostedMode ? <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">不可使用，需开通套餐</div> : null}
                                                 <div className="mt-1 truncate text-xs text-stone-500">
                                                     OpenAI · {t("config.channels.modelCount", { count: channel.models.length })} · {channel.baseUrl}
                                                 </div>
                                             </div>
                                             <div className="flex shrink-0 gap-2">
-                                                <Button size="small" icon={<KeyRound className="size-3.5" />} onClick={() => setEditingChannelId(channel.id)}>
+                                                <Button size="small" disabled={isHostedMode} icon={<KeyRound className="size-3.5" />} onClick={() => setEditingChannelId(channel.id)}>
                                                     {t("common.edit")}
                                                 </Button>
                                             </div>
@@ -304,7 +309,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         label: t("config.tabs.localStorage"),
                         children: <ConfigLocalStorage active={activeTab === "local-storage"} />,
                     },
-                ].filter((item) => !isHostedMode || (item.key !== "channels" && item.key !== "local-proxy"))}
+                ].filter((item) => !isHostedMode || item.key !== "local-proxy")}
             />
             {showDoneButton ? (
                 <div className="mt-4 flex justify-end">
@@ -348,7 +353,7 @@ function withChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
 }
 
 function resolveConfigTab(tab: ConfigTabKey): ConfigTabKey {
-    return isHostedMode && (tab === "channels" || tab === "local-proxy") ? "preferences" : tab;
+    return isHostedMode && tab === "local-proxy" ? "preferences" : tab;
 }
 
 function normalizeImageCount(value: string) {

@@ -67,8 +67,7 @@ export const hostedApi = {
             body: JSON.stringify({ productId, paymentProvider: "epay", paymentMethod }),
         }),
     invitation: () => request<InvitationSelf>("/invitation/self"),
-    models: (capability?: string, signal?: AbortSignal) =>
-        request<{ items: PublishedModel[] }>(`/models${capability ? `?capability=${encodeURIComponent(capability)}` : ""}`, { signal }),
+    models: (capability?: string, signal?: AbortSignal) => request<{ items: PublishedModel[] }>(`/models${capability ? `?capability=${encodeURIComponent(capability)}` : ""}`, { signal }),
     quote: (modelId: number, capability: string, parameters: Record<string, unknown>, count = 1, signal?: AbortSignal) =>
         request<HostedQuote>("/quotes", {
             method: "POST",

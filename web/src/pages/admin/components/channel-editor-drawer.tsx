@@ -1,4 +1,4 @@
-import { App, Button, Drawer, Input, InputNumber, Modal, Segmented, Select, Space } from "antd";
+import { App, Button, Drawer, Input, InputNumber, Modal, Select, Space, Table, Tag } from "antd";
 import { KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useEffect, useState } from "react";
@@ -64,6 +64,8 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
     const [availableModels, setAvailableModels] = useState<string[]>([]);
     const [selectedModels, setSelectedModels] = useState<string[]>([]);
     const [scriptTarget, setScriptTarget] = useState<ScriptTarget | null>(null);
+    const [modelEditor, setModelEditor] = useState<AdminChannelModel | null>(null);
+    const [modelCapability, setModelCapability] = useState<ModelCapability>("text");
 
     useEffect(() => {
         if (!open) return;
@@ -72,17 +74,14 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
         setAvailableModels([]);
         setSelectedModels([]);
         setScriptTarget(null);
+        setModelEditor(null);
     }, [channel, open]);
 
     const patch = (value: Partial<DraftChannel>) => setDraft((current) => ({ ...current, ...value }));
     const setKeys = (modelApiKeys: DraftKey[]) => patch({ modelApiKeys });
     const setModels = (models: AdminChannelModel[]) => patch({ models });
     const targetKey = draft.modelApiKeys.find((item) => item.localId === keyModelTargetId) || null;
-    const duplicateKeyIds = new Set(
-        draft.modelApiKeys
-            .filter((item) => item.apiKey.trim() && draft.modelApiKeys.some((other) => other.localId !== item.localId && other.apiKey.trim() === item.apiKey.trim()))
-            .map((item) => item.localId),
-    );
+    const duplicateKeyIds = new Set(draft.modelApiKeys.filter((item) => item.apiKey.trim() && draft.modelApiKeys.some((other) => other.localId !== item.localId && other.apiKey.trim() === item.apiKey.trim())).map((item) => item.localId));
 
     const patchKey = (localId: string, value: Partial<DraftKey>) => setKeys(draft.modelApiKeys.map((item) => (item.localId === localId ? { ...item, ...value } : item)));
     const removeModel = (name: string) => {
@@ -91,6 +90,7 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
     };
     const setCapability = (name: string, capability: ModelCapability) => setModels(draft.models.map((model) => (model.name === name ? { ...model, capability } : model)));
     const setScript = (name: string, script: string) => setModels(draft.models.map((model) => (model.name === name ? { ...model, script: script || undefined } : model)));
+    const setModelStatus = (name: string, status: "active" | "hidden") => setModels(draft.models.map((model) => (model.name === name ? { ...model, status } : model)));
 
     const readKeyModels = async (item: DraftKey) => {
         if (!draft.baseUrl.trim()) throw new Error("请先填写 Base URL");
@@ -204,7 +204,9 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                 extra={
                     <Space>
                         <Button onClick={onClose}>取消</Button>
-                        <Button type="primary" loading={saving} onClick={() => void save()}>保存</Button>
+                        <Button type="primary" loading={saving} onClick={() => void save()}>
+                            保存
+                        </Button>
                     </Space>
                 }
             >
@@ -230,8 +232,12 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                             <div className="mt-0.5 text-xs text-stone-500">每个模型只绑定一个 Key；同步会更新模型列表，已保存密钥不会回显。</div>
                         </div>
                         <Space size="small" wrap>
-                            <Button size="small" loading={fetchingAll} icon={<RefreshCw className="size-3.5" />} onClick={() => void fetchAllModels()}>获取全部 Key 的模型</Button>
-                            <Button size="small" icon={<Plus className="size-3.5" />} onClick={() => setKeys([...draft.modelApiKeys, { localId: nanoid(), name: `模型 Key ${draft.modelApiKeys.length + 1}`, apiKey: "", apiKeySet: false, models: [] }])}>添加模型专用 Key</Button>
+                            <Button size="small" loading={fetchingAll} icon={<RefreshCw className="size-3.5" />} onClick={() => void fetchAllModels()}>
+                                获取全部 Key 的模型
+                            </Button>
+                            <Button size="small" icon={<Plus className="size-3.5" />} onClick={() => setKeys([...draft.modelApiKeys, { localId: nanoid(), name: `模型 Key ${draft.modelApiKeys.length + 1}`, apiKey: "", apiKeySet: false, models: [] }])}>
+                                添加模型专用 Key
+                            </Button>
                         </Space>
                     </div>
                     <div className="mt-3 space-y-3">
@@ -240,11 +246,18 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                                 <div className="grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_auto]">
                                     <Input value={item.name} onChange={(event) => patchKey(item.localId, { name: event.target.value })} prefix={<KeyRound className="size-3.5 text-stone-400" />} />
                                     <div>
-                                        <Input.Password status={duplicateKeyIds.has(item.localId) ? "error" : undefined} value={item.apiKey} onChange={(event) => patchKey(item.localId, { apiKey: event.target.value })} placeholder={item.apiKeySet ? "留空保持已保存密钥" : "sk-..."} />
+                                        <Input.Password
+                                            status={duplicateKeyIds.has(item.localId) ? "error" : undefined}
+                                            value={item.apiKey}
+                                            onChange={(event) => patchKey(item.localId, { apiKey: event.target.value })}
+                                            placeholder={item.apiKeySet ? "留空保持已保存密钥" : "sk-..."}
+                                        />
                                         {duplicateKeyIds.has(item.localId) ? <div className="mt-1 text-xs text-red-500">模型专用 Key 不能重复</div> : null}
                                     </div>
                                     <div className="flex gap-1">
-                                        <Button loading={fetchingKeyId === item.localId} disabled={!item.apiKey.trim() && !item.id} onClick={() => void openKeyModels(item)}>选择模型</Button>
+                                        <Button loading={fetchingKeyId === item.localId} disabled={!item.apiKey.trim() && !item.id} onClick={() => void openKeyModels(item)}>
+                                            选择模型
+                                        </Button>
                                         <Button danger type="text" icon={<Trash2 className="size-3.5" />} aria-label="删除 Key" onClick={() => setKeys(draft.modelApiKeys.filter((key) => key.localId !== item.localId))} />
                                     </div>
                                 </div>
@@ -259,23 +272,43 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                     <div className="text-sm font-semibold">渠道模型</div>
                     <div className="mt-0.5 text-xs text-stone-500">共 {draft.models.length} 个模型；能力决定它可以绑定的公开模型类型。</div>
                 </div>
-                <div className="space-y-2 rounded-lg border border-stone-200 p-2 dark:border-stone-800">
-                    {draft.models.length ? draft.models.map((model) => (
-                        <div key={model.name} className="flex flex-wrap items-center gap-3 rounded-md px-2 py-1.5 hover:bg-stone-50 dark:hover:bg-stone-900/40">
-                            <span className="min-w-0 flex-1 truncate text-sm" title={model.name}>{model.name}</span>
-                            <div className="flex shrink-0 items-center gap-2">
-                                <Segmented size="small" value={model.capability} options={capabilityOptions} onChange={(value) => setCapability(model.name, value as ModelCapability)} />
-                                <Button size="small" type={model.script ? "primary" : "default"} ghost={Boolean(model.script)} onClick={() => setScriptTarget({ name: model.name, capability: model.capability, value: model.script || "" })}>{model.script ? "脚本已配置" : "调用脚本"}</Button>
-                                <Button size="small" danger type="text" icon={<Trash2 className="size-3.5" />} onClick={() => removeModel(model.name)} />
-                            </div>
-                        </div>
-                    )) : <div className="px-2 py-8 text-center text-sm text-stone-500">同步 Key 后在这里配置模型能力</div>}
-                </div>
+                <Table
+                    size="small"
+                    rowKey="name"
+                    pagination={false}
+                    scroll={{ x: 520 }}
+                    dataSource={draft.models}
+                    locale={{ emptyText: "同步 Key 后在这里配置模型能力" }}
+                    columns={[
+                        { title: "模型", dataIndex: "name", ellipsis: true },
+                        { title: "能力", dataIndex: "capability", width: 90, render: (value: string) => capabilityOptions.find((option) => option.value === value)?.label || value },
+                        { title: "状态", dataIndex: "status", width: 90, render: (value: string) => <Tag color={value === "hidden" ? "default" : "green"}>{value === "hidden" ? "已禁用" : "启用"}</Tag> },
+                        {
+                            title: "操作",
+                            width: 220,
+                            render: (_, item: AdminChannelModel) => (
+                                <Space size="small">
+                                    <Button size="small" type="link" onClick={() => { setModelEditor(item); setModelCapability(item.capability); }}>编辑</Button>
+                                    <Button size="small" type="link" onClick={() => setModelStatus(item.name, item.status === "hidden" ? "active" : "hidden")}>{item.status === "hidden" ? "启用" : "禁用"}</Button>
+                                    <Button size="small" danger type="link" icon={<Trash2 className="size-3.5" />} onClick={() => removeModel(item.name)}>删除</Button>
+                                </Space>
+                            ),
+                        },
+                    ]}
+                />
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
                     <label className="block">
                         <span className="mb-1 block text-sm font-medium">状态</span>
-                        <Select className="w-full" value={draft.status} options={[{ value: "active", label: "启用" }, { value: "hidden", label: "隐藏" }]} onChange={(status) => patch({ status })} />
+                        <Select
+                            className="w-full"
+                            value={draft.status}
+                            options={[
+                                { value: "active", label: "启用" },
+                                { value: "hidden", label: "隐藏" },
+                            ]}
+                            onChange={(status) => patch({ status })}
+                        />
                     </label>
                     <label className="block">
                         <span className="mb-1 block text-sm font-medium">排序</span>
@@ -283,6 +316,31 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                     </label>
                 </div>
             </Drawer>
+
+            <Modal
+                open={Boolean(modelEditor)}
+                title="编辑渠道模型"
+                onCancel={() => setModelEditor(null)}
+                onOk={() => {
+                    if (modelEditor) setCapability(modelEditor.name, modelCapability);
+                    setModelEditor(null);
+                }}
+                okText="保存"
+            >
+                <div className="space-y-4">
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium">模型名称</span>
+                        <Input value={modelEditor?.name || ""} disabled />
+                    </label>
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium">能力</span>
+                        <Select className="w-full" value={modelCapability} options={capabilityOptions} onChange={setModelCapability} />
+                    </label>
+                    <Button onClick={() => modelEditor && setScriptTarget({ name: modelEditor.name, capability: modelCapability, value: modelEditor.script || "" })}>
+                        {modelEditor?.script ? "编辑调用脚本" : "配置调用脚本"}
+                    </Button>
+                </div>
+            </Modal>
 
             <Modal
                 open={Boolean(targetKey)}
@@ -293,15 +351,7 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                 }}
                 onCancel={() => setKeyModelTargetId("")}
             >
-                <Select
-                    mode="multiple"
-                    className="w-full"
-                    value={selectedModels}
-                    options={availableModels.map((name) => ({ value: name, label: name }))}
-                    onChange={setSelectedModels}
-                    placeholder="选择这个 Key 负责的模型"
-                    optionFilterProp="label"
-                />
+                <Select mode="multiple" className="w-full" value={selectedModels} options={availableModels.map((name) => ({ value: name, label: name }))} onChange={setSelectedModels} placeholder="选择这个 Key 负责的模型" optionFilterProp="label" />
             </Modal>
 
             <ModelScriptEditor
@@ -309,7 +359,11 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                 capability={scriptTarget?.capability || "text"}
                 modelName={scriptTarget?.name || ""}
                 value={scriptTarget?.value || ""}
-                onSave={(script) => scriptTarget && setScript(scriptTarget.name, script)}
+                onSave={(script) => {
+                    if (!scriptTarget) return;
+                    setScript(scriptTarget.name, script);
+                    setModelEditor((current) => current?.name === scriptTarget.name ? { ...current, script } : current);
+                }}
                 onClose={() => setScriptTarget(null)}
             />
         </>

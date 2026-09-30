@@ -165,6 +165,7 @@ const (
 type PublishedModel struct {
 	ID               uint      `gorm:"primaryKey" json:"id"`
 	Capability       string    `gorm:"size:32;index;not null" json:"capability"`
+	SourceModel      string    `gorm:"size:128;index" json:"sourceModel"`
 	DisplayName      string    `gorm:"size:128;not null" json:"displayName"`
 	PublicConfigJSON string    `gorm:"type:text;not null" json:"-"`
 	Status           string    `gorm:"size:32;index;not null" json:"status"`
@@ -176,6 +177,8 @@ type PublishedModel struct {
 const (
 	UpstreamChannelActive = "active"
 	UpstreamChannelHidden = "hidden"
+	ChannelModelActive    = "active"
+	ChannelModelHidden    = "hidden"
 	ModelRouteActive      = "active"
 	ModelRouteHidden      = "hidden"
 )
@@ -212,6 +215,7 @@ type UpstreamChannelModel struct {
 	Name         string    `gorm:"uniqueIndex:ux_channel_model;size:128;not null" json:"name"`
 	Capability   string    `gorm:"size:32;index;not null" json:"capability"`
 	Script       string    `gorm:"type:text;not null" json:"-"`
+	Status       string    `gorm:"size:32;index;not null;default:active" json:"status"`
 	SortOrder    int       `gorm:"not null;default:0" json:"sortOrder"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
@@ -223,6 +227,7 @@ type ModelRoute struct {
 	ChannelID        uint      `gorm:"uniqueIndex:ux_model_route;not null" json:"channelId"`
 	UpstreamModel    string    `gorm:"uniqueIndex:ux_model_route;size:128;not null" json:"upstreamModel"`
 	Priority         int       `gorm:"index;not null;default:0" json:"priority"`
+	Weight           int       `gorm:"not null;default:100" json:"weight"`
 	Status           string    `gorm:"size:32;index;not null" json:"status"`
 	SettingsJSON     string    `gorm:"type:text;not null" json:"-"`
 	CreatedAt        time.Time `json:"createdAt"`

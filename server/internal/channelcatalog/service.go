@@ -32,6 +32,7 @@ type ChannelModelInput struct {
 	Name       string `json:"name"`
 	Capability string `json:"capability"`
 	Script     string `json:"script"`
+	Status     string `json:"status"`
 }
 
 type ChannelModelAPIKeyInput struct {
@@ -53,9 +54,11 @@ type ChannelInput struct {
 }
 
 type AdminChannelModel struct {
+	ID         uint   `json:"id"`
 	Name       string `json:"name"`
 	Capability string `json:"capability"`
 	Script     string `json:"script,omitempty"`
+	Status     string `json:"status"`
 }
 
 type AdminChannelModelAPIKey struct {
@@ -91,6 +94,7 @@ type RouteInput struct {
 	ChannelID        uint           `json:"channelId"`
 	UpstreamModel    string         `json:"upstreamModel"`
 	Priority         int            `json:"priority"`
+	Weight           int            `json:"weight"`
 	Status           string         `json:"status"`
 	Settings         map[string]any `json:"settings"`
 }
@@ -104,6 +108,9 @@ type AdminRoute struct {
 	Provider         string         `json:"provider"`
 	UpstreamModel    string         `json:"upstreamModel"`
 	Priority         int            `json:"priority"`
+	Weight           int            `json:"weight"`
+	WeightPercent    float64        `json:"weightPercent"`
+	Available        bool           `json:"available"`
 	Status           string         `json:"status"`
 	Settings         map[string]any `json:"settings"`
 }
@@ -261,10 +268,43 @@ func (s *Service) ListRoutes(includeHidden bool) ([]AdminRoute, error) {
 		return nil, err
 	}
 	result := make([]AdminRoute, 0, len(rows))
+	totals := map[struct {
+		modelID  uint
+		priority int
+	}]int{}
+	availableByID := make(map[uint]bool, len(rows))
+	for _, row := range rows {
+		available, err := s.routeAvailable(row)
+		if err != nil {
+			return nil, err
+		}
+		availableByID[row.ID] = available
+		if available && row.Status == model.ModelRouteActive {
+			weight := row.Weight
+			if weight <= 0 {
+				weight = 100
+			}
+			totals[struct {
+				modelID  uint
+				priority int
+			}{row.PublishedModelID, row.Priority}] += weight
+		}
+	}
 	for _, row := range rows {
 		item, err := s.toAdminRoute(row)
 		if err != nil {
 			return nil, err
+		}
+		item.Available = availableByID[row.ID] && row.Status == model.ModelRouteActive
+		if total := totals[struct {
+			modelID  uint
+			priority int
+		}{row.PublishedModelID, row.Priority}]; total > 0 && item.Available {
+			weight := row.Weight
+			if weight <= 0 {
+				weight = 100
+			}
+			item.WeightPercent = float64(weight) * 100 / float64(total)
 		}
 		result = append(result, item)
 	}
@@ -298,7 +338,7 @@ func (s *Service) UpdateRoute(id uint, input RouteInput) (AdminRoute, error) {
 	if err := s.DB.Model(&existing).Updates(map[string]any{
 		"published_model_id": row.PublishedModelID, "channel_id": row.ChannelID,
 		"upstream_model": row.UpstreamModel, "priority": row.Priority,
-		"status": row.Status, "settings_json": row.SettingsJSON,
+		"weight": row.Weight, "status": row.Status, "settings_json": row.SettingsJSON,
 	}).Error; err != nil {
 		return AdminRoute{}, err
 	}
@@ -339,6 +379,14 @@ func fromChannelInput(input ChannelInput) (model.UpstreamChannel, error) {
 }
 
 func replaceChannelDetails(tx *gorm.DB, channelID uint, keyInputs []ChannelModelAPIKeyInput, modelInputs []ChannelModelInput) error {
+	var existingModels []model.UpstreamChannelModel
+	if err := tx.Where("channel_id = ?", channelID).Find(&existingModels).Error; err != nil {
+		return err
+	}
+	statusByName := make(map[string]string, len(existingModels))
+	for _, item := range existingModels {
+		statusByName[item.Name] = item.Status
+	}
 	var existingKeys []model.UpstreamChannelKey
 	if err := tx.Where("channel_id = ?", channelID).Find(&existingKeys).Error; err != nil {
 		return err
@@ -356,8 +404,18 @@ func replaceChannelDetails(tx *gorm.DB, channelID uint, keyInputs []ChannelModel
 		if name == "" || len(name) > 128 || modelNames[name] || !validCapability(capability) {
 			return ErrInvalidChannel
 		}
+		status := strings.TrimSpace(input.Status)
+		if status == "" {
+			status = statusByName[name]
+		}
+		if status == "" {
+			status = model.ChannelModelActive
+		}
+		if status != model.ChannelModelActive && status != model.ChannelModelHidden {
+			return ErrInvalidChannel
+		}
 		modelNames[name] = true
-		models = append(models, model.UpstreamChannelModel{ChannelID: channelID, Name: name, Capability: capability, Script: strings.TrimSpace(input.Script), SortOrder: index})
+		models = append(models, model.UpstreamChannelModel{ChannelID: channelID, Name: name, Capability: capability, Script: strings.TrimSpace(input.Script), Status: status, SortOrder: index})
 	}
 
 	type preparedKey struct {
@@ -439,7 +497,7 @@ func replaceChannelDetails(tx *gorm.DB, channelID uint, keyInputs []ChannelModel
 
 func (s *Service) fromRouteInput(input RouteInput) (model.ModelRoute, error) {
 	upstreamModel := strings.TrimSpace(input.UpstreamModel)
-	if input.PublishedModelID == 0 || input.ChannelID == 0 || upstreamModel == "" || len(upstreamModel) > 128 {
+	if input.PublishedModelID == 0 || input.ChannelID == 0 || input.Priority < 0 || upstreamModel == "" || len(upstreamModel) > 128 {
 		return model.ModelRoute{}, ErrInvalidRoute
 	}
 	var published model.PublishedModel
@@ -451,7 +509,7 @@ func (s *Service) fromRouteInput(input RouteInput) (model.ModelRoute, error) {
 		return model.ModelRoute{}, ErrChannelNotFound
 	}
 	var channelModel model.UpstreamChannelModel
-	if err := s.DB.Where("channel_id = ? AND name = ? AND channel_key_id IS NOT NULL", input.ChannelID, upstreamModel).First(&channelModel).Error; err != nil || channelModel.Capability != published.Capability {
+	if err := s.DB.Where("channel_id = ? AND name = ? AND status = ? AND channel_key_id IS NOT NULL", input.ChannelID, upstreamModel, model.ChannelModelActive).First(&channelModel).Error; err != nil || channelModel.Capability != published.Capability {
 		return model.ModelRoute{}, ErrInvalidRoute
 	}
 	status := strings.TrimSpace(input.Status)
@@ -465,7 +523,39 @@ func (s *Service) fromRouteInput(input RouteInput) (model.ModelRoute, error) {
 	if err != nil {
 		return model.ModelRoute{}, ErrInvalidRoute
 	}
-	return model.ModelRoute{PublishedModelID: input.PublishedModelID, ChannelID: input.ChannelID, UpstreamModel: upstreamModel, Priority: input.Priority, Status: status, SettingsJSON: settings}, nil
+	weight := input.Weight
+	if weight == 0 {
+		weight = 100
+	}
+	if weight < 1 {
+		return model.ModelRoute{}, ErrInvalidRoute
+	}
+	return model.ModelRoute{PublishedModelID: input.PublishedModelID, ChannelID: input.ChannelID, UpstreamModel: upstreamModel, Priority: input.Priority, Weight: weight, Status: status, SettingsJSON: settings}, nil
+}
+
+func (s *Service) routeAvailable(row model.ModelRoute) (bool, error) {
+	var channel model.UpstreamChannel
+	if err := s.DB.Where("id = ? AND status = ?", row.ChannelID, model.UpstreamChannelActive).First(&channel).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	var channelModel model.UpstreamChannelModel
+	if err := s.DB.Where("channel_id = ? AND name = ? AND status = ? AND channel_key_id IS NOT NULL", row.ChannelID, row.UpstreamModel, model.ChannelModelActive).First(&channelModel).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	var key model.UpstreamChannelKey
+	if err := s.DB.Where("id = ? AND channel_id = ? AND api_key <> ''", *channelModel.ChannelKeyID, row.ChannelID).First(&key).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (s *Service) toAdminChannel(row model.UpstreamChannel) (AdminChannel, error) {
@@ -484,7 +574,7 @@ func (s *Service) toAdminChannel(row model.UpstreamChannel) (AdminChannel, error
 	modelsByKey := map[uint][]string{}
 	adminModels := make([]AdminChannelModel, 0, len(models))
 	for _, item := range models {
-		adminModels = append(adminModels, AdminChannelModel{Name: item.Name, Capability: item.Capability, Script: item.Script})
+		adminModels = append(adminModels, AdminChannelModel{ID: item.ID, Name: item.Name, Capability: item.Capability, Script: item.Script, Status: item.Status})
 		if item.ChannelKeyID != nil {
 			modelsByKey[*item.ChannelKeyID] = append(modelsByKey[*item.ChannelKeyID], item.Name)
 		}
@@ -513,7 +603,7 @@ func (s *Service) toAdminRoute(row model.ModelRoute) (AdminRoute, error) {
 	if err != nil {
 		return AdminRoute{}, err
 	}
-	return AdminRoute{ID: row.ID, PublishedModelID: row.PublishedModelID, PublishedModel: published.DisplayName, ChannelID: row.ChannelID, ChannelName: channel.Name, Provider: channel.Provider, UpstreamModel: row.UpstreamModel, Priority: row.Priority, Status: row.Status, Settings: settings}, nil
+	return AdminRoute{ID: row.ID, PublishedModelID: row.PublishedModelID, PublishedModel: published.DisplayName, ChannelID: row.ChannelID, ChannelName: channel.Name, Provider: channel.Provider, UpstreamModel: row.UpstreamModel, Priority: row.Priority, Weight: row.Weight, Status: row.Status, Settings: settings}, nil
 }
 
 func normalizeBaseURL(value string) (string, error) {

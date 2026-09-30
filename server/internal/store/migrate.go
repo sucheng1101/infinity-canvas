@@ -74,6 +74,12 @@ func migrate(db *gorm.DB) error {
 			},
 		},
 		{
+			version: "20260930_m6_model_pool_fields",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.PublishedModel{}, &model.UpstreamChannelModel{}, &model.ModelRoute{})
+			},
+		},
+		{
 			version: "20260921_m3_pricing_and_quotes",
 			apply: func(tx *gorm.DB) error {
 				return tx.AutoMigrate(&model.PricingVersion{}, &model.Quote{}, &model.QuotaReservation{}, &model.GenerationTask{})

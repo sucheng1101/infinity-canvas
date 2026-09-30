@@ -15,9 +15,11 @@ export type AdminChannel = {
 };
 
 export type AdminChannelModel = {
+    id?: number;
     name: string;
     capability: "image" | "video" | "text" | "audio";
     script?: string;
+    status?: "active" | "hidden";
 };
 
 export type AdminChannelModelApiKey = {
@@ -33,7 +35,7 @@ export type AdminChannelInput = {
     provider: string;
     baseUrl: string;
     modelApiKeys: Array<{ id?: number; name: string; apiKey: string; models: string[] }>;
-    models: AdminChannelModel[];
+    models: Array<Partial<AdminChannelModel> & Pick<AdminChannelModel, "name" | "capability">>;
     settings: Record<string, unknown>;
     status: "active" | "hidden";
     sortOrder: number;
@@ -48,6 +50,9 @@ export type AdminRoute = {
     provider: string;
     upstreamModel: string;
     priority: number;
+    weight: number;
+    weightPercent: number;
+    available: boolean;
     status: "active" | "hidden";
     settings: Record<string, unknown>;
 };
@@ -66,7 +71,22 @@ export type PricingVersion = {
 
 export type InvitationSettings = { open: boolean; inviterQuota: number; inviteeQuota: number; version?: number };
 export type PaymentSettings = { enabled: boolean; gatewayUrl: string; partnerId: string; key?: string; payMethods: string[]; callbackUrl: string };
-export type EmailSettings = { enabled: boolean; verificationRequired: boolean; registrationEnabled: boolean; domainRestrictionEnabled: boolean; aliasRestrictionEnabled: boolean; smtpHost: string; smtpPort: number; smtpUsername: string; smtpPassword?: string; smtpFrom: string; smtpSSLEnabled: boolean; smtpForceAuthLogin: boolean; allowedDomains: string[]; blockedDomains: string[] };
+export type EmailSettings = {
+    enabled: boolean;
+    verificationRequired: boolean;
+    registrationEnabled: boolean;
+    domainRestrictionEnabled: boolean;
+    aliasRestrictionEnabled: boolean;
+    smtpHost: string;
+    smtpPort: number;
+    smtpUsername: string;
+    smtpPassword?: string;
+    smtpFrom: string;
+    smtpSSLEnabled: boolean;
+    smtpForceAuthLogin: boolean;
+    allowedDomains: string[];
+    blockedDomains: string[];
+};
 
 type Envelope<T> = { data: T; requestId?: string; error?: { message?: string } };
 const apiBase = (import.meta.env.VITE_HOSTED_API_BASE || "/api/v1").replace(/\/$/, "");

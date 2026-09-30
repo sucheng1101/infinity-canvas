@@ -2,11 +2,13 @@ package relay
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 
@@ -124,6 +126,8 @@ func (s *Service) findRoute(publishedModelID uint) (route, error) {
 	if len(routes) == 0 {
 		return route{}, ErrRouteUnavailable
 	}
+	available := make([]route, 0, len(routes))
+	priority := 0
 	for _, candidate := range routes {
 		var item route
 		item.model = candidate
@@ -133,7 +137,7 @@ func (s *Service) findRoute(publishedModelID uint) (route, error) {
 			}
 			return route{}, err
 		}
-		if err := s.DB.Where("channel_id = ? AND name = ? AND channel_key_id IS NOT NULL", candidate.ChannelID, candidate.UpstreamModel).First(&item.channelModel).Error; err != nil {
+		if err := s.DB.Where("channel_id = ? AND name = ? AND status = ? AND channel_key_id IS NOT NULL", candidate.ChannelID, candidate.UpstreamModel, model.ChannelModelActive).First(&item.channelModel).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				continue
 			}
@@ -146,10 +150,45 @@ func (s *Service) findRoute(publishedModelID uint) (route, error) {
 			return route{}, err
 		}
 		if strings.TrimSpace(item.key.APIKey) != "" {
-			return item, nil
+			if len(available) == 0 {
+				priority = candidate.Priority
+			}
+			if candidate.Priority != priority {
+				break
+			}
+			available = append(available, item)
 		}
 	}
-	return route{}, ErrRouteUnavailable
+	if len(available) == 0 {
+		return route{}, ErrRouteUnavailable
+	}
+	total := 0
+	for _, item := range available {
+		weight := item.model.Weight
+		if weight <= 0 {
+			weight = 100
+		}
+		total += weight
+	}
+	if total <= 0 {
+		return available[0], nil
+	}
+	pointValue, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(total)))
+	if err != nil {
+		return available[0], nil
+	}
+	point := int(pointValue.Int64())
+	for _, item := range available {
+		weight := item.model.Weight
+		if weight <= 0 {
+			weight = 100
+		}
+		if point < weight {
+			return item, nil
+		}
+		point -= weight
+	}
+	return available[len(available)-1], nil
 }
 
 func buildRequestBody(task model.GenerationTask, selected model.ModelRoute) (string, error) {
