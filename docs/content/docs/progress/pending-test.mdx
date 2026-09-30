@@ -40,7 +40,10 @@ description: Implemented changes that still need manual verification
 
 - 管理员登录后可从账户菜单进入 `/admin`，普通用户不显示该入口且直接访问会被服务端拒绝。
 - 管理员可创建、编辑和隐藏模型、渠道、模型路由、充值套餐，并创建/发布/停用定价版本。
-- 渠道密钥只显示掩码；编辑渠道时密钥留空应保持原值。
+- 新增或编辑渠道应打开与本地“配置”入口结构一致的抽屉，可添加多个模型专用 Key、分别读取可用模型、一键同步全部 Key、调整模型能力并保存调用脚本。
+- 渠道密钥只显示掩码；编辑渠道时各专用 Key 留空应保持原值，重复 Key、空的新 Key 或同一模型绑定多个 Key 应拒绝保存。
+- 编辑渠道并更换 Base URL 时应要求重新输入全部已有专用 Key；未重新输入时不得把旧密钥用于新地址的模型同步或 Relay 请求。
+- 模型路由的上游模型应只能从所选渠道已绑定 Key、且能力与公开模型一致的模型中选择；渠道未配置匹配模型时应显示明确提示。
 - 邀请奖励、易支付网关、商户号、支付方式可在控制台保存；支付密钥读取时不回显。
 - 管理员可按用户 ID 增加或扣减额度，操作应生成额度流水。
 - 管理员可在“邮箱与注册”配置注册总开关、邮箱服务开关、注册验证开关、域名限制、别名限制、允许/禁止邮箱域名、SMTP SSL 与 AUTH LOGIN；启用域名限制但未填写允许域名时应拒绝保存。
@@ -59,7 +62,8 @@ description: Implemented changes that still need manual verification
 ## Hosted relay
 
 - 托管模式图片、文本、音频和视频生成过程中触发取消时，应中止报价、任务创建或执行请求，并保持现有额度与本地节点状态不变。
-- Administrator routes should map one published model to an active upstream channel and the channel key must never appear in user responses.
+- Administrator routes should map one published model to an active upstream channel model; Relay should use the dedicated key bound to that upstream model, and no channel key may appear in user responses.
+- When the highest-priority route points to a hidden channel, an unbound model, or a missing dedicated key, Relay should continue to the next available active route.
 - An authenticated user can create a quote, create a generation task, and call `POST /api/v1/generation-tasks/:id/execute`; the server should inject the configured upstream model and relay JSON requests for image, text, video, and audio capabilities.
 - Upstream success should persist the response in the task and settle the reserved quota; upstream HTTP errors, missing routes, and unsupported capabilities should persist a failed task and release the reservation.
 - Repeating the execute request after a terminal task should return the persisted task without sending another upstream request.

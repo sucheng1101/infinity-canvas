@@ -55,7 +55,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	generationService := &generation.Service{DB: db, Quota: quotaService, Pricing: pricingService}
 	relayService := &relay.Service{DB: db, Generation: generationService, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	modelCatalogService := &modelcatalog.Service{DB: db}
-	channelCatalogService := &channelcatalog.Service{DB: db}
+	channelCatalogService := &channelcatalog.Service{DB: db, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Redis: redisClient, Mailer: outbound}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
@@ -107,6 +107,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.PUT("/admin/models/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateModel)
 	v1.DELETE("/admin/models/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminDeleteModel)
 	v1.GET("/admin/channels", app.requireAdmin(), app.adminChannels)
+	v1.POST("/admin/channels/fetch-models", app.requireAdmin(), app.adminFetchChannelModels)
 	v1.POST("/admin/channels", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateChannel)
 	v1.PUT("/admin/channels/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateChannel)
 	v1.DELETE("/admin/channels/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminDeleteChannel)
@@ -683,6 +684,24 @@ func (a *Router) adminChannels(c *gin.Context) {
 	items, err := a.ChannelCatalog.ListChannels(true)
 	if err != nil {
 		errorJSON(c, http.StatusInternalServerError, "CHANNELS_READ_FAILED", "渠道列表读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminFetchChannelModels(c *gin.Context) {
+	var input channelcatalog.FetchModelsInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
+		return
+	}
+	items, err := a.ChannelCatalog.FetchModels(c.Request.Context(), input)
+	if errors.Is(err, channelcatalog.ErrInvalidChannel) {
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_INVALID", "渠道地址或密钥无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadGateway, "CHANNEL_MODELS_FETCH_FAILED", "渠道模型读取失败")
 		return
 	}
 	successJSON(c, http.StatusOK, gin.H{"items": items})

@@ -7,6 +7,33 @@ export type AdminChannel = {
     baseUrl: string;
     apiKeySet: boolean;
     apiKeyMasked?: string;
+    modelApiKeys: AdminChannelModelApiKey[];
+    models: AdminChannelModel[];
+    settings: Record<string, unknown>;
+    status: "active" | "hidden";
+    sortOrder: number;
+};
+
+export type AdminChannelModel = {
+    name: string;
+    capability: "image" | "video" | "text" | "audio";
+    script?: string;
+};
+
+export type AdminChannelModelApiKey = {
+    id: number;
+    name: string;
+    apiKeySet: boolean;
+    apiKeyMasked?: string;
+    models: string[];
+};
+
+export type AdminChannelInput = {
+    name: string;
+    provider: string;
+    baseUrl: string;
+    modelApiKeys: Array<{ id?: number; name: string; apiKey: string; models: string[] }>;
+    models: AdminChannelModel[];
     settings: Record<string, unknown>;
     status: "active" | "hidden";
     sortOrder: number;
@@ -63,8 +90,9 @@ export const adminApi = {
     updateModel: (id: number, body: Partial<PublishedModel>) => request<PublishedModel>(`/admin/models/${id}`, json(body, "PUT")),
     hideModel: (id: number) => request<{ ok: boolean }>(`/admin/models/${id}`, { method: "DELETE" }),
     channels: () => request<{ items: AdminChannel[] }>("/admin/channels"),
-    createChannel: (body: Record<string, unknown>) => request<AdminChannel>("/admin/channels", json(body)),
-    updateChannel: (id: number, body: Record<string, unknown>) => request<AdminChannel>(`/admin/channels/${id}`, json(body, "PUT")),
+    createChannel: (body: AdminChannelInput) => request<AdminChannel>("/admin/channels", json(body)),
+    updateChannel: (id: number, body: AdminChannelInput) => request<AdminChannel>(`/admin/channels/${id}`, json(body, "PUT")),
+    fetchChannelModels: (body: { baseUrl: string; apiKey?: string; keyId?: number }) => request<{ items: string[] }>("/admin/channels/fetch-models", json(body)),
     hideChannel: (id: number) => request<{ ok: boolean }>(`/admin/channels/${id}`, { method: "DELETE" }),
     routes: () => request<{ items: AdminRoute[] }>("/admin/model-routes"),
     createRoute: (body: Record<string, unknown>) => request<AdminRoute>("/admin/model-routes", json(body)),

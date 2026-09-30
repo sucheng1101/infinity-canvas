@@ -180,16 +180,38 @@ const (
 	ModelRouteHidden      = "hidden"
 )
 
-// UpstreamChannel stores provider credentials for administrator-managed relay traffic.
-// APIKey is intentionally excluded from JSON responses and is only read by server-side relay code.
+// UpstreamChannel stores the shared connection settings for administrator-managed relay traffic.
+// Model-specific credentials live in UpstreamChannelKey and are never serialized to clients.
 type UpstreamChannel struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Name         string    `gorm:"size:128;not null" json:"name"`
 	Provider     string    `gorm:"size:64;index;not null" json:"provider"`
 	BaseURL      string    `gorm:"size:512;not null" json:"baseUrl"`
-	APIKey       string    `gorm:"size:512;not null" json:"-"`
+	APIKey       string    `gorm:"size:512;not null;default:''" json:"-"`
 	SettingsJSON string    `gorm:"type:text;not null" json:"-"`
 	Status       string    `gorm:"size:32;index;not null" json:"status"`
+	SortOrder    int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type UpstreamChannelKey struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	ChannelID uint      `gorm:"index;not null" json:"channelId"`
+	Name      string    `gorm:"size:128;not null" json:"name"`
+	APIKey    string    `gorm:"size:512;not null" json:"-"`
+	SortOrder int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type UpstreamChannelModel struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	ChannelID    uint      `gorm:"uniqueIndex:ux_channel_model;not null" json:"channelId"`
+	ChannelKeyID *uint     `gorm:"index" json:"channelKeyId,omitempty"`
+	Name         string    `gorm:"uniqueIndex:ux_channel_model;size:128;not null" json:"name"`
+	Capability   string    `gorm:"size:32;index;not null" json:"capability"`
+	Script       string    `gorm:"type:text;not null" json:"-"`
 	SortOrder    int       `gorm:"not null;default:0" json:"sortOrder"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`

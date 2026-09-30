@@ -1,9 +1,13 @@
 package channelcatalog
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
@@ -11,37 +15,75 @@ import (
 )
 
 var (
-	ErrInvalidChannel   = errors.New("invalid upstream channel")
-	ErrChannelNotFound  = errors.New("upstream channel not found")
-	ErrInvalidRoute     = errors.New("invalid model route")
-	ErrRouteNotFound    = errors.New("model route not found")
+	ErrInvalidChannel    = errors.New("invalid upstream channel")
+	ErrChannelNotFound   = errors.New("upstream channel not found")
+	ErrInvalidRoute      = errors.New("invalid model route")
+	ErrRouteNotFound     = errors.New("model route not found")
 	ErrPublishedNotFound = errors.New("published model not found")
+	ErrModelFetch        = errors.New("upstream models fetch failed")
 )
 
 type Service struct {
-	DB *gorm.DB
+	DB     *gorm.DB
+	Client *http.Client
+}
+
+type ChannelModelInput struct {
+	Name       string `json:"name"`
+	Capability string `json:"capability"`
+	Script     string `json:"script"`
+}
+
+type ChannelModelAPIKeyInput struct {
+	ID     uint     `json:"id"`
+	Name   string   `json:"name"`
+	APIKey string   `json:"apiKey"`
+	Models []string `json:"models"`
 }
 
 type ChannelInput struct {
-	Name        string         `json:"name"`
-	Provider    string         `json:"provider"`
-	BaseURL     string         `json:"baseUrl"`
-	APIKey      string         `json:"apiKey"`
-	Settings    map[string]any `json:"settings"`
-	Status      string         `json:"status"`
-	SortOrder   int            `json:"sortOrder"`
+	Name         string                    `json:"name"`
+	Provider     string                    `json:"provider"`
+	BaseURL      string                    `json:"baseUrl"`
+	ModelAPIKeys []ChannelModelAPIKeyInput `json:"modelApiKeys"`
+	Models       []ChannelModelInput       `json:"models"`
+	Settings     map[string]any            `json:"settings"`
+	Status       string                    `json:"status"`
+	SortOrder    int                       `json:"sortOrder"`
+}
+
+type AdminChannelModel struct {
+	Name       string `json:"name"`
+	Capability string `json:"capability"`
+	Script     string `json:"script,omitempty"`
+}
+
+type AdminChannelModelAPIKey struct {
+	ID           uint     `json:"id"`
+	Name         string   `json:"name"`
+	APIKeySet    bool     `json:"apiKeySet"`
+	APIKeyMasked string   `json:"apiKeyMasked,omitempty"`
+	Models       []string `json:"models"`
 }
 
 type AdminChannel struct {
-	ID             uint           `json:"id"`
-	Name           string         `json:"name"`
-	Provider       string         `json:"provider"`
-	BaseURL        string         `json:"baseUrl"`
-	APIKeySet      bool           `json:"apiKeySet"`
-	APIKeyMasked   string         `json:"apiKeyMasked,omitempty"`
-	Settings       map[string]any `json:"settings"`
-	Status         string         `json:"status"`
-	SortOrder      int            `json:"sortOrder"`
+	ID           uint                      `json:"id"`
+	Name         string                    `json:"name"`
+	Provider     string                    `json:"provider"`
+	BaseURL      string                    `json:"baseUrl"`
+	APIKeySet    bool                      `json:"apiKeySet"`
+	APIKeyMasked string                    `json:"apiKeyMasked,omitempty"`
+	ModelAPIKeys []AdminChannelModelAPIKey `json:"modelApiKeys"`
+	Models       []AdminChannelModel       `json:"models"`
+	Settings     map[string]any            `json:"settings"`
+	Status       string                    `json:"status"`
+	SortOrder    int                       `json:"sortOrder"`
+}
+
+type FetchModelsInput struct {
+	BaseURL string `json:"baseUrl"`
+	APIKey  string `json:"apiKey"`
+	KeyID   uint   `json:"keyId"`
 }
 
 type RouteInput struct {
@@ -50,7 +92,7 @@ type RouteInput struct {
 	UpstreamModel    string         `json:"upstreamModel"`
 	Priority         int            `json:"priority"`
 	Status           string         `json:"status"`
-	Settings        map[string]any `json:"settings"`
+	Settings         map[string]any `json:"settings"`
 }
 
 type AdminRoute struct {
@@ -77,7 +119,7 @@ func (s *Service) ListChannels(includeHidden bool) ([]AdminChannel, error) {
 	}
 	result := make([]AdminChannel, 0, len(rows))
 	for _, row := range rows {
-		item, err := toAdminChannel(row)
+		item, err := s.toAdminChannel(row)
 		if err != nil {
 			return nil, err
 		}
@@ -87,14 +129,20 @@ func (s *Service) ListChannels(includeHidden bool) ([]AdminChannel, error) {
 }
 
 func (s *Service) CreateChannel(input ChannelInput) (AdminChannel, error) {
-	row, err := fromChannelInput(input, "")
+	row, err := fromChannelInput(input)
 	if err != nil {
 		return AdminChannel{}, err
 	}
-	if err := s.DB.Create(&row).Error; err != nil {
+	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		return replaceChannelDetails(tx, row.ID, input.ModelAPIKeys, input.Models)
+	})
+	if err != nil {
 		return AdminChannel{}, err
 	}
-	return toAdminChannel(row)
+	return s.toAdminChannel(row)
 }
 
 func (s *Service) UpdateChannel(id uint, input ChannelInput) (AdminChannel, error) {
@@ -105,20 +153,33 @@ func (s *Service) UpdateChannel(id uint, input ChannelInput) (AdminChannel, erro
 		}
 		return AdminChannel{}, err
 	}
-	row, err := fromChannelInput(input, existing.APIKey)
+	row, err := fromChannelInput(input)
 	if err != nil {
 		return AdminChannel{}, err
 	}
+	if !strings.EqualFold(strings.TrimRight(existing.BaseURL, "/"), row.BaseURL) {
+		for _, key := range input.ModelAPIKeys {
+			if key.ID != 0 && strings.TrimSpace(key.APIKey) == "" {
+				return AdminChannel{}, ErrInvalidChannel
+			}
+		}
+	}
 	row.ID = id
-	if err := s.DB.Model(&existing).Updates(map[string]any{
-		"name": row.Name, "provider": row.Provider, "base_url": row.BaseURL,
-		"api_key": row.APIKey, "settings_json": row.SettingsJSON, "status": row.Status,
-		"sort_order": row.SortOrder,
-	}).Error; err != nil {
+	err = s.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&existing).Updates(map[string]any{
+			"name": row.Name, "provider": row.Provider, "base_url": row.BaseURL,
+			"api_key": "", "settings_json": row.SettingsJSON, "status": row.Status,
+			"sort_order": row.SortOrder,
+		}).Error; err != nil {
+			return err
+		}
+		return replaceChannelDetails(tx, id, input.ModelAPIKeys, input.Models)
+	})
+	if err != nil {
 		return AdminChannel{}, err
 	}
 	row.CreatedAt = existing.CreatedAt
-	return toAdminChannel(row)
+	return s.toAdminChannel(row)
 }
 
 func (s *Service) HideChannel(id uint) error {
@@ -130,6 +191,64 @@ func (s *Service) HideChannel(id uint) error {
 		return ErrChannelNotFound
 	}
 	return nil
+}
+
+func (s *Service) FetchModels(ctx context.Context, input FetchModelsInput) ([]string, error) {
+	baseURL, err := normalizeBaseURL(input.BaseURL)
+	if err != nil {
+		return nil, ErrInvalidChannel
+	}
+	apiKey := strings.TrimSpace(input.APIKey)
+	if apiKey == "" && input.KeyID != 0 {
+		var key model.UpstreamChannelKey
+		if err := s.DB.First(&key, input.KeyID).Error; err != nil {
+			return nil, ErrModelFetch
+		}
+		var channel model.UpstreamChannel
+		if err := s.DB.Select("base_url").First(&channel, key.ChannelID).Error; err != nil || !strings.EqualFold(strings.TrimRight(channel.BaseURL, "/"), baseURL) {
+			return nil, ErrInvalidChannel
+		}
+		apiKey = key.APIKey
+	}
+	if apiKey == "" {
+		return nil, ErrInvalidChannel
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, joinURL(baseURL, "/v1/models"), nil)
+	if err != nil {
+		return nil, ErrModelFetch
+	}
+	request.Header.Set("Authorization", "Bearer "+apiKey)
+	client := s.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	response, err := client.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrModelFetch, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("%w: upstream returned HTTP %d", ErrModelFetch, response.StatusCode)
+	}
+	var payload struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrModelFetch, err)
+	}
+	seen := map[string]bool{}
+	items := make([]string, 0, len(payload.Data))
+	for _, item := range payload.Data {
+		name := strings.TrimSpace(item.ID)
+		if name != "" && !seen[name] {
+			seen[name] = true
+			items = append(items, name)
+		}
+	}
+	sort.Strings(items)
+	return items, nil
 }
 
 func (s *Service) ListRoutes(includeHidden bool) ([]AdminRoute, error) {
@@ -198,20 +317,11 @@ func (s *Service) HideRoute(id uint) error {
 	return nil
 }
 
-func fromChannelInput(input ChannelInput, existingKey string) (model.UpstreamChannel, error) {
+func fromChannelInput(input ChannelInput) (model.UpstreamChannel, error) {
 	name := strings.TrimSpace(input.Name)
 	provider := strings.TrimSpace(input.Provider)
-	baseURL := strings.TrimRight(strings.TrimSpace(input.BaseURL), "/")
-	parsed, err := url.Parse(baseURL)
-	if name == "" || len(name) > 128 || provider == "" || len(provider) > 64 ||
-		baseURL == "" || err != nil || parsed.Scheme == "" || parsed.Host == "" {
-		return model.UpstreamChannel{}, ErrInvalidChannel
-	}
-	apiKey := strings.TrimSpace(input.APIKey)
-	if apiKey == "" {
-		apiKey = existingKey
-	}
-	if apiKey == "" {
+	baseURL, err := normalizeBaseURL(input.BaseURL)
+	if name == "" || len(name) > 128 || provider == "" || len(provider) > 64 || err != nil {
 		return model.UpstreamChannel{}, ErrInvalidChannel
 	}
 	status := strings.TrimSpace(input.Status)
@@ -225,10 +335,106 @@ func fromChannelInput(input ChannelInput, existingKey string) (model.UpstreamCha
 	if err != nil {
 		return model.UpstreamChannel{}, ErrInvalidChannel
 	}
-	return model.UpstreamChannel{
-		Name: name, Provider: provider, BaseURL: baseURL, APIKey: apiKey,
-		SettingsJSON: settings, Status: status, SortOrder: input.SortOrder,
-	}, nil
+	return model.UpstreamChannel{Name: name, Provider: provider, BaseURL: baseURL, APIKey: "", SettingsJSON: settings, Status: status, SortOrder: input.SortOrder}, nil
+}
+
+func replaceChannelDetails(tx *gorm.DB, channelID uint, keyInputs []ChannelModelAPIKeyInput, modelInputs []ChannelModelInput) error {
+	var existingKeys []model.UpstreamChannelKey
+	if err := tx.Where("channel_id = ?", channelID).Find(&existingKeys).Error; err != nil {
+		return err
+	}
+	existingByID := make(map[uint]model.UpstreamChannelKey, len(existingKeys))
+	for _, key := range existingKeys {
+		existingByID[key.ID] = key
+	}
+
+	models := make([]model.UpstreamChannelModel, 0, len(modelInputs))
+	modelNames := make(map[string]bool, len(modelInputs))
+	for index, input := range modelInputs {
+		name := strings.TrimSpace(input.Name)
+		capability := strings.ToLower(strings.TrimSpace(input.Capability))
+		if name == "" || len(name) > 128 || modelNames[name] || !validCapability(capability) {
+			return ErrInvalidChannel
+		}
+		modelNames[name] = true
+		models = append(models, model.UpstreamChannelModel{ChannelID: channelID, Name: name, Capability: capability, Script: strings.TrimSpace(input.Script), SortOrder: index})
+	}
+
+	type preparedKey struct {
+		row    model.UpstreamChannelKey
+		models []string
+	}
+	keys := make([]preparedKey, 0, len(keyInputs))
+	usedIDs := map[uint]bool{}
+	usedSecrets := map[string]bool{}
+	assignedModels := map[string]bool{}
+	for index, input := range keyInputs {
+		name := strings.TrimSpace(input.Name)
+		if name == "" || len(name) > 128 || usedIDs[input.ID] {
+			return ErrInvalidChannel
+		}
+		secret := strings.TrimSpace(input.APIKey)
+		if input.ID != 0 {
+			existing, ok := existingByID[input.ID]
+			if !ok {
+				return ErrInvalidChannel
+			}
+			usedIDs[input.ID] = true
+			if secret == "" {
+				secret = existing.APIKey
+			}
+		}
+		if secret == "" || usedSecrets[secret] {
+			return ErrInvalidChannel
+		}
+		usedSecrets[secret] = true
+		bound := make([]string, 0, len(input.Models))
+		for _, value := range input.Models {
+			modelName := strings.TrimSpace(value)
+			if !modelNames[modelName] || assignedModels[modelName] {
+				return ErrInvalidChannel
+			}
+			assignedModels[modelName] = true
+			bound = append(bound, modelName)
+		}
+		keys = append(keys, preparedKey{row: model.UpstreamChannelKey{ID: input.ID, ChannelID: channelID, Name: name, APIKey: secret, SortOrder: index}, models: bound})
+	}
+
+	if err := tx.Where("channel_id = ?", channelID).Delete(&model.UpstreamChannelModel{}).Error; err != nil {
+		return err
+	}
+	keptIDs := make([]uint, 0, len(keys))
+	modelKeyIDs := map[string]uint{}
+	for index := range keys {
+		key := &keys[index].row
+		if key.ID == 0 {
+			if err := tx.Create(key).Error; err != nil {
+				return err
+			}
+		} else if err := tx.Model(&model.UpstreamChannelKey{}).Where("id = ? AND channel_id = ?", key.ID, channelID).Updates(map[string]any{"name": key.Name, "api_key": key.APIKey, "sort_order": key.SortOrder}).Error; err != nil {
+			return err
+		}
+		keptIDs = append(keptIDs, key.ID)
+		for _, name := range keys[index].models {
+			modelKeyIDs[name] = key.ID
+		}
+	}
+	deleteKeys := tx.Where("channel_id = ?", channelID)
+	if len(keptIDs) > 0 {
+		deleteKeys = deleteKeys.Where("id NOT IN ?", keptIDs)
+	}
+	if err := deleteKeys.Delete(&model.UpstreamChannelKey{}).Error; err != nil {
+		return err
+	}
+	for index := range models {
+		if keyID, ok := modelKeyIDs[models[index].Name]; ok {
+			models[index].ChannelKeyID = &keyID
+		}
+	}
+	if len(models) > 0 {
+		return tx.Create(&models).Error
+	}
+	return nil
 }
 
 func (s *Service) fromRouteInput(input RouteInput) (model.ModelRoute, error) {
@@ -237,12 +443,16 @@ func (s *Service) fromRouteInput(input RouteInput) (model.ModelRoute, error) {
 		return model.ModelRoute{}, ErrInvalidRoute
 	}
 	var published model.PublishedModel
-	if err := s.DB.Select("id").First(&published, input.PublishedModelID).Error; err != nil {
+	if err := s.DB.Select("id, capability").First(&published, input.PublishedModelID).Error; err != nil {
 		return model.ModelRoute{}, ErrPublishedNotFound
 	}
 	var channel model.UpstreamChannel
 	if err := s.DB.Select("id").First(&channel, input.ChannelID).Error; err != nil {
 		return model.ModelRoute{}, ErrChannelNotFound
+	}
+	var channelModel model.UpstreamChannelModel
+	if err := s.DB.Where("channel_id = ? AND name = ? AND channel_key_id IS NOT NULL", input.ChannelID, upstreamModel).First(&channelModel).Error; err != nil || channelModel.Capability != published.Capability {
+		return model.ModelRoute{}, ErrInvalidRoute
 	}
 	status := strings.TrimSpace(input.Status)
 	if status == "" {
@@ -255,23 +465,39 @@ func (s *Service) fromRouteInput(input RouteInput) (model.ModelRoute, error) {
 	if err != nil {
 		return model.ModelRoute{}, ErrInvalidRoute
 	}
-	return model.ModelRoute{
-		PublishedModelID: input.PublishedModelID, ChannelID: input.ChannelID,
-		UpstreamModel: upstreamModel, Priority: input.Priority, Status: status,
-		SettingsJSON: settings,
-	}, nil
+	return model.ModelRoute{PublishedModelID: input.PublishedModelID, ChannelID: input.ChannelID, UpstreamModel: upstreamModel, Priority: input.Priority, Status: status, SettingsJSON: settings}, nil
 }
 
-func toAdminChannel(row model.UpstreamChannel) (AdminChannel, error) {
+func (s *Service) toAdminChannel(row model.UpstreamChannel) (AdminChannel, error) {
 	settings, err := unmarshalSettings(row.SettingsJSON)
 	if err != nil {
 		return AdminChannel{}, err
 	}
-	return AdminChannel{
-		ID: row.ID, Name: row.Name, Provider: row.Provider, BaseURL: row.BaseURL,
-		APIKeySet: row.APIKey != "", APIKeyMasked: maskSecret(row.APIKey), Settings: settings,
-		Status: row.Status, SortOrder: row.SortOrder,
-	}, nil
+	var keys []model.UpstreamChannelKey
+	if err := s.DB.Where("channel_id = ?", row.ID).Order("sort_order ASC").Order("id ASC").Find(&keys).Error; err != nil {
+		return AdminChannel{}, err
+	}
+	var models []model.UpstreamChannelModel
+	if err := s.DB.Where("channel_id = ?", row.ID).Order("sort_order ASC").Order("id ASC").Find(&models).Error; err != nil {
+		return AdminChannel{}, err
+	}
+	modelsByKey := map[uint][]string{}
+	adminModels := make([]AdminChannelModel, 0, len(models))
+	for _, item := range models {
+		adminModels = append(adminModels, AdminChannelModel{Name: item.Name, Capability: item.Capability, Script: item.Script})
+		if item.ChannelKeyID != nil {
+			modelsByKey[*item.ChannelKeyID] = append(modelsByKey[*item.ChannelKeyID], item.Name)
+		}
+	}
+	adminKeys := make([]AdminChannelModelAPIKey, 0, len(keys))
+	for _, key := range keys {
+		adminKeys = append(adminKeys, AdminChannelModelAPIKey{ID: key.ID, Name: key.Name, APIKeySet: key.APIKey != "", APIKeyMasked: maskSecret(key.APIKey), Models: modelsByKey[key.ID]})
+	}
+	masked := ""
+	if len(adminKeys) > 0 {
+		masked = "******"
+	}
+	return AdminChannel{ID: row.ID, Name: row.Name, Provider: row.Provider, BaseURL: row.BaseURL, APIKeySet: len(adminKeys) > 0, APIKeyMasked: masked, ModelAPIKeys: adminKeys, Models: adminModels, Settings: settings, Status: row.Status, SortOrder: row.SortOrder}, nil
 }
 
 func (s *Service) toAdminRoute(row model.ModelRoute) (AdminRoute, error) {
@@ -287,11 +513,34 @@ func (s *Service) toAdminRoute(row model.ModelRoute) (AdminRoute, error) {
 	if err != nil {
 		return AdminRoute{}, err
 	}
-	return AdminRoute{
-		ID: row.ID, PublishedModelID: row.PublishedModelID, PublishedModel: published.DisplayName,
-		ChannelID: row.ChannelID, ChannelName: channel.Name, Provider: channel.Provider,
-		UpstreamModel: row.UpstreamModel, Priority: row.Priority, Status: row.Status, Settings: settings,
-	}, nil
+	return AdminRoute{ID: row.ID, PublishedModelID: row.PublishedModelID, PublishedModel: published.DisplayName, ChannelID: row.ChannelID, ChannelName: channel.Name, Provider: channel.Provider, UpstreamModel: row.UpstreamModel, Priority: row.Priority, Status: row.Status, Settings: settings}, nil
+}
+
+func normalizeBaseURL(value string) (string, error) {
+	baseURL := strings.TrimRight(strings.TrimSpace(value), "/")
+	parsed, err := url.Parse(baseURL)
+	if baseURL == "" || err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		return "", ErrInvalidChannel
+	}
+	return baseURL, nil
+}
+
+func validCapability(value string) bool {
+	switch value {
+	case "image", "video", "text", "audio":
+		return true
+	default:
+		return false
+	}
+}
+
+func joinURL(base, path string) string {
+	base = strings.TrimRight(strings.TrimSpace(base), "/")
+	path = "/" + strings.TrimLeft(strings.TrimSpace(path), "/")
+	if strings.HasSuffix(base, "/v1") && strings.HasPrefix(path, "/v1/") {
+		path = strings.TrimPrefix(path, "/v1")
+	}
+	return base + path
 }
 
 func marshalSettings(value map[string]any) (string, error) {
@@ -313,8 +562,6 @@ func unmarshalSettings(payload string) (map[string]any, error) {
 	return result, nil
 }
 
-// maskSecret never reveals any character of the stored secret; callers use
-// APIKeySet to tell whether a key is configured.
 func maskSecret(value string) string {
 	if value == "" {
 		return ""

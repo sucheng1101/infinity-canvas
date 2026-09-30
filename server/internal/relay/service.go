@@ -16,11 +16,11 @@ import (
 )
 
 var (
-	ErrTaskNotFound      = errors.New("generation task not found")
-	ErrRouteUnavailable  = errors.New("generation route unavailable")
-	ErrUnsupported       = errors.New("generation capability is unsupported")
-	ErrUpstream          = errors.New("upstream generation failed")
-	ErrResponseTooLarge  = errors.New("upstream response is too large")
+	ErrTaskNotFound     = errors.New("generation task not found")
+	ErrRouteUnavailable = errors.New("generation route unavailable")
+	ErrUnsupported      = errors.New("generation capability is unsupported")
+	ErrUpstream         = errors.New("upstream generation failed")
+	ErrResponseTooLarge = errors.New("upstream response is too large")
 )
 
 type Service struct {
@@ -30,8 +30,10 @@ type Service struct {
 }
 
 type route struct {
-	model  model.ModelRoute
-	channel model.UpstreamChannel
+	model        model.ModelRoute
+	channel      model.UpstreamChannel
+	channelModel model.UpstreamChannelModel
+	key          model.UpstreamChannelKey
 }
 
 // Execute runs one queued task through the administrator-selected upstream route.
@@ -80,7 +82,7 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string) (gene
 		return s.fail(task.ID, "UPSTREAM_REQUEST_INVALID", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+selected.channel.APIKey)
+	req.Header.Set("Authorization", "Bearer "+selected.key.APIKey)
 	applyHeaders(req, selected.channel.SettingsJSON, selected.model.SettingsJSON)
 	client := s.Client
 	if client == nil {
@@ -115,20 +117,39 @@ func (s *Service) fail(taskID, code string, cause error) (generation.View, error
 }
 
 func (s *Service) findRoute(publishedModelID uint) (route, error) {
-	var item route
-	if err := s.DB.Where("published_model_id = ? AND status = ?", publishedModelID, model.ModelRouteActive).Order("priority ASC").Order("id ASC").First(&item.model).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return route{}, ErrRouteUnavailable
-		}
+	var routes []model.ModelRoute
+	if err := s.DB.Where("published_model_id = ? AND status = ?", publishedModelID, model.ModelRouteActive).Order("priority ASC").Order("id ASC").Find(&routes).Error; err != nil {
 		return route{}, err
 	}
-	if err := s.DB.Where("id = ? AND status = ?", item.model.ChannelID, model.UpstreamChannelActive).First(&item.channel).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return route{}, ErrRouteUnavailable
-		}
-		return route{}, err
+	if len(routes) == 0 {
+		return route{}, ErrRouteUnavailable
 	}
-	return item, nil
+	for _, candidate := range routes {
+		var item route
+		item.model = candidate
+		if err := s.DB.Where("id = ? AND status = ?", candidate.ChannelID, model.UpstreamChannelActive).First(&item.channel).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return route{}, err
+		}
+		if err := s.DB.Where("channel_id = ? AND name = ? AND channel_key_id IS NOT NULL", candidate.ChannelID, candidate.UpstreamModel).First(&item.channelModel).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return route{}, err
+		}
+		if err := s.DB.Where("id = ? AND channel_id = ?", *item.channelModel.ChannelKeyID, candidate.ChannelID).First(&item.key).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				continue
+			}
+			return route{}, err
+		}
+		if strings.TrimSpace(item.key.APIKey) != "" {
+			return item, nil
+		}
+	}
+	return route{}, ErrRouteUnavailable
 }
 
 func buildRequestBody(task model.GenerationTask, selected model.ModelRoute) (string, error) {
