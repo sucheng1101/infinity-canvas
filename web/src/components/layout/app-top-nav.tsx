@@ -62,12 +62,10 @@ export function AppTopNav() {
                             </button>
 
                             <nav className="hide-scrollbar ml-8 hidden h-14 min-w-0 items-center gap-7 overflow-x-auto md:flex">
-                                {navigationTools
-                                    .filter((tool) => !isHostedMode || tool.slug !== "config")
-                                    .map((tool) => {
-                                        const Icon = tool.icon;
-                                        const active = tool.slug === activeToolSlug;
-                                        return (
+                                {navigationTools.map((tool) => {
+                                    const Icon = tool.icon;
+                                    const active = tool.slug === activeToolSlug;
+                                    return (
                                         <Link
                                             key={tool.slug}
                                             to={`/${tool.slug}`}
@@ -81,8 +79,8 @@ export function AppTopNav() {
                                             <Icon className="size-4" />
                                             <span className="truncate">{t(`navigation.${tool.slug}`)}</span>
                                         </Link>
-                                        );
-                                    })}
+                                    );
+                                })}
                             </nav>
                         </div>
 

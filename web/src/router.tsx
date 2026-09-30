@@ -53,7 +53,7 @@ export const router = createBrowserRouter([
                     { path: "/prompts", element: <PromptsPage /> },
                     { path: "/canvas", element: <CanvasPage /> },
                     { path: "/canvas/:id", element: <CanvasProjectPage /> },
-                    { path: "/config", element: isHostedMode ? <Navigate to="/app" replace /> : <ConfigPage /> },
+                    { path: "/config", element: <ConfigPage /> },
                 ],
             },
         ],
