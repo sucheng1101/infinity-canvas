@@ -1,6 +1,6 @@
-import { Bot, Menu } from "lucide-react";
+import { Bot, Menu, Settings2 } from "lucide-react";
 import { Button, Tooltip } from "antd";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
@@ -12,10 +12,13 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { isHostedMode } from "@/lib/app-mode";
+import { useAuthStore } from "@/stores/use-auth-store";
 
 export function AppTopNav() {
     const { t } = useTranslation();
     const { pathname } = useLocation();
+    const navigate = useNavigate();
+    const user = useAuthStore((state) => state.user);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const autoConnectRef = useRef(false);
     const agentToken = useAgentStore((state) => state.token);
@@ -85,6 +88,17 @@ export function AppTopNav() {
                         </div>
 
                         <div className="my-auto flex h-9 min-w-0 items-center justify-end gap-2 justify-self-end whitespace-nowrap">
+                            {user?.role === "admin" ? (
+                                <Button
+                                    type="text"
+                                    className="!h-8 !px-2"
+                                    icon={<Settings2 className="size-4" />}
+                                    onClick={() => navigate("/admin")}
+                                    aria-label="管理后台"
+                                >
+                                    <span className="hidden text-xs sm:inline">管理后台</span>
+                                </Button>
+                            ) : null}
                             <Tooltip title={t(panelOpen ? "topNav.closeAgent" : "topNav.openAgent")}>
                                 <Button type="text" shape="circle" className="!h-8 !w-8 !min-w-8" icon={<Bot className="size-4" />} onClick={togglePanel} aria-label={t(panelOpen ? "topNav.closeAgent" : "topNav.openAgent")} />
                             </Tooltip>

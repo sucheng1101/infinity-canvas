@@ -5,6 +5,7 @@ description: Planned follow-up work
 
 # TODO
 
+- 接入管理员后台用户管理与使用日志数据：补充用户查询/编辑/状态/额度接口，以及 Relay 渠道、上游模型、Token、耗时、费用和 Request ID 的持久化日志。
 - Hosted commercial platform follow-up: hosted video generation still executes upstream synchronously, so cancelling only marks the task and releases quota without interrupting the upstream call; move to a task-keyed cancellable execution context. Cleanup of completed tasks, expired quotes, and expired orders is still missing.
 - Replace the Claude Code CLI adapter with a Claude Agent SDK adapter and improve the tool queue, following the [Local Agent Integration Plan](/docs/progress/local-agent-integration-plan).
 - Add Skill installation from web search, Skill resource-file management, and controlled local-memory persistence.

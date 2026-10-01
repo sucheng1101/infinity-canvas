@@ -1,5 +1,5 @@
 import { App, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag } from "antd";
-import { RefreshCw, Save, Settings2 } from "lucide-react";
+import { Activity, Boxes, CircleDollarSign, LayoutDashboard, Mail, RefreshCw, Route, Save, Settings2, SlidersHorizontal, Users, ScrollText, WalletCards } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 
@@ -60,6 +60,7 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(false);
     const [modal, setModal] = useState<{ type: string; item?: any }>();
     const [channelEditor, setChannelEditor] = useState<AdminChannel | null>();
+    const [activeSection, setActiveSection] = useState("overview");
 
     const load = async () => {
         setLoading(true);
@@ -410,8 +411,106 @@ export default function AdminPage() {
                         刷新
                     </Button>
                 </div>
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
+                    <aside className="w-full shrink-0 rounded-2xl border border-stone-200 bg-white/80 p-3 dark:border-stone-800 dark:bg-stone-950/70 lg:sticky lg:top-6 lg:w-56">
+                        <div className="mb-3 px-3 text-xs font-semibold uppercase tracking-[.18em] text-stone-400">运营导航</div>
+                        <div className="space-y-5">
+                            <div>
+                                <div className="mb-1 px-3 text-xs font-medium text-stone-400">运营中心</div>
+                                <div className="space-y-1">
+                                    {[
+                                        { key: "overview", label: "总览", icon: LayoutDashboard },
+                                        { key: "users", label: "用户管理", icon: Users },
+                                        { key: "usage", label: "使用日志", icon: ScrollText },
+                                    ].map(({ key, label, icon: Icon }) => (
+                                        <Button key={key} type={activeSection === key ? "primary" : "text"} block className="!justify-start" icon={<Icon className="size-4" />} onClick={() => setActiveSection(key)}>
+                                            {label}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="mb-1 px-3 text-xs font-medium text-stone-400">模型服务</div>
+                                <div className="space-y-1">
+                                    {[
+                                        { key: "models", label: "模型目录", icon: Boxes },
+                                        { key: "channels", label: "渠道管理", icon: Route },
+                                        { key: "pricing", label: "定价与充值", icon: CircleDollarSign },
+                                    ].map(({ key, label, icon: Icon }) => (
+                                        <Button key={key} type={activeSection === key ? "primary" : "text"} block className="!justify-start" icon={<Icon className="size-4" />} onClick={() => setActiveSection(key)}>
+                                            {label}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="mb-1 px-3 text-xs font-medium text-stone-400">财务与系统</div>
+                                <div className="space-y-1">
+                                    {[
+                                        { key: "operations", label: "账户与支付", icon: WalletCards },
+                                        { key: "email", label: "邮箱与注册", icon: Mail },
+                                    ].map(({ key, label, icon: Icon }) => (
+                                        <Button key={key} type={activeSection === key ? "primary" : "text"} block className="!justify-start" icon={<Icon className="size-4" />} onClick={() => setActiveSection(key)}>
+                                            {label}
+                                        </Button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                    <section className="min-w-0 flex-1">
                 <Tabs
+                    activeKey={activeSection}
+                    onChange={setActiveSection}
+                    styles={{ header: { display: "none" } }}
                     items={[
+                        {
+                            key: "overview",
+                            label: "总览",
+                            children: (
+                                <Space direction="vertical" className="w-full" size="large">
+                                    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                                        <Card size="small"><div className="text-sm text-stone-500">用户模型</div><div className="mt-2 text-2xl font-semibold">{models.length}</div><div className="mt-1 text-xs text-stone-400">{models.filter((model) => model.status === "active").length} 个已开放</div></Card>
+                                        <Card size="small"><div className="text-sm text-stone-500">活跃渠道</div><div className="mt-2 text-2xl font-semibold">{channels.filter((channel) => channel.status === "active").length}</div><div className="mt-1 text-xs text-stone-400">共 {channels.length} 个渠道</div></Card>
+                                        <Card size="small"><div className="text-sm text-stone-500">可用路由</div><div className="mt-2 text-2xl font-semibold">{routes.filter((route) => route.available).length}</div><div className="mt-1 text-xs text-stone-400">共 {routes.length} 条路由</div></Card>
+                                        <Card size="small"><div className="text-sm text-stone-500">启用定价</div><div className="mt-2 text-2xl font-semibold">{pricing.filter((item) => item.status === "active").length}</div><div className="mt-1 text-xs text-stone-400">充值套餐 {products.filter((product) => product.status === "active").length} 个</div></Card>
+                                    </div>
+                                    <Card title="运营状态" extra={<Button type="link" icon={<RefreshCw className="size-4" />} onClick={() => void load()}>刷新数据</Button>}>
+                                        <div className="grid gap-4 md:grid-cols-3">
+                                            <div className="rounded-xl bg-stone-50 p-4 dark:bg-stone-900"><div className="flex items-center gap-2 text-sm font-medium"><Activity className="size-4 text-emerald-500" />渠道服务</div><div className="mt-2 text-xs text-stone-500">{channels.filter((channel) => channel.status === "active").length ? "已有启用渠道" : "等待配置渠道"}</div></div>
+                                            <div className="rounded-xl bg-stone-50 p-4 dark:bg-stone-900"><div className="flex items-center gap-2 text-sm font-medium"><SlidersHorizontal className="size-4 text-orange-500" />模型发布</div><div className="mt-2 text-xs text-stone-500">{models.filter((model) => model.status === "active").length} 个模型对用户开放</div></div>
+                                            <div className="rounded-xl bg-stone-50 p-4 dark:bg-stone-900"><div className="flex items-center gap-2 text-sm font-medium"><Settings2 className="size-4 text-blue-500" />后台配置</div><div className="mt-2 text-xs text-stone-500">从左侧选择模块开始管理</div></div>
+                                        </div>
+                                    </Card>
+                                </Space>
+                            ),
+                        },
+                        {
+                            key: "users",
+                            label: "用户管理",
+                            children: (
+                                <Card title="用户管理" extra={<Tag color="orange">首板入口</Tag>}>
+                                    <div className="rounded-xl border border-dashed border-stone-300 p-8 text-center dark:border-stone-700">
+                                        <Users className="mx-auto size-8 text-stone-400" />
+                                        <div className="mt-3 font-medium">用户与额度管理工作区</div>
+                                        <p className="mt-2 text-sm text-stone-500">下一步接入用户列表、状态管理、额度调整和单用户使用记录。</p>
+                                    </div>
+                                </Card>
+                            ),
+                        },
+                        {
+                            key: "usage",
+                            label: "使用日志",
+                            children: (
+                                <Card title="使用日志" extra={<Tag color="orange">首板入口</Tag>}>
+                                    <div className="rounded-xl border border-dashed border-stone-300 p-8 text-center dark:border-stone-700">
+                                        <ScrollText className="mx-auto size-8 text-stone-400" />
+                                        <div className="mt-3 font-medium">模型调用与计费日志</div>
+                                        <p className="mt-2 text-sm text-stone-500">下一步接入时间、用户、模型、渠道、Token、费用、耗时和请求详情筛选。</p>
+                                    </div>
+                                </Card>
+                            ),
+                        },
                         {
                             key: "models",
                             label: "模型目录",
@@ -620,6 +719,8 @@ export default function AdminPage() {
                         },
                     ]}
                 />
+                    </section>
+                </div>
                 {modal && editor()}
                 <AdminChannelEditorDrawer open={channelEditor !== undefined} channel={channelEditor || null} onSave={saveChannel} onClose={() => setChannelEditor(undefined)} />
             </div>
