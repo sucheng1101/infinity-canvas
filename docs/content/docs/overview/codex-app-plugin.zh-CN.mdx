@@ -16,54 +16,19 @@ Infinite Canvas 提供了一个 Codex App 插件，用来把 Codex 和本地 Can
 把下面这段发给 Codex：
 
 ```text
-请从 https://github.com/basketikun/infinite-canvas.git 安装 Infinite Canvas Codex 插件。
-请 clone 仓库到 ~/plugins/infinite-canvas，确认 plugins/infinite-canvas/.codex-plugin/plugin.json 存在，
-把 plugins/infinite-canvas 加入 personal marketplace，先运行 codex plugin marketplace add ~，
-再运行 codex plugin add infinite-canvas@personal。
+请从 https://github.com/sucheng1101/infinity-canvas.git 安装项目自有的 Infinite Canvas Codex 插件。
+先运行 codex plugin marketplace add https://github.com/sucheng1101/infinity-canvas.git，
+再运行 codex plugin add infinity-canvas@infinity-canvas。
 安装后请校验插件，并告诉我是否需要开启一个新对话来加载新技能和 MCP 工具。
 ```
 
-这种方式适合不想手动改 marketplace 配置的用户。Codex 会完成 clone、写入 marketplace、安装插件和基础校验。
+这种方式适合普通用户。Codex 会添加项目自有 marketplace、安装插件并完成基础校验。
 
 ### 手动安装
 
-推荐把仓库 clone 到 Codex personal marketplace 默认会引用的位置：
-
 ```bash
-mkdir -p ~/plugins
-git clone https://github.com/basketikun/infinite-canvas.git ~/plugins/infinite-canvas
-```
-
-确保 `~/.agents/plugins/marketplace.json` 中有 Infinite Canvas 条目。这里的 `path` 要指向仓库里的插件子目录：
-
-```json
-{
-  "name": "personal",
-  "interface": {
-    "displayName": "Personal"
-  },
-  "plugins": [
-    {
-      "name": "infinite-canvas",
-      "source": {
-        "source": "local",
-        "path": "./plugins/infinite-canvas/plugins/infinite-canvas"
-      },
-      "policy": {
-        "installation": "AVAILABLE",
-        "authentication": "ON_INSTALL"
-      },
-      "category": "Productivity"
-    }
-  ]
-}
-```
-
-然后注册 personal marketplace 并安装插件：
-
-```bash
-codex plugin marketplace add ~
-codex plugin add infinite-canvas@personal
+codex plugin marketplace add https://github.com/sucheng1101/infinity-canvas.git
+codex plugin add infinity-canvas@infinity-canvas
 ```
 
 安装完成后，建议新建一个 Codex 对话，让新的 skill 和 MCP 工具完整加载。
@@ -73,9 +38,9 @@ codex plugin add infinite-canvas@personal
 如果你正在 Infinite Canvas 仓库中开发插件，可以直接使用仓库自带的 marketplace：
 
 ```bash
-cd /path/to/infinite-canvas
+cd /path/to/infinity-canvas
 codex plugin marketplace add "$(pwd)"
-codex plugin add infinite-canvas@infinite-canvas-local
+codex plugin add infinity-canvas@infinity-canvas
 ```
 
 仓库内的 `.agents/plugins/marketplace.json` 已经指向 `./plugins/infinite-canvas`，适合开发者本地调试。
@@ -88,7 +53,7 @@ codex plugin add infinite-canvas@infinite-canvas-local
 打开 Infinite Canvas 新建画布 并连接好Codex
 ```
 
-插件会启动本地 Canvas Agent，读取连接地址和 token，然后在右侧打开 `https://canvas.best/` 并自动新建、连接画布。只有明确要求使用本地项目时，插件才会启动本地前端。
+插件会启动项目自有的 `@sucheng1101/canvas-agent`，读取其输出的 `Canvas URL`，然后在右侧打开 `https://sucheng1101.github.io/infinity-canvas/` 并自动新建、连接画布。只有明确要求使用本地项目时，插件才会启动本地前端。
 
 画布打开后可以继续让 Codex 操作画布：
 
@@ -114,7 +79,7 @@ codex plugin add infinite-canvas@infinite-canvas-local
 插件默认通过下面的 MCP 命令启动 Canvas Agent：
 
 ```bash
-npx -y @basketikun/canvas-agent@latest mcp
+npx -y @sucheng1101/canvas-agent@latest mcp
 ```
 
 如果需要手动排查，先启动画布：
@@ -128,10 +93,10 @@ bun run dev
 然后启动本地 Agent：
 
 ```bash
-npx -y @basketikun/canvas-agent@latest
+npx -y @sucheng1101/canvas-agent@latest
 ```
 
-从 Agent 输出或 `http://127.0.0.1:17371/config` 读取本地地址和 token 后，打开：
+Agent 会直接输出完整的项目自有 `Canvas URL`。自建站点或本地开发可以先设置 `INFINITY_CANVAS_WEB_URL`，也可以从 Agent 输出或 `http://127.0.0.1:17371/config` 读取本地地址和 token 后手动打开：
 
 ```text
 <画布网页地址>/canvas?mode=new#agentUrl=<Local URL>&agentToken=<Connect token>

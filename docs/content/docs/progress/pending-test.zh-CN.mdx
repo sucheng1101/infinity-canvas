@@ -5,6 +5,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 
 # 待测试
 
+- 项目自有 Codex 连接：Agent 连接页应展示 `sucheng1101/infinity-canvas` marketplace、`infinity-canvas` 插件/MCP 和 `@sucheng1101/canvas-agent` 的安装与启动命令；安装插件后新建 Codex 对话，要求打开 Infinite Canvas 时应启动项目自有 Agent，并打开 `https://sucheng1101.github.io/infinity-canvas/` 下的新画布。直接启动 Agent 时应额外输出完整 `Canvas URL`，设置 `INFINITY_CANVAS_WEB_URL` 后应改用指定站点；GitHub Pages 的 `/infinity-canvas/canvas` 嵌套路由应正常进入画布并自动读取连接参数。
 - 官方 v0.19 画布优化：图片和素材列表应使用本地 WebP 缩略图展示，同时放大预览、下载、导出、生图参考图和 WebDAV 仍使用原图；多节点拖拽与连线渲染应保持流畅；图片和 Gemini 请求超时后应结束；安装 ZCode 插件后应具备与 Codex 插件一致的 Canvas Agent 操作能力。
 - 8K 图片与 MiniMax H3 视频设置：图片预设应包含 8K，并支持自定义短边和宽高比；MiniMax H3 应显示并提交 `768`、`1080p`、`2K`、`4K`，且不追加 `p`。
 
@@ -12,7 +13,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 - 项目管理与电商项目：普通无限画布入口继续保留且不再显示场景项目创建操作；项目管理当前只展示电商项目。确认上传多张参考图并提交商品资料后，项目能持久化电商类型、商品资料、真实感预设和参考图，画布包含商品资料、套图规划、三类生成、QA 与参考图节点；参考图应连接到三类生成节点，生成提示词应包含实拍真实感预设，刷新或导入后仍保留“电商”标识和节点内容。
 
 - 固定 AI 渠道与顶部入口：应用顶部不再显示 GitHub 和文档图标，画布主菜单不再显示文档链接；配置中心应始终只显示 `codex.helpapis.com` 和 `helpapis.com` 两个 OpenAI 渠道，不提供新增或删除入口，渠道名称、协议及接口地址不可编辑，API Key 可独立填写，模型拉取、能力分类、调用脚本与默认模型选择保持可用；刷新页面、导入旧配置或使用 URL 参数后不得新增或改写为其他渠道。
-- Canvas Agent Debug：普通启动应通过公共 logger 输出 Info、Warn 和 Error 日志；使用 `npx -y @basketikun/canvas-agent --debug` 启动后还应输出 Debug 日志并显示日志文件路径，终端统一采用“`YYYY-MM-DD HH:mm:ss` 级别 消息 详情”的纯文本单行格式，`~/.infinite-canvas/logs/` 下应按启动日期生成相同格式的 `canvas-agent-YYYY-MM-DD.log`，同一天多次启动应追加到同一文件；日志中不应出现连接 token 或图片 Data URL 原文。
+- Canvas Agent Debug：普通启动应通过公共 logger 输出 Info、Warn 和 Error 日志；使用 `npx -y @sucheng1101/canvas-agent --debug` 启动后还应输出 Debug 日志并显示日志文件路径，终端统一采用“`YYYY-MM-DD HH:mm:ss` 级别 消息 详情”的纯文本单行格式，`~/.infinite-canvas/logs/` 下应按启动日期生成相同格式的 `canvas-agent-YYYY-MM-DD.log`，同一天多次启动应追加到同一文件；日志中不应出现连接 token 或图片 Data URL 原文。
 
 - 本地代理：配置弹窗应在「渠道」和「偏好设置」之间出现独立的「本地代理」页签，开关默认关闭。打开后应显示 `npx @basketikun/canvas-proxy@latest` 启动命令（端口非默认时自动追加 `--port`）、复制按钮，以及默认 `http://127.0.0.1:23210` 的地址输入框，失焦时自动补全协议并去掉末尾斜杠；「测试连接」应只在命令已启动时成功。开启代理后，拉取模型列表、生图、生视频、生成文本（含流式输出）、生成音频、自定义调用脚本、视频任务轮询、生成结果图片和视频的下载，以及 WebDAV 测试连接与同步都应经代理转发且功能正常，关闭后恢复直连。代理本身应原样转发请求方法、请求头、查询参数和请求体，SSE 响应按块透传不缓冲，`data:` 和 `blob:` 地址不受影响。
 - 图像与视频尺寸设置：图像设置应将分辨率（`1k` / `2k` / `4k` / 自动）和宽高比（`1:1`、`2:3`、`3:2`、`4:3`、`3:4`、`16:9`、`9:16`、`21:9`、`9:21`、自动）拆成两项，并由二者计算 W/H。视频设置仍使用 `480p` / `720p` / `1080p`（以及自定义 p 值），比例为 `1:1`、`3:4`、`4:3`、`16:9`、`9:16`、`21:9`、自动，并由清晰度与比例计算 W/H。秒数应为 4–30 的滑杆，右侧显示当前秒数；比例为自动时应禁用 W/H。
@@ -52,7 +53,7 @@ description: 当前版本已实现但仍需人工验证的变更项
 - Agent Markdown 样式：右侧 Agent 回复中的代码块应为横向占满消息区域、无语言标题和无双层边框的紧凑代码条，单行内容不应保留纵向大面积空白，复制操作仅在悬停时弱化显示；行内代码、链接在浅色和深色主题下应清晰；点击外部链接后应显示中文紧凑确认弹窗，长路径能够正常换行且复制、继续打开和关闭操作可用；点击 `/Users/`、`/home/` 等本地绝对文件路径时应改为提示在系统文件管理器中定位，支持复制路径，且浏览器地址不应跳转为 localhost 文件路径。
 - Agent 工具确认模式：右侧面板标题栏不应再显示「工具确认」开关；对话输入框左下方应显示确认模式选择，默认选中「自动确认」，画布写入工具应直接执行；切换为「手动确认」后，画布写入工具应在对话中展示等待确认卡片，并支持批准或拒绝。
 - Canvas Agent Codex 升级：启动 Canvas Agent 后应输出 Canvas Agent、内置 Codex 和本机 Codex 版本，实际运行的内置 Codex 应为 0.153.4；内置与本机版本不一致、未安装本机 Codex，或 npm 存在更新版本时应显示对应升级提醒，npm 检查失败不应阻止服务启动；Agent 应能正常连接 Codex、创建或恢复会话、发送消息并调用画布工具，运行中停止任务应只中断当前 turn，随后无需重启 Agent 即可继续发送新任务。
-- Canvas Agent Debug：普通启动应通过公共 logger 输出 Info、Warn 和 Error 日志；使用 `npx -y @basketikun/canvas-agent@latest --debug` 启动后还应输出 Debug 日志并显示日志文件路径，终端统一采用“`YYYY-MM-DD HH:mm:ss` 级别 消息 详情”的纯文本单行格式，`~/.infinite-canvas/logs/` 下应按启动日期生成相同格式的 `canvas-agent-YYYY-MM-DD.log`，同一天多次启动应追加到同一文件；日志中不应出现连接 token 或图片 Data URL 原文。
+- Canvas Agent Debug：普通启动应通过公共 logger 输出 Info、Warn 和 Error 日志；使用 `npx -y @sucheng1101/canvas-agent@latest --debug` 启动后还应输出 Debug 日志并显示日志文件路径，终端统一采用“`YYYY-MM-DD HH:mm:ss` 级别 消息 详情”的纯文本单行格式，`~/.infinite-canvas/logs/` 下应按启动日期生成相同格式的 `canvas-agent-YYYY-MM-DD.log`，同一天多次启动应追加到同一文件；日志中不应出现连接 token 或图片 Data URL 原文。
 - Canvas Agent 凭据脱敏：Codex 与 Claude CLI 的 stderr 包含 Bearer token、`sk-` 密钥、显式 API key/token/authorization 赋值、ANSI 样式或跨输出分片的凭据时，调试日志和网页诊断事件均不应出现明文；普通 stderr 文本应保持不变。
 - Canvas Agent 配置权限：在 Linux 和 macOS 上保存配置后，`~/.infinite-canvas` 权限应为 `0700`，`canvas-agent.json` 权限应为 `0600`，已有的宽松权限也应被纠正；配置应能继续正常读写，Windows 启动不受影响。
 - Canvas Agent URL 自动连接：链接应在 `#` 后传递 `agentUrl` 和 `agentToken`，进入或选择具体画布时继续保留，读取后立即从地址栏移除，并可连接有效的本机、局域网或远程 HTTP(S) Agent 地址且不主动展开设置面板；缺少参数或地址无效时应展开设置并显示错误。

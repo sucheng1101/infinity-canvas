@@ -69,7 +69,7 @@ export function baseOptions(locale: string): BaseLayoutProps {
             <ArrowUpRight className="size-4" />
           </span>
         ),
-        url: 'https://canvas.best/',
+        url: 'https://sucheng1101.github.io/infinity-canvas/',
         external: true,
         on: 'nav',
       },

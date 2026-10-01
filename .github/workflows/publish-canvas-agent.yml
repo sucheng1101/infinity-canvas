@@ -1,0 +1,47 @@
+name: Publish Canvas Agent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "canvas-agent/**"
+      - ".github/workflows/publish-canvas-agent.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-canvas-agent
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: canvas-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: canvas-agent/package-lock.json
+
+      - run: npm ci
+
+      - name: Publish package version when missing
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "$name@$version already exists; skipping publish."
+          else
+            npm publish --access public
+          fi

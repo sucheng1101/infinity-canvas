@@ -60,7 +60,7 @@ canvas-agent/
 MVP 阶段优先提供 `npx`：
 
 ```bash
-npx -y @basketikun/canvas-agent
+npx -y @sucheng1101/canvas-agent
 ```
 
 在本仓库内开发调试时可直接运行：
@@ -135,13 +135,13 @@ Codex CLI <-> canvas-agent MCP <-> 当前网页画布
 用户本机 Codex 配置示例：
 
 ```bash
-codex mcp add infinite-canvas -- npx -y @basketikun/canvas-agent@latest mcp
+codex mcp add infinity-canvas -- npx -y @sucheng1101/canvas-agent@latest mcp
 ```
 
 本仓库调试时可使用，实际配置建议替换为本机绝对路径：
 
 ```bash
-codex mcp add infinite-canvas -- node /path/to/infinite-canvas/canvas-agent/dist/index.js mcp
+codex mcp add infinity-canvas -- node /path/to/infinity-canvas/canvas-agent/dist/index.js mcp
 ```
 
 网页侧边栏助手另走 Canvas Agent 的对话通道。Canvas Agent 使用官方 `@openai/codex` CLI 的 `codex app-server --stdio` 启动并续用同一个 thread，启动时会注入 `infinite-canvas` MCP 配置并把 `default_tools_approval_mode` 设为 `approve`，避免 Codex 自己的 MCP 审批卡住侧边栏；真正修改画布前由网页侧边栏做二次确认。
@@ -189,10 +189,10 @@ Claude Code 侧当前 MVP 先调用本机 Claude Code CLI 的流式 JSON 输出�
 如果希望 Claude Code 也能操作当前画布，需要给 Claude Code 配置同一个 MCP：
 
 ```bash
-claude mcp add --scope user --transport stdio infinite-canvas -- npx -y @basketikun/canvas-agent@latest mcp
+claude mcp add --scope user --transport stdio infinity-canvas -- npx -y @sucheng1101/canvas-agent@latest mcp
 ```
 
-Canvas Agent 调用 Claude Code 时默认允许 `mcp__infinite-canvas__*`，避免 print 模式被工具审批卡住；真正修改画布仍由网页侧边栏确认。
+Canvas Agent 调用 Claude Code 时默认允许 `mcp__infinity-canvas__*`，避免 print 模式被工具审批卡住；真正修改画布仍由网页侧边栏确认。
 
 参考：
 
@@ -240,7 +240,7 @@ Canvas Agent 调用 Claude Code 时默认允许 `mcp__infinite-canvas__*`，避�
 
 ## MVP 验收标准
 
-- 用户运行 `npx -y @basketikun/canvas-agent@latest` 后，线上画布能显示已连接。
+- 用户运行 `npx -y @sucheng1101/canvas-agent@latest` 后，线上画布能显示已连接。
 - 用户在 Codex CLI 中可以创建文本节点、移动节点、连接节点。
 - 网页侧边栏能发送一条消息给本地 Codex，并展示流式回复。
 - 网页侧边栏默认只展示本地 Codex，并展示结构化回复。

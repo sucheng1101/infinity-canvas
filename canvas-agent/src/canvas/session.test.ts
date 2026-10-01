@@ -243,7 +243,7 @@ test("对话 revision 单调递增且 MCP 全部进入终态前保持 preparing"
 
     revisions.push(session.beginConversation({ sourceClientId: "first" }).revision);
     revisions.push(session.updateConversationMcp("late-service", "starting").revision);
-    revisions.push(session.completeConversationMcpInventory([{ name: "infinite-canvas", authStatus: "unsupported" }]).revision);
+    revisions.push(session.completeConversationMcpInventory([{ name: "infinity-canvas", authStatus: "unsupported" }]).revision);
     const pending = session.completeConversationPreparation("thread-1");
     revisions.push(pending.revision);
     assert.equal(pending.status, "preparing");
@@ -259,7 +259,7 @@ test("可选 MCP 失败进入 warning，画布 MCP 失败进入 failed", () => {
     const optionalFailure = new CanvasSession();
     optionalFailure.beginConversation();
     optionalFailure.completeConversationMcpInventory([
-        { name: "infinite-canvas", authStatus: "unsupported" },
+        { name: "infinity-canvas", authStatus: "unsupported" },
         { name: "notion", authStatus: "notLoggedIn" },
     ]);
     const warning = optionalFailure.completeConversationPreparation("thread-1");
@@ -268,7 +268,7 @@ test("可选 MCP 失败进入 warning，画布 MCP 失败进入 failed", () => {
 
     const requiredFailure = new CanvasSession();
     requiredFailure.beginConversation();
-    requiredFailure.completeConversationMcpInventory([{ name: "infinite-canvas", authStatus: "notLoggedIn" }]);
+    requiredFailure.completeConversationMcpInventory([{ name: "infinity-canvas", authStatus: "notLoggedIn" }]);
     const failed = requiredFailure.completeConversationPreparation("thread-2");
     assert.equal(failed.status, "failed");
     assert.match(failed.error || "", /Infinite Canvas MCP/);

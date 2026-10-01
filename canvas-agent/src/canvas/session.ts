@@ -146,9 +146,9 @@ export class CanvasSession {
         this.preparedConversationThreadId = threadId;
         const statuses = this.conversationState.mcpStatuses;
         const hasPending = !this.conversationInventoryComplete || Object.values(statuses).some((item) => item.status === "starting");
-        const requiredFailure = statuses["infinite-canvas"]?.status !== "ready";
+        const requiredFailure = statuses["infinity-canvas"]?.status !== "ready";
         const hasFailure = Object.values(statuses).some((item) => item.status === "failed" || item.status === "cancelled");
-        const requiredFailureDetail = statuses["infinite-canvas"]?.error;
+        const requiredFailureDetail = statuses["infinity-canvas"]?.error;
         return this.updateConversation({
             threadId,
             status: hasPending ? "preparing" : requiredFailure ? "failed" : hasFailure ? "warning" : "ready",

@@ -1,10 +1,10 @@
 {
-  "name": "infinite-canvas-local",
+  "name": "infinity-canvas",
   "version": 1,
   "description": "Local marketplace for the Infinite Canvas ZCode plugin.",
   "plugins": [
     {
-      "name": "infinite-canvas",
+      "name": "infinity-canvas",
       "version": "0.1.0",
       "description": "Use ZCode to read and operate Infinite Canvas through the local Canvas Agent MCP server.",
       "source": "."

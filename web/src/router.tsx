@@ -18,6 +18,8 @@ import WorkbenchPage from "@/pages/workbench";
 import ProjectsPage from "@/pages/projects";
 import AdminPage from "@/pages/admin";
 
+const routerBase = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
+
 export const router = createBrowserRouter([
     { path: "/", element: isHostedMode ? <LoginPage /> : <Navigate to="/app" replace /> },
     {
@@ -59,4 +61,4 @@ export const router = createBrowserRouter([
         ],
     },
     { path: "*", element: <NotFound /> },
-]);
+], { basename: routerBase });

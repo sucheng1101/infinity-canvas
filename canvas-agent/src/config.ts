@@ -6,6 +6,7 @@ import path from "node:path";
 import { assertSafeWorkspacePath } from "./utils/safe-input.js";
 
 export const DEFAULT_PORT = 17371;
+export const DEFAULT_CANVAS_WEB_URL = "https://sucheng1101.github.io/infinity-canvas/";
 export const CONFIG_DIR = path.join(os.homedir(), ".infinite-canvas");
 export const CONFIG_FILE = path.join(CONFIG_DIR, "canvas-agent.json");
 export const VERSION = readPackageVersion();
@@ -14,6 +15,16 @@ const initializedWorkspaces = new Set<string>();
 
 export type SiteWorkspaceConfig = { workspacePath: string; activeThreadId?: string; pinnedThreadIds?: string[] };
 export type CanvasAgentConfig = { url: string; token: string; origins?: string[]; workspace?: SiteWorkspaceConfig };
+
+/** 生成当前 Agent 对应的项目自有画布连接地址。 */
+export function canvasWebUrl(config: CanvasAgentConfig, mode = "new") {
+    const configured = process.env.INFINITY_CANVAS_WEB_URL?.trim() || DEFAULT_CANVAS_WEB_URL;
+    const base = configured.endsWith("/") ? configured : `${configured}/`;
+    const url = new URL("canvas", base);
+    url.searchParams.set("mode", mode);
+    url.hash = new URLSearchParams({ agentUrl: config.url, agentToken: config.token }).toString();
+    return url.toString();
+}
 
 /** 读取本地 Canvas Agent 配置，不存在时生成默认配置。 */
 export function loadConfig(create = false): CanvasAgentConfig {

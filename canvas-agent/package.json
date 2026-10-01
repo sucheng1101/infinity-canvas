@@ -1,6 +1,7 @@
 {
-  "name": "@basketikun/canvas-agent",
+  "name": "@sucheng1101/canvas-agent",
   "version": "0.6.0",
+  "description": "Local bridge between Infinity Canvas and Codex or Claude Code.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -39,6 +40,12 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "homepage": "https://sucheng1101.github.io/infinity-canvas/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sucheng1101/infinity-canvas.git",
+    "directory": "canvas-agent"
   },
   "publishConfig": {
     "access": "public"

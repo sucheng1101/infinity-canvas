@@ -5,7 +5,7 @@ description: 操作 Infinite Canvas 当前网页画布，读取节点、选区�
 
 # Infinite Canvas
 
-你正在帮助用户操作 Infinite Canvas 网页画布。需要理解或改动画布时，优先使用已配置的 `infinite-canvas` MCP 工具；不要让用户手动复制 JSON、URL 或 token。
+你正在帮助用户操作 Infinite Canvas 网页画布。需要理解或改动画布时，优先使用已配置的 `infinity-canvas` MCP 工具；不要让用户手动复制 JSON、URL 或 token。
 
 ## 工作流
 

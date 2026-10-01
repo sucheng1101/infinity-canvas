@@ -6,8 +6,10 @@ import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 
-const AGENT_PLUGIN_REMOVE_COMMAND = "codex plugin remove infinite-canvas";
-const AGENT_MCP_REMOVE_COMMAND = "codex mcp remove infinite-canvas";
+const AGENT_MARKETPLACE_ADD_COMMAND = "codex plugin marketplace add https://github.com/sucheng1101/infinity-canvas.git";
+const AGENT_PLUGIN_ADD_COMMAND = "codex plugin add infinity-canvas@infinity-canvas";
+const AGENT_PLUGIN_REMOVE_COMMAND = "codex plugin remove infinity-canvas";
+const AGENT_MCP_REMOVE_COMMAND = "codex mcp remove infinity-canvas";
 
 export function AgentConnectView({
     theme,
@@ -34,7 +36,7 @@ export function AgentConnectView({
 }) {
     const { t } = useTranslation();
     const { message } = App.useApp();
-    const steps = [{ title: t("agent.connect.pluginTitle"), text: t("agent.connect.pluginText") }, { title: t("agent.connect.directTitle"), text: t("agent.connect.directText"), command: "npx -y @basketikun/canvas-agent@latest" }];
+    const steps = [{ title: t("agent.connect.pluginTitle"), text: t("agent.connect.pluginText") }, { title: t("agent.connect.directTitle"), text: t("agent.connect.directText"), command: "npx -y @sucheng1101/canvas-agent@latest" }];
     const statusText = connectError ? t("agent.status.failed") : connected ? activity : enabled ? t("agent.status.connecting") : t("agent.status.disconnected");
     const statusColor = connectError ? "#dc2626" : connected ? "#16a34a" : enabled ? "#d97706" : theme.node.muted;
     const copyCommand = (command: string) => {
@@ -49,6 +51,8 @@ export function AgentConnectView({
             <div className="mt-1">{t("agent.connect.pluginReminderText")}</div>
             <div className="mt-2 grid gap-1.5">
                 {[
+                    [t("agent.connect.addMarketplace"), AGENT_MARKETPLACE_ADD_COMMAND],
+                    [t("agent.connect.installPlugin"), AGENT_PLUGIN_ADD_COMMAND],
                     [t("agent.connect.removePlugin"), AGENT_PLUGIN_REMOVE_COMMAND],
                     [t("agent.connect.removeMcp"), AGENT_MCP_REMOVE_COMMAND],
                 ].map(([label, command]) => (

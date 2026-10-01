@@ -5,6 +5,12 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+## Project-owned Codex connection
+
+- The Agent connection view should show the `sucheng1101/infinity-canvas` marketplace, the `infinity-canvas` plugin/MCP, and the `@sucheng1101/canvas-agent` commands.
+- After installing the plugin and starting a new Codex conversation, asking it to open Infinite Canvas should start the project-owned Agent and open a new canvas under `https://sucheng1101.github.io/infinity-canvas/`.
+- Direct Agent startup should print a complete `Canvas URL`; `INFINITY_CANVAS_WEB_URL` should override the target site, and the GitHub Pages `/infinity-canvas/canvas` route should load correctly with automatic connection parameters.
+
 ## 本地服务启动与账户错误提示
 
 - `start-local.ps1` 在 MySQL 或 Redis 未监听时应显示对应地址并停止启动；不应关闭或重启其他进程。

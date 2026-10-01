@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@basketikun/canvas-agent",
+      "name": "@sucheng1101/canvas-agent",
       "dependencies": {
         "@modelcontextprotocol/sdk": "^1.12.1",
         "@openai/codex": "0.153.4",

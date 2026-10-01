@@ -9,7 +9,7 @@ import type { CodexReasoningEffort, CodexSkillSelector } from "../agent/codex-pr
 import { messageMetadataStore } from "../agent/message-metadata.js";
 import type { AgentAttachment, AgentPermissionMode } from "../agent/types.js";
 import { AGENT_PROTOCOL_VERSION, CanvasSession } from "../canvas/session.js";
-import { DEFAULT_PORT, ensureSiteWorkspace, loadConfig, saveConfig, updateSiteWorkspace, type CanvasAgentConfig } from "../config.js";
+import { canvasWebUrl, DEFAULT_PORT, ensureSiteWorkspace, loadConfig, saveConfig, updateSiteWorkspace, type CanvasAgentConfig } from "../config.js";
 import { logger } from "../utils/logger.js";
 import { isSafeId, isSafeLocalFilePath, safeId } from "../utils/safe-input.js";
 import { checkVersions } from "../version-check.js";
@@ -441,9 +441,10 @@ export function startHttpServer() {
         checkVersions();
         console.log(`Local URL: ${config.url}`);
         console.log(`Connect token: ${config.token}`);
+        console.log(`Canvas URL: ${canvasWebUrl(config)}`);
         console.log("Codex MCP is not installed by this command.");
-        console.log("Optional MCP add: codex mcp add infinite-canvas -- npx -y @basketikun/canvas-agent@latest mcp");
-        console.log("Remove manually added MCP: codex mcp remove infinite-canvas");
+        console.log("Optional MCP add: codex mcp add infinity-canvas -- npx -y @sucheng1101/canvas-agent@latest mcp");
+        console.log("Remove manually added MCP: codex mcp remove infinity-canvas");
         if (logger.enabled) console.log(`Debug log: ${logger.filePath}`);
         logger.info("Canvas Agent started", { url: config.url, workspace: ensureSiteWorkspace(config).workspacePath, debugLog: logger.filePath });
         const activeThreadId = initialWorkspace.activeThreadId || "";
