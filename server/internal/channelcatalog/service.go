@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
 	"gorm.io/gorm"
@@ -87,6 +88,13 @@ type FetchModelsInput struct {
 	BaseURL string `json:"baseUrl"`
 	APIKey  string `json:"apiKey"`
 	KeyID   uint   `json:"keyId"`
+}
+
+type ChannelTestResult struct {
+	OK         bool   `json:"ok"`
+	LatencyMS  int64  `json:"latencyMs"`
+	ModelCount int    `json:"modelCount"`
+	Message    string `json:"message"`
 }
 
 type RouteInput struct {
@@ -256,6 +264,30 @@ func (s *Service) FetchModels(ctx context.Context, input FetchModelsInput) ([]st
 	}
 	sort.Strings(items)
 	return items, nil
+}
+
+func (s *Service) TestChannel(ctx context.Context, id uint) (ChannelTestResult, error) {
+	var channel model.UpstreamChannel
+	if err := s.DB.First(&channel, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ChannelTestResult{}, ErrChannelNotFound
+		}
+		return ChannelTestResult{}, err
+	}
+	var key model.UpstreamChannelKey
+	if err := s.DB.Where("channel_id = ?", id).Order("sort_order ASC").Order("id ASC").First(&key).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ChannelTestResult{}, ErrInvalidChannel
+		}
+		return ChannelTestResult{}, err
+	}
+	startedAt := time.Now()
+	items, err := s.FetchModels(ctx, FetchModelsInput{BaseURL: channel.BaseURL, KeyID: key.ID})
+	latency := time.Since(startedAt).Milliseconds()
+	if err != nil {
+		return ChannelTestResult{OK: false, LatencyMS: latency, Message: "渠道连接失败"}, err
+	}
+	return ChannelTestResult{OK: true, LatencyMS: latency, ModelCount: len(items), Message: "渠道连接正常"}, nil
 }
 
 func (s *Service) ListRoutes(includeHidden bool) ([]AdminRoute, error) {

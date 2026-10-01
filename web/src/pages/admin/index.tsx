@@ -1,5 +1,5 @@
-import { App, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag, Tooltip } from "antd";
-import { Plus, RefreshCw, Save, Settings2, Trash2 } from "lucide-react";
+import { App, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag } from "antd";
+import { RefreshCw, Save, Settings2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 
@@ -7,6 +7,8 @@ import { adminApi, type AdminChannel, type AdminRoute, type EmailSettings, type 
 import type { PublishedModel, RechargeProduct } from "@/services/api/hosted";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { AdminChannelEditorDrawer } from "./components/channel-editor-drawer";
+import { ChannelManagement } from "./components/channel-management";
+import { PricingManagement } from "./components/pricing-management";
 
 const statusOptions = [
     { value: "active", label: "启用" },
@@ -59,15 +61,6 @@ export default function AdminPage() {
     const [modal, setModal] = useState<{ type: string; item?: any }>();
     const [channelEditor, setChannelEditor] = useState<AdminChannel | null>();
 
-    const routeGroups = Array.from(
-        routes.reduce((groups, route) => {
-            const group = groups.get(route.publishedModelId) || { id: route.publishedModelId, model: route.publishedModel, routes: [] as AdminRoute[] };
-            group.routes.push(route);
-            groups.set(route.publishedModelId, group);
-            return groups;
-        }, new Map<number, { id: number; model: string; routes: AdminRoute[] }>()).values(),
-    );
-
     const load = async () => {
         setLoading(true);
         try {
@@ -110,8 +103,32 @@ export default function AdminPage() {
             }
             if (type === "model") modal?.item ? await adminApi.updateModel(modal.item.id, values) : await adminApi.createModel(values);
             if (type === "route") modal?.item ? await adminApi.updateRoute(modal.item.id, values) : await adminApi.createRoute(values);
-            if (type === "pricing") await adminApi.createPricing({ ...values, formula: JSON.parse(values.formula || "{}") });
-            if (type === "product") await adminApi.saveProduct(values, modal?.item?.id);
+            if (type === "pricing") {
+                const created = await adminApi.createPricing({
+                    publishedModelId: values.publishedModelId,
+                    currency: "CNY",
+                    formula: {
+                        type: values.pricingType,
+                        unitAmount: values.unitAmount,
+                        ...(values.baseAmount ? { baseAmount: values.baseAmount } : {}),
+                        ...(values.minimumAmount ? { minimumAmount: values.minimumAmount } : {}),
+                    },
+                });
+                if (values.enabled) await adminApi.publishPricing(created.id);
+            }
+            if (type === "product") {
+                await adminApi.saveProduct(
+                    {
+                        name: values.name,
+                        payAmountFen: Math.round(Number(values.payAmountYuan) * 100),
+                        quotaAmount: values.quotaAmount,
+                        giftQuota: values.giftQuota || 0,
+                        status: values.enabled ? "active" : "hidden",
+                        sortOrder: values.sortOrder || 0,
+                    },
+                    modal?.item?.id,
+                );
+            }
             if (type === "quota") await adminApi.adjustQuota({ ...values, idempotencyKey: crypto.randomUUID() });
             setModal(undefined);
             await load();
@@ -153,6 +170,71 @@ export default function AdminPage() {
         }
     };
 
+    const channelInput = (channel: AdminChannel, status: "active" | "hidden") => ({
+        name: channel.name,
+        provider: channel.provider,
+        baseUrl: channel.baseUrl,
+        modelApiKeys: channel.modelApiKeys.map((item) => ({ id: item.id, name: item.name, apiKey: "", models: item.models })),
+        models: channel.models,
+        settings: channel.settings,
+        status,
+        sortOrder: channel.sortOrder,
+    });
+
+    const toggleChannel = async (channel: AdminChannel, enabled: boolean) => {
+        try {
+            await adminApi.updateChannel(channel.id, channelInput(channel, enabled ? "active" : "hidden"));
+            await load();
+            message.success(enabled ? "渠道已启用" : "渠道已停用");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "渠道状态更新失败");
+        }
+    };
+
+    const toggleModel = async (model: PublishedModel, enabled: boolean) => {
+        const hasRoute = routes.some((route) => route.publishedModelId === model.id && route.available);
+        const hasPricing = pricing.some((item) => item.publishedModelId === model.id && item.status === "active");
+        if (enabled && (!hasRoute || !hasPricing)) {
+            message.warning(`请先完成${!hasRoute ? "可用渠道路由" : ""}${!hasRoute && !hasPricing ? "和" : ""}${!hasPricing ? "启用定价" : ""}`);
+            return;
+        }
+        try {
+            await adminApi.updateModel(model.id, { ...model, status: enabled ? "active" : "hidden" });
+            await load();
+            message.success(enabled ? "模型已对用户开放" : "模型已停止对用户开放");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "模型状态更新失败");
+        }
+    };
+
+    const togglePricing = async (model: PublishedModel, enabled: boolean, item?: PricingVersion) => {
+        try {
+            if (enabled) {
+                if (!item) {
+                    setModal({ type: "pricing", item: { model } });
+                    return;
+                }
+                await adminApi.publishPricing(item.id);
+            } else if (item?.status === "active") {
+                await adminApi.retirePricing(item.id);
+            }
+            await load();
+            message.success(enabled ? `${model.displayName} 定价已启用` : `${model.displayName} 定价已停用`);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "定价状态更新失败");
+        }
+    };
+
+    const toggleProduct = async (product: RechargeProduct, enabled: boolean) => {
+        try {
+            await adminApi.saveProduct({ ...product, status: enabled ? "active" : "hidden" }, product.id);
+            await load();
+            message.success(enabled ? "充值套餐已启用" : "充值套餐已停用");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "套餐状态更新失败");
+        }
+    };
+
     const editor = () => {
         const type = modal?.type;
         const item = modal?.item;
@@ -162,9 +244,16 @@ export default function AdminPage() {
                 : type === "route"
                   ? { ...item, settings: jsonValue(item?.settings) }
                   : type === "pricing"
-                    ? { currency: "CNY", formula: '{"type":"fixed","unitAmount":1}' }
+                    ? {
+                          publishedModelId: item?.model?.id,
+                          pricingType: item?.pricing?.formula?.type || "fixed",
+                          unitAmount: Number(item?.pricing?.formula?.unitAmount || 1),
+                          baseAmount: Number(item?.pricing?.formula?.baseAmount || 0),
+                          minimumAmount: Number(item?.pricing?.formula?.minimumAmount || 0),
+                          enabled: item?.pricing ? item.pricing.status === "active" : true,
+                      }
                     : type === "product"
-                      ? item
+                      ? { ...item, payAmountYuan: item ? item.payAmountFen / 100 : undefined, enabled: item ? item.status === "active" : true }
                       : {};
         return (
             <Modal open onCancel={() => setModal(undefined)} title={type === "model" ? "模型" : type === "route" ? "模型渠道调度" : type === "pricing" ? "新增定价" : type === "product" ? "充值套餐" : "额度调整"} footer={null}>
@@ -207,14 +296,25 @@ export default function AdminPage() {
                     )}
                     {type === "pricing" && (
                         <>
-                            <Form.Item name="publishedModelId" label="公开模型" rules={[{ required: true }]}>
-                                <Select options={models.map((value) => ({ value: value.id, label: value.displayName }))} />
+                            <Form.Item name="publishedModelId" label="选择模型" rules={[{ required: true, message: "请选择模型" }]}>
+                                <Select showSearch optionFilterProp="label" options={models.map((value) => ({ value: value.id, label: `${value.displayName} · ${value.capability}` }))} />
                             </Form.Item>
-                            <Form.Item name="currency" label="币种" rules={[{ required: true }]}>
-                                <Input />
+                            <Form.Item name="pricingType" label="计费方式" rules={[{ required: true }]}>
+                                <Select options={[{ value: "fixed", label: "固定价格（每次请求）" }, { value: "per_unit", label: "按生成数量" }, { value: "per_second", label: "按秒" }, { value: "per_token", label: "按 Token" }]} />
                             </Form.Item>
-                            <Form.Item name="formula" label="计费公式" rules={[{ required: true }]}>
-                                <Input.TextArea rows={5} />
+                            <Form.Item name="unitAmount" label="单价（额度）" rules={[{ required: true, message: "请填写单价" }]}>
+                                <InputNumber className="w-full" min={1} precision={0} />
+                            </Form.Item>
+                            <div className="grid grid-cols-2 gap-4">
+                                <Form.Item name="baseAmount" label="基础额度">
+                                    <InputNumber className="w-full" min={0} precision={0} />
+                                </Form.Item>
+                                <Form.Item name="minimumAmount" label="最低消费额度">
+                                    <InputNumber className="w-full" min={0} precision={0} />
+                                </Form.Item>
+                            </div>
+                            <Form.Item name="enabled" label="保存后启用" valuePropName="checked">
+                                <Switch checkedChildren="开" unCheckedChildren="关" />
                             </Form.Item>
                         </>
                     )}
@@ -223,8 +323,8 @@ export default function AdminPage() {
                             <Form.Item name="name" label="套餐名称" rules={[{ required: true }]}>
                                 <Input />
                             </Form.Item>
-                            <Form.Item name="payAmountFen" label="支付金额（分）" rules={[{ required: true }]}>
-                                <InputNumber min={100} />
+                            <Form.Item name="payAmountYuan" label="支付金额（元）" rules={[{ required: true }]}>
+                                <InputNumber className="w-full" min={1} precision={2} prefix="¥" />
                             </Form.Item>
                             <Form.Item name="quotaAmount" label="额度" rules={[{ required: true }]}>
                                 <InputNumber min={1} />
@@ -232,8 +332,8 @@ export default function AdminPage() {
                             <Form.Item name="giftQuota" label="赠送额度">
                                 <InputNumber min={0} />
                             </Form.Item>
-                            <Form.Item name="status" label="状态">
-                                <Select options={statusOptions} />
+                            <Form.Item name="enabled" label="启用套餐" valuePropName="checked">
+                                <Switch checkedChildren="开" unCheckedChildren="关" />
                             </Form.Item>
                             <Form.Item name="sortOrder" label="排序">
                                 <InputNumber />
@@ -316,25 +416,50 @@ export default function AdminPage() {
                             key: "models",
                             label: "模型目录",
                             children: (
-                                <Card>
+                                <Card title="用户模型目录" extra={<div className="text-xs text-stone-500">开放前必须同时具备可用路由和启用定价</div>}>
                                     <Table
                                         rowKey="id"
+                                        loading={loading}
                                         dataSource={models}
+                                        pagination={false}
                                         columns={[
-                                            { title: "名称", dataIndex: "displayName" },
-                                            { title: "能力", dataIndex: "capability" },
-                                            { title: "状态", dataIndex: "status", render: (v) => <Tag color={v === "active" ? "green" : "default"}>{v === "active" ? "启用" : "隐藏"}</Tag> },
+                                            { title: "模型", dataIndex: "displayName", render: (value) => <span className="font-medium">{value}</span> },
+                                            { title: "能力", dataIndex: "capability", render: (value) => <Tag>{value}</Tag> },
+                                            {
+                                                title: "渠道路由",
+                                                render: (_, model) => {
+                                                    const modelRoutes = routes.filter((route) => route.publishedModelId === model.id);
+                                                    const available = modelRoutes.filter((route) => route.available).length;
+                                                    return <span>{available} / {modelRoutes.length} 可用</span>;
+                                                },
+                                            },
+                                            {
+                                                title: "定价",
+                                                render: (_, model) => {
+                                                    const active = pricing.find((item) => item.publishedModelId === model.id && item.status === "active");
+                                                    return active ? <Tag color="success">{Number(active.formula.unitAmount || 0)} 额度</Tag> : <Tag color="warning">未启用</Tag>;
+                                                },
+                                            },
+                                            {
+                                                title: "用户可用状态",
+                                                render: (_, model) => {
+                                                    const routeReady = routes.some((route) => route.publishedModelId === model.id && route.available);
+                                                    const priceReady = pricing.some((item) => item.publishedModelId === model.id && item.status === "active");
+                                                    const ready = model.status === "active" && routeReady && priceReady;
+                                                    const label = ready ? "可用" : model.status !== "active" ? "目录已停用" : !routeReady ? "缺少可用路由" : "定价未启用";
+                                                    return <Tag color={ready ? "success" : "warning"}>{label}</Tag>;
+                                                },
+                                            },
+                                            {
+                                                title: "开放给用户",
+                                                width: 130,
+                                                render: (_, model) => <Switch checked={model.status === "active"} checkedChildren="开" unCheckedChildren="关" onChange={(checked) => void toggleModel(model, checked)} />,
+                                            },
                                             {
                                                 title: "操作",
+                                                width: 100,
                                                 render: (_, row) => (
-                                                    <Space>
-                                                        <Button type="link" onClick={() => setModal({ type: "model", item: row })}>
-                                                            编辑
-                                                        </Button>
-                                                        <Button danger type="link" icon={<Trash2 className="size-4" />} onClick={() => void hide("model", row.id)}>
-                                                            删除
-                                                        </Button>
-                                                    </Space>
+                                                    <Button type="link" onClick={() => setModal({ type: "model", item: row })}>编辑</Button>
                                                 ),
                                             },
                                         ]}
@@ -344,175 +469,13 @@ export default function AdminPage() {
                         },
                         {
                             key: "channels",
-                            label: "渠道与路由",
-                            children: (
-                                <Space direction="vertical" className="w-full" size="large">
-                                    <Card
-                                        title="渠道"
-                                        extra={
-                                            <Button icon={<Plus className="size-4" />} onClick={() => setChannelEditor(null)}>
-                                                新增渠道
-                                            </Button>
-                                        }
-                                    >
-                                        <Table
-                                            rowKey="id"
-                                            dataSource={channels}
-                                            columns={[
-                                                { title: "名称", dataIndex: "name" },
-                                                { title: "协议", render: () => "OpenAI" },
-                                                { title: "地址", dataIndex: "baseUrl" },
-                                                { title: "专用 Key", render: (_, row) => (row.modelApiKeys.length ? `${row.modelApiKeys.length} 个` : "未设置") },
-                                                {
-                                                    title: "模型",
-                                                    render: (_, row) => (
-                                                        <Tooltip title={row.models.length ? row.models.map((item) => `${item.name}（${item.capability}）`).join("、") : "暂无模型"}>
-                                                            <span className="cursor-help">{row.models.length} 个</span>
-                                                        </Tooltip>
-                                                    ),
-                                                },
-                                                {
-                                                    title: "操作",
-                                                    render: (_, row) => (
-                                                        <Space>
-                                                            <Button type="link" onClick={() => setChannelEditor(row)}>
-                                                                编辑
-                                                            </Button>
-                                                            <Button danger type="link" onClick={() => void hide("channel", row.id)}>
-                                                                隐藏
-                                                            </Button>
-                                                        </Space>
-                                                    ),
-                                                },
-                                            ]}
-                                        />
-                                    </Card>
-                                    <Card
-                                        title="模型路由"
-                                        extra={
-                                            <Button icon={<Plus className="size-4" />} onClick={() => setModal({ type: "route" })}>
-                                                新增路由
-                                            </Button>
-                                        }
-                                    >
-                                        <Table
-                                            rowKey="id"
-                                            dataSource={routeGroups}
-                                            columns={[
-                                                { title: "公开模型", dataIndex: "model", width: 180 },
-                                                {
-                                                    title: "渠道优先级与权重",
-                                                    render: (_, group) => (
-                                                        <Space direction="vertical" className="w-full" size={8}>
-                                                            {[...group.routes].sort((a, b) => a.priority - b.priority || a.id - b.id).map((row) => (
-                                                                <div key={row.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-stone-100 pb-2 last:border-0 last:pb-0 dark:border-stone-800">
-                                                                    <Space size={6} wrap>
-                                                                        <Tag>优先级 {row.priority}</Tag>
-                                                                        <span>{row.channelName} · {row.upstreamModel}</span>
-                                                                        <Tag color={row.available ? "green" : row.status === "hidden" ? "default" : "orange"}>
-                                                                            {row.available ? "可用" : row.status === "hidden" ? "已禁用" : "渠道未就绪"}
-                                                                        </Tag>
-                                                                    </Space>
-                                                                    <span className="text-xs text-stone-500">权重 {row.weight} · 同级比例 {row.weightPercent.toFixed(1)}%</span>
-                                                                    <Space size="small">
-                                                                        <Button type="link" onClick={() => setModal({ type: "route", item: row })}>编辑</Button>
-                                                                        <Button type="link" onClick={() => void toggleRoute(row)}>{row.status === "active" ? "禁用" : "启用"}</Button>
-                                                                        <Button danger type="link" onClick={() => void hide("route", row.id)}>删除</Button>
-                                                                    </Space>
-                                                                </div>
-                                                            ))}
-                                                        </Space>
-                                                    ),
-                                                },
-                                            ]}
-                                        />
-                                    </Card>
-                                </Space>
-                            ),
+                            label: "渠道管理",
+                            children: <ChannelManagement channels={channels} routes={routes} loading={loading} onAddChannel={() => setChannelEditor(null)} onEditChannel={setChannelEditor} onToggleChannel={toggleChannel} onAddRoute={() => setModal({ type: "route" })} onEditRoute={(route) => setModal({ type: "route", item: route })} onToggleRoute={toggleRoute} onDeleteRoute={(route) => hide("route", route.id)} />,
                         },
                         {
                             key: "pricing",
                             label: "定价与充值",
-                            children: (
-                                <Space direction="vertical" className="w-full" size="large">
-                                    <Card
-                                        title="模型定价"
-                                        extra={
-                                            <Button icon={<Plus className="size-4" />} onClick={() => setModal({ type: "pricing" })}>
-                                                新增定价
-                                            </Button>
-                                        }
-                                    >
-                                        <Table
-                                            rowKey="id"
-                                            dataSource={pricing}
-                                            columns={[
-                                                { title: "模型", dataIndex: "publishedModel" },
-                                                { title: "版本", dataIndex: "version" },
-                                                { title: "公式", dataIndex: "formula", render: jsonValue },
-                                                { title: "状态", dataIndex: "status" },
-                                                {
-                                                    title: "操作",
-                                                    render: (_, row) => (
-                                                        <Space>
-                                                            {row.status === "draft" && (
-                                                                <Button
-                                                                    type="link"
-                                                                    onClick={async () => {
-                                                                        await adminApi.publishPricing(row.id);
-                                                                        await load();
-                                                                    }}
-                                                                >
-                                                                    发布
-                                                                </Button>
-                                                            )}
-                                                            {row.status === "active" && (
-                                                                <Button
-                                                                    type="link"
-                                                                    onClick={async () => {
-                                                                        await adminApi.retirePricing(row.id);
-                                                                        await load();
-                                                                    }}
-                                                                >
-                                                                    停用
-                                                                </Button>
-                                                            )}
-                                                        </Space>
-                                                    ),
-                                                },
-                                            ]}
-                                        />
-                                    </Card>
-                                    <Card
-                                        title="充值套餐"
-                                        extra={
-                                            <Button icon={<Plus className="size-4" />} onClick={() => setModal({ type: "product" })}>
-                                                新增套餐
-                                            </Button>
-                                        }
-                                    >
-                                        <Table
-                                            rowKey="id"
-                                            dataSource={products}
-                                            columns={[
-                                                { title: "名称", dataIndex: "name" },
-                                                { title: "金额（分）", dataIndex: "payAmountFen" },
-                                                { title: "额度", dataIndex: "quotaAmount" },
-                                                { title: "赠送", dataIndex: "giftQuota" },
-                                                { title: "状态", dataIndex: "status" },
-                                                {
-                                                    title: "操作",
-                                                    render: (_, row) => (
-                                                        <Button type="link" onClick={() => setModal({ type: "product", item: row })}>
-                                                            编辑
-                                                        </Button>
-                                                    ),
-                                                },
-                                            ]}
-                                        />
-                                    </Card>
-                                </Space>
-                            ),
+                            children: <PricingManagement models={models} pricing={pricing} products={products} loading={loading} onEditPricing={(model, item) => setModal({ type: "pricing", item: { model, pricing: item } })} onTogglePricing={togglePricing} onEditProduct={(product) => setModal({ type: "product", item: product })} onToggleProduct={toggleProduct} />,
                         },
                         {
                             key: "operations",

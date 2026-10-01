@@ -108,6 +108,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.DELETE("/admin/models/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminDeleteModel)
 	v1.GET("/admin/channels", app.requireAdmin(), app.adminChannels)
 	v1.POST("/admin/channels/fetch-models", app.requireAdmin(), app.adminFetchChannelModels)
+	v1.POST("/admin/channels/:id/test", app.requireAdmin(), app.adminTestChannel)
 	v1.POST("/admin/channels", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateChannel)
 	v1.PUT("/admin/channels/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateChannel)
 	v1.DELETE("/admin/channels/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminDeleteChannel)
@@ -705,6 +706,24 @@ func (a *Router) adminFetchChannelModels(c *gin.Context) {
 		return
 	}
 	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminTestChannel(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道编号无效")
+		return
+	}
+	result, err := a.ChannelCatalog.TestChannel(c.Request.Context(), uint(id))
+	if errors.Is(err, channelcatalog.ErrChannelNotFound) {
+		errorJSON(c, http.StatusNotFound, "CHANNEL_NOT_FOUND", "渠道不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadGateway, "CHANNEL_TEST_FAILED", result.Message)
+		return
+	}
+	successJSON(c, http.StatusOK, result)
 }
 
 func (a *Router) adminCreateChannel(c *gin.Context) {

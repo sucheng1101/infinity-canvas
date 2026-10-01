@@ -41,6 +41,13 @@ export type AdminChannelInput = {
     sortOrder: number;
 };
 
+export type ChannelTestResult = {
+    ok: boolean;
+    latencyMs: number;
+    modelCount: number;
+    message: string;
+};
+
 export type AdminRoute = {
     id: number;
     publishedModelId: number;
@@ -113,6 +120,7 @@ export const adminApi = {
     createChannel: (body: AdminChannelInput) => request<AdminChannel>("/admin/channels", json(body)),
     updateChannel: (id: number, body: AdminChannelInput) => request<AdminChannel>(`/admin/channels/${id}`, json(body, "PUT")),
     fetchChannelModels: (body: { baseUrl: string; apiKey?: string; keyId?: number }) => request<{ items: string[] }>("/admin/channels/fetch-models", json(body)),
+    testChannel: (id: number) => request<ChannelTestResult>(`/admin/channels/${id}/test`, { method: "POST" }),
     hideChannel: (id: number) => request<{ ok: boolean }>(`/admin/channels/${id}`, { method: "DELETE" }),
     routes: () => request<{ items: AdminRoute[] }>("/admin/model-routes"),
     createRoute: (body: Record<string, unknown>) => request<AdminRoute>("/admin/model-routes", json(body)),

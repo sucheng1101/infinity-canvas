@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
 	"gorm.io/gorm"
@@ -109,7 +110,7 @@ func (s *Service) SyncFromChannels() error {
 			}
 		}
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			published = model.PublishedModel{Capability: channelModel.Capability, SourceModel: key, DisplayName: key, Status: model.PublishedModelActive, PublicConfigJSON: "{}"}
+			published = model.PublishedModel{Capability: channelModel.Capability, SourceModel: key, DisplayName: key, Status: model.PublishedModelHidden, PublicConfigJSON: "{}"}
 			if err := s.DB.Create(&published).Error; err != nil {
 				if retryErr := s.DB.Where("capability = ? AND source_model = ?", channelModel.Capability, key).First(&published).Error; retryErr != nil {
 					return err
@@ -136,12 +137,15 @@ func (s *Service) SyncFromChannels() error {
 
 func (s *Service) availableModelIDs() ([]uint, error) {
 	var ids []uint
+	now := time.Now().UTC()
 	err := s.DB.Model(&model.ModelRoute{}).
 		Select("DISTINCT model_routes.published_model_id").
 		Joins("JOIN upstream_channels ON upstream_channels.id = model_routes.channel_id").
 		Joins("JOIN upstream_channel_models ON upstream_channel_models.channel_id = model_routes.channel_id AND upstream_channel_models.name = model_routes.upstream_model").
 		Joins("JOIN upstream_channel_keys ON upstream_channel_keys.id = upstream_channel_models.channel_key_id").
+		Joins("JOIN pricing_versions ON pricing_versions.published_model_id = model_routes.published_model_id").
 		Where("model_routes.status = ? AND upstream_channels.status = ? AND upstream_channel_models.status = ? AND upstream_channel_models.channel_key_id IS NOT NULL AND upstream_channel_keys.api_key <> ''", model.ModelRouteActive, model.UpstreamChannelActive, model.ChannelModelActive).
+		Where("pricing_versions.status = ? AND pricing_versions.effective_at <= ? AND (pricing_versions.retired_at IS NULL OR pricing_versions.retired_at > ?)", model.PricingVersionActive, now, now).
 		Pluck("model_routes.published_model_id", &ids).Error
 	return ids, err
 }
