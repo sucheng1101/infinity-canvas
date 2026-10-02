@@ -1,4 +1,4 @@
-import { CreditCard, LogOut, Settings2, UserRound } from "lucide-react";
+import { CreditCard, LogOut, RadioTower, Settings2, UserRound } from "lucide-react";
 import { Button, Dropdown } from "antd";
 import { useNavigate } from "react-router-dom";
 
@@ -18,7 +18,8 @@ export function AccountMenu() {
                 items: [
                     { key: "email", label: <span className="block max-w-56 truncate text-xs text-stone-500 dark:text-stone-400">{user.username || user.email}</span>, disabled: true },
                     { type: "divider" },
-                    { key: "billing", icon: <CreditCard className="size-4" />, label: "额度与充值", onClick: () => navigate("/billing") },
+                    { key: "billing", icon: <CreditCard className="size-4" />, label: "积分与充值", onClick: () => navigate("/billing") },
+                    { key: "channels", icon: <RadioTower className="size-4" />, label: "我的渠道", onClick: () => navigate("/channels") },
                     ...(user.role === "admin" ? [{ key: "admin", icon: <Settings2 className="size-4" />, label: "运营控制台", onClick: () => navigate("/admin") }] : []),
                     { key: "logout", icon: <LogOut className="size-4" />, label: "退出登录", onClick: () => void logout().then(() => navigate("/login", { replace: true })) },
                 ],

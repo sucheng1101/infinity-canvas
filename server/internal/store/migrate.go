@@ -91,6 +91,12 @@ func migrate(db *gorm.DB) error {
 				return tx.AutoMigrate(&model.User{}, &model.QuotaLedger{}, &model.UsageLog{})
 			},
 		},
+		{
+			version: "20261002_m8_system_settings_user_channels",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.TopupProduct{}, &model.TopupOrder{}, &model.UserChannelEntitlement{}, &model.UserChannel{}, &model.SystemUpdateJob{}, &model.GenerationTask{}, &model.UsageLog{}, &model.AccessEvent{}, &model.IPBlock{})
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64

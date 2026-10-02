@@ -6,6 +6,9 @@ export type RechargeProduct = {
     payAmountFen: number;
     quotaAmount: number;
     giftQuota: number;
+    customChannelEnabled?: boolean;
+    customChannelLimit?: number;
+    customChannelDays?: number;
     status: "active" | "hidden";
     sortOrder: number;
 };
@@ -16,6 +19,9 @@ export type InvitationSelf = {
     counts: { invited: number; rewarded: number };
     rewardConfigSummary: { open: boolean; inviterQuota: number; inviteeQuota: number };
 };
+export type UserChannelModel = { name: string; capability: string; status: string };
+export type UserChannel = { id: number; name: string; provider: string; baseUrl: string; apiKeySet: boolean; apiKeyMasked?: string; models: UserChannelModel[]; status: string; lastTestedAt?: string; lastError?: string; createdAt: string };
+export type UserChannelEntitlement = { enabled: boolean; channelLimit: number; used: number; expiresAt?: string };
 export type PublishedModel = {
     id: number;
     capability: "image" | "text" | "video" | "audio" | string;
@@ -60,6 +66,11 @@ export const hostedApi = {
     quota: () => request<QuotaSummary>("/account/quota"),
     ledger: () => request<{ items: QuotaLedger[]; nextCursor: string }>("/account/ledger?limit=20"),
     products: () => request<{ items: RechargeProduct[] }>("/recharge/products"),
+    channels: () => request<{ items: UserChannel[]; entitlement: UserChannelEntitlement }>("/account/channels"),
+    createChannel: (body: Record<string, unknown>) => request<UserChannel>("/account/channels", { method: "POST", body: JSON.stringify(body) }),
+    updateChannel: (id: number, body: Record<string, unknown>) => request<UserChannel>(`/account/channels/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    deleteChannel: (id: number) => request<{ ok: boolean }>(`/account/channels/${id}`, { method: "DELETE" }),
+    testChannel: (id: number) => request<UserChannel>(`/account/channels/${id}/test`, { method: "POST" }),
     createOrder: (productId: number, paymentMethod = "alipay") =>
         request<{ order: RechargeOrder; checkout: Checkout }>("/recharge/orders", {
             method: "POST",
@@ -74,7 +85,7 @@ export const hostedApi = {
             signal,
             body: JSON.stringify({ modelId, capability, parameters, count }),
         }),
-    createGenerationTask: (input: { quoteId: string; modelId: number; capability: string; parameters: Record<string, unknown>; payload: Record<string, unknown>; idempotencyKey?: string; signal?: AbortSignal }) => {
+    createGenerationTask: (input: { quoteId: string; modelId: number; capability: string; parameters: Record<string, unknown>; payload: Record<string, unknown>; channelId?: number; channelModel?: string; idempotencyKey?: string; signal?: AbortSignal }) => {
         const { signal, ...body } = input;
         return request<HostedGenerationTask>("/generation-tasks", {
             method: "POST",

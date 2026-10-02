@@ -15,6 +15,7 @@ import (
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/generation"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
+	"github.com/sucheng1101/infinity-canvas/server/internal/userchannel"
 	"gorm.io/gorm"
 )
 
@@ -27,9 +28,10 @@ var (
 )
 
 type Service struct {
-	DB         *gorm.DB
-	Generation *generation.Service
-	Client     *http.Client
+	DB           *gorm.DB
+	Generation   *generation.Service
+	Client       *http.Client
+	UserChannels *userchannel.Service
 }
 
 type ExecuteMeta struct {
@@ -87,7 +89,7 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metad
 		return view, failure
 	}
 
-	selected, err := s.findRoute(task.PublishedModelID)
+	selected, err := s.findTaskRoute(task)
 	if err != nil {
 		return failWithLog("ROUTE_UNAVAILABLE", err)
 	}
@@ -152,7 +154,8 @@ func (s *Service) beginUsage(task model.GenerationTask, meta ExecuteMeta) uint {
 		TaskID: task.ID, RequestID: strings.TrimSpace(meta.RequestID), UserID: task.UserID,
 		PublishedModelID: task.PublishedModelID, Capability: task.Capability,
 		RequestType: meta.RequestType, ReasoningEffort: meta.ReasoningEffort,
-		Status: model.UsageLogRunning, IP: strings.TrimSpace(meta.IP), StartedAt: time.Now().UTC(),
+		BillingUnit: billingUnit(task.Capability),
+		Status:      model.UsageLogRunning, IP: strings.TrimSpace(meta.IP), StartedAt: time.Now().UTC(),
 		RequestSummaryJSON: summarizeTask(task),
 	}
 	var published model.PublishedModel
@@ -184,7 +187,7 @@ func (s *Service) finishUsage(id uint, status string, task model.GenerationTask,
 		return
 	}
 	now := time.Now().UTC()
-	updates := map[string]any{"status": status, "completed_at": now, "duration_ms": now.Sub(item.StartedAt).Milliseconds(), "charged_quota": charged, "total_tokens": totalTokens}
+	updates := map[string]any{"status": status, "completed_at": now, "duration_ms": now.Sub(item.StartedAt).Milliseconds(), "charged_quota": charged, "total_tokens": totalTokens, "billed_units": billedUnits(task, totalTokens)}
 	if code != "" {
 		updates["error_code"] = code
 	}
@@ -195,6 +198,50 @@ func (s *Service) finishUsage(id uint, status string, task model.GenerationTask,
 		updates["response_summary_json"] = summarizeResponse(response)
 	}
 	_ = s.DB.Model(&model.UsageLog{}).Where("id = ?", id).Updates(updates)
+}
+
+func billingUnit(capability string) string {
+	switch strings.ToLower(strings.TrimSpace(capability)) {
+	case "image":
+		return "image"
+	case "video":
+		return "second"
+	case "text":
+		return "token"
+	default:
+		return "request"
+	}
+}
+
+func billedUnits(task model.GenerationTask, totalTokens int64) float64 {
+	if task.Capability == "text" {
+		return float64(totalTokens)
+	}
+	var parameters map[string]any
+	_ = json.Unmarshal([]byte(task.ParametersJSON), &parameters)
+	if task.Capability == "video" {
+		return numberValue(parameters["durationSeconds"])
+	}
+	if task.Capability == "image" {
+		value := numberValue(parameters["count"])
+		if value > 0 {
+			return value
+		}
+	}
+	return 1
+}
+
+func numberValue(value any) float64 {
+	switch typed := value.(type) {
+	case float64:
+		return typed
+	case int:
+		return float64(typed)
+	case int64:
+		return float64(typed)
+	default:
+		return 0
+	}
 }
 
 func summarizeTask(task model.GenerationTask) string {
@@ -331,6 +378,21 @@ func (s *Service) findRoute(publishedModelID uint) (route, error) {
 		point -= weight
 	}
 	return available[len(available)-1], nil
+}
+
+func (s *Service) findTaskRoute(task model.GenerationTask) (route, error) {
+	if task.UserChannelID == nil || s.UserChannels == nil {
+		return s.findRoute(task.PublishedModelID)
+	}
+	custom, err := s.UserChannels.Resolve(task.UserID, *task.UserChannelID, task.UserChannelModel, task.Capability)
+	if err != nil {
+		return route{}, ErrRouteUnavailable
+	}
+	return route{
+		model:   model.ModelRoute{PublishedModelID: task.PublishedModelID, UpstreamModel: custom.Model},
+		channel: model.UpstreamChannel{ID: *task.UserChannelID, Name: custom.Name, Provider: custom.Provider, BaseURL: custom.BaseURL, Status: model.UpstreamChannelActive},
+		key:     model.UpstreamChannelKey{APIKey: custom.APIKey},
+	}, nil
 }
 
 func buildRequestBody(task model.GenerationTask, selected model.ModelRoute) (string, error) {

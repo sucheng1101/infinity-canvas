@@ -95,6 +95,24 @@ export type EmailSettings = {
     blockedDomains: string[];
 };
 
+export type SystemRelease = {
+    currentVersion: string;
+    latestVersion: string;
+    source: string;
+    sourceUrl: string;
+    changelog: string;
+    checkedAt: string;
+    hasUpdate: boolean;
+    updateJob?: { id: string; targetVersion: string; status: string; createdAt: string };
+};
+export type SecurityAccess = {
+    settings: { ipLoggingEnabled: boolean };
+    events: Array<{ id: number; userId?: number; eventType: string; ip: string; userAgent?: string; success: boolean; detail?: string; createdAt: string }>;
+    sessions: Array<{ id: string; userId: number; expiresAt: string; ip: string; userAgent?: string; createdAt: string }>;
+    blocks: Array<{ id: number; value: string; reason?: string; status: string; createdAt: string }>;
+    audits: Array<{ id: number; operatorId?: number; action: string; resourceType: string; resourceId: string; createdAt: string }>;
+};
+
 export type AdminUser = {
     id: number;
     username: string;
@@ -126,6 +144,8 @@ export type AdminUsageLog = {
     upstreamModel: string;
     requestType: string;
     reasoningEffort?: string;
+    billingUnit: string;
+    billedUnits: number;
     status: "running" | "succeeded" | "failed";
     durationMs: number;
     inputTokens: number;
@@ -197,6 +217,14 @@ export const adminApi = {
     email: () => request<EmailSettings>("/admin/email-settings"),
     saveEmail: (body: EmailSettings) => request<EmailSettings>("/admin/email-settings", json(body, "PUT")),
     testEmail: (email: string) => request<{ sent: boolean }>("/admin/email-settings/test", json({ email })),
+    systemRelease: () => request<SystemRelease>("/admin/system/releases"),
+    checkSystemRelease: () => request<SystemRelease>("/admin/system/releases/check", json({})),
+    requestSystemUpdate: (version: string) => request<SystemRelease>("/admin/system/releases/update", json({ version })),
+    securityAccess: () => request<SecurityAccess>("/admin/security/access"),
+    saveSecuritySettings: (body: SecurityAccess["settings"]) => request<SecurityAccess["settings"]>("/admin/security/access/settings", json(body, "PUT")),
+    createIPBlock: (body: { value: string; reason?: string }) => request<SecurityAccess["blocks"][number]>("/admin/security/ip-blocks", json(body)),
+    deleteIPBlock: (id: number) => request<{ ok: boolean }>(`/admin/security/ip-blocks/${id}`, { method: "DELETE" }),
+    revokeSession: (id: string) => request<{ ok: boolean }>(`/admin/security/sessions/${encodeURIComponent(id)}/revoke`, { method: "POST" }),
     users: (params: Record<string, string | number | undefined> = {}) => request<{ items: AdminUser[]; total: number; page: number; pageSize: number }>(`/admin/users?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
     user: (id: number) => request<AdminUserDetail>(`/admin/users/${id}`),
     createUser: (body: Record<string, unknown>) => request<AdminUser>("/admin/users", json(body)),

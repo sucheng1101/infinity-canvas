@@ -44,7 +44,7 @@ export function UsageLogManagement() {
                 <Card size="small"><Statistic title="调用总数" value={result.stats.total} /></Card>
                 <Card size="small"><Statistic title="成功" value={result.stats.succeeded} valueStyle={{ color: "#16a34a" }} /></Card>
                 <Card size="small"><Statistic title="失败" value={result.stats.failed} valueStyle={{ color: "#dc2626" }} /></Card>
-                <Card size="small"><Statistic title="消耗额度" value={result.stats.chargedQuota} /></Card>
+                <Card size="small"><Statistic title="消耗积分" value={result.stats.chargedQuota} /></Card>
                 <Card size="small"><Statistic title="平均耗时" value={Math.round(result.stats.averageDurationMs)} suffix="ms" /></Card>
             </div>
             <Space wrap className="mb-4 w-full">
@@ -65,13 +65,13 @@ export function UsageLogManagement() {
                     { title: "模型", render: (_, item) => <div><div className="font-medium">{item.publishedModel || "未命名模型"}</div><div className="text-xs text-stone-500">{item.upstreamModel || "-"}</div></div> },
                     { title: "渠道", render: (_, item) => item.channelName || "-" },
                     { title: "状态", dataIndex: "status", render: statusTag },
-                    { title: "Token", render: (_, item) => item.totalTokens.toLocaleString() },
+                    { title: "计费", render: (_, item) => `${item.billedUnits || 0} ${item.billingUnit || "request"}` },
                     { title: "耗时", render: (_, item) => `${item.durationMs} ms` },
                     { title: "详情", render: (_, item) => <Button type="link" onClick={() => setSelected(item)}>查看</Button> },
                 ]}
             />
             <Drawer open={Boolean(selected)} width={640} title="使用日志详情" onClose={() => setSelected(null)}>
-                {selected && <><Descriptions bordered size="small" column={2} items={[{ label: "Request ID", children: selected.requestId || "-" }, { label: "Task ID", children: selected.taskId }, { label: "用户", children: selected.username || selected.userId }, { label: "模型", children: selected.publishedModel || selected.upstreamModel }, { label: "渠道", children: selected.channelName || "-" }, { label: "状态", children: statusTag(selected.status) }, { label: "输入 Token", children: selected.inputTokens }, { label: "输出 Token", children: selected.outputTokens }, { label: "缓存 Token", children: selected.cachedTokens }, { label: "扣费额度", children: selected.chargedQuota }, { label: "IP", children: selected.ip || "-" }, { label: "错误", children: selected.errorMessage || "-" }]} /><div className="mt-5 grid gap-4 md:grid-cols-2"><Card size="small" title="请求摘要"><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selected.requestSummary || {}, null, 2)}</pre></Card><Card size="small" title="响应摘要"><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selected.responseSummary || {}, null, 2)}</pre></Card></div></>}
+                {selected && <><Descriptions bordered size="small" column={2} items={[{ label: "Request ID", children: selected.requestId || "-" }, { label: "Task ID", children: selected.taskId }, { label: "用户", children: selected.username || selected.userId }, { label: "模型", children: selected.publishedModel || selected.upstreamModel }, { label: "渠道", children: selected.channelName || "-" }, { label: "状态", children: statusTag(selected.status) }, { label: "计费单位", children: `${selected.billedUnits || 0} ${selected.billingUnit || "request"}` }, { label: "输入 Token", children: selected.inputTokens }, { label: "输出 Token", children: selected.outputTokens }, { label: "缓存 Token", children: selected.cachedTokens }, { label: "扣费积分", children: selected.chargedQuota }, { label: "IP", children: selected.ip || "-" }, { label: "错误", children: selected.errorMessage || "-" }]} /><div className="mt-5 grid gap-4 md:grid-cols-2"><Card size="small" title="请求摘要"><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selected.requestSummary || {}, null, 2)}</pre></Card><Card size="small" title="响应摘要"><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selected.responseSummary || {}, null, 2)}</pre></Card></div></>}
             </Drawer>
         </Card>
     );

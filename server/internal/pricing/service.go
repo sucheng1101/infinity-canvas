@@ -303,6 +303,7 @@ func calculate(formula, parameters map[string]any, count int) (int64, error) {
 	if !ok || unit < 0 {
 		return 0, ErrInvalidPricing
 	}
+	base := numberOr(formula["baseAmount"], 0)
 	var units float64 = float64(count)
 	switch kind {
 	case "fixed":
@@ -312,11 +313,17 @@ func calculate(formula, parameters map[string]any, count int) (int64, error) {
 	case "per_second":
 		units = numberOr(parameters["durationSeconds"], 0) * float64(count)
 	case "per_token":
-		units = (numberOr(parameters["inputTokens"], 0) + numberOr(parameters["outputTokens"], 0)) * float64(count)
+		inputTokens := numberOr(parameters["inputTokens"], 0)
+		outputTokens := numberOr(parameters["outputTokens"], 0)
+		cachedTokens := numberOr(parameters["cachedTokens"], 0)
+		inputUnit := numberOr(formula["inputTokenAmount"], unit)
+		outputUnit := numberOr(formula["outputTokenAmount"], unit)
+		cachedUnit := numberOr(formula["cachedTokenAmount"], 0)
+		base += (inputTokens*inputUnit + outputTokens*outputUnit + cachedTokens*cachedUnit) * float64(count)
+		units = 0
 	default:
 		return 0, ErrInvalidPricing
 	}
-	base := numberOr(formula["baseAmount"], 0)
 	amount := base + unit*units
 	if minimum := numberOr(formula["minimumAmount"], 0); amount < minimum {
 		amount = minimum

@@ -17,6 +17,8 @@ import PromptsPage from "@/pages/prompts";
 import WorkbenchPage from "@/pages/workbench";
 import ProjectsPage from "@/pages/projects";
 import AdminPage from "@/pages/admin";
+import AdminSettingsPage from "@/pages/admin/settings";
+import ChannelsPage from "@/pages/channels";
 
 const routerBase = import.meta.env.BASE_URL.replace(/\/$/, "") || "/";
 
@@ -51,7 +53,9 @@ export const router = createBrowserRouter([
                     { path: "/projects/:id", element: <EcommerceCanvasProjectPage /> },
                     { path: "/assets", element: <AssetsPage /> },
                     { path: "/billing", element: <BillingPage /> },
+                    { path: "/channels", element: <ChannelsPage /> },
                     { path: "/admin", element: <AdminPage /> },
+                    { path: "/admin/settings", element: <AdminSettingsPage /> },
                     { path: "/prompts", element: <PromptsPage /> },
                     { path: "/canvas", element: <CanvasPage /> },
                     { path: "/canvas/:id", element: <CanvasProjectPage /> },

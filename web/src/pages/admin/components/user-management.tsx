@@ -77,9 +77,9 @@ export function UserManagement({ loading: parentLoading }: Props) {
             await adminApi.adjustUserQuota(quotaUser.id, values);
             setQuotaUser(null);
             await load();
-            message.success("额度已调整");
+            message.success("积分已调整");
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "额度调整失败");
+            message.error(error instanceof Error ? error.message : "积分调整失败");
         }
     };
 
@@ -123,9 +123,9 @@ export function UserManagement({ loading: parentLoading }: Props) {
                     { title: "用户", render: (_, user) => <Space><UserRound className="size-4 text-stone-400" /><div><div className="font-medium">{user.displayName || user.username}</div><div className="text-xs text-stone-500">{user.email}</div></div></Space> },
                     { title: "分组", dataIndex: "groupName", render: (value) => value || <span className="text-stone-400">未分组</span> },
                     { title: "角色", dataIndex: "role", render: (value) => value === "admin" ? <Tag color="orange" icon={<ShieldCheck className="size-3" />}>管理员</Tag> : <Tag>普通用户</Tag> },
-                    { title: "额度", render: (_, user) => <span>{user.quota.available.toLocaleString()}</span> },
+                    { title: "积分", render: (_, user) => <span>{user.quota.available.toLocaleString()}</span> },
                     { title: "状态", render: (_, user) => <Switch size="small" checked={user.status === "active"} checkedChildren="开" unCheckedChildren="关" onChange={(checked) => void changeStatus(user, checked)} /> },
-                    { title: "操作", render: (_, user) => <Space size="small"><Button type="link" onClick={() => void openDetail(user)}>详情</Button><Button type="link" onClick={() => setEditor({ mode: "edit", user })}>编辑</Button><Button type="link" onClick={() => setQuotaUser(user)}>额度</Button><Button type="link" onClick={() => setPasswordUser(user)}>重置密码</Button></Space> },
+                    { title: "操作", render: (_, user) => <Space size="small"><Button type="link" onClick={() => void openDetail(user)}>详情</Button><Button type="link" onClick={() => setEditor({ mode: "edit", user })}>编辑</Button><Button type="link" onClick={() => setQuotaUser(user)}>积分</Button><Button type="link" onClick={() => setPasswordUser(user)}>重置密码</Button></Space> },
                 ]}
             />
 
@@ -141,14 +141,14 @@ export function UserManagement({ loading: parentLoading }: Props) {
                 </Form>
             </Drawer>}
 
-            {quotaUser && <Drawer open width={400} title={`调整额度 · ${quotaUser.username}`} onClose={() => setQuotaUser(null)}>
-                <Form layout="vertical" onFinish={adjustQuota}><Form.Item name="delta" label="额度变动（负数为扣减）" rules={[{ required: true }]}><InputNumber className="w-full" /></Form.Item><Form.Item name="reason" label="调整原因" rules={[{ required: true }]}><Input.TextArea rows={4} /></Form.Item><Button type="primary" htmlType="submit" block>提交调整</Button></Form>
+            {quotaUser && <Drawer open width={400} title={`调整积分 · ${quotaUser.username}`} onClose={() => setQuotaUser(null)}>
+                <Form layout="vertical" onFinish={adjustQuota}><Form.Item name="delta" label="积分变动（负数为扣减）" rules={[{ required: true }]}><InputNumber className="w-full" /></Form.Item><Form.Item name="reason" label="调整原因" rules={[{ required: true }]}><Input.TextArea rows={4} /></Form.Item><Button type="primary" htmlType="submit" block>提交调整</Button></Form>
             </Drawer>}
 
             {passwordUser && <Drawer open width={400} title={`重置密码 · ${passwordUser.username}`} onClose={() => setPasswordUser(null)}><Form layout="vertical" onFinish={resetPassword}><Form.Item name="newPassword" label="新密码" extra="留空将自动生成临时密码"><Input.Password /></Form.Item><Button type="primary" htmlType="submit" block>重置密码</Button></Form></Drawer>}
 
             <Drawer open={Boolean(selected)} width={560} title="用户详情" onClose={() => { setSelected(null); setDetail(null); }}>
-                {detail && <><Descriptions bordered size="small" column={1} items={[{ label: "用户名", children: detail.user.username }, { label: "邮箱", children: detail.user.email }, { label: "状态", children: statusLabels[detail.user.status] }, { label: "可用额度", children: detail.user.quota.available.toLocaleString() }, { label: "创建时间", children: detail.user.createdAt }]} /><div className="mt-6 font-medium">最近额度流水</div><Table className="mt-2" size="small" rowKey="id" dataSource={detail.ledger} pagination={false} columns={[{ title: "变动", dataIndex: "delta" }, { title: "余额", dataIndex: "balanceAfter" }, { title: "原因", dataIndex: "reason" }, { title: "时间", dataIndex: "createdAt" }]} /><div className="mt-6 font-medium">最近使用记录</div><Table className="mt-2" size="small" rowKey="id" dataSource={detail.usage} pagination={false} columns={[{ title: "模型", dataIndex: "publishedModel" }, { title: "状态", dataIndex: "status" }, { title: "额度", dataIndex: "chargedQuota" }, { title: "时间", dataIndex: "startedAt" }]} /></>}
+                {detail && <><Descriptions bordered size="small" column={1} items={[{ label: "用户名", children: detail.user.username }, { label: "邮箱", children: detail.user.email }, { label: "状态", children: statusLabels[detail.user.status] }, { label: "可用积分", children: detail.user.quota.available.toLocaleString() }, { label: "创建时间", children: detail.user.createdAt }]} /><div className="mt-6 font-medium">最近积分流水</div><Table className="mt-2" size="small" rowKey="id" dataSource={detail.ledger} pagination={false} columns={[{ title: "变动", dataIndex: "delta" }, { title: "余额", dataIndex: "balanceAfter" }, { title: "原因", dataIndex: "reason" }, { title: "时间", dataIndex: "createdAt" }]} /><div className="mt-6 font-medium">最近使用记录</div><Table className="mt-2" size="small" rowKey="id" dataSource={detail.usage} pagination={false} columns={[{ title: "模型", dataIndex: "publishedModel" }, { title: "状态", dataIndex: "status" }, { title: "积分", dataIndex: "chargedQuota" }, { title: "时间", dataIndex: "startedAt" }]} /></>}
             </Drawer>
         </Card>
     );

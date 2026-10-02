@@ -51,6 +51,7 @@ type Config struct {
 	EpayKey                       string
 	EpayPayMethods                []string
 	EpayCallbackURL               string
+	ChannelEncryptionKey          string
 }
 
 // EmailSettings is the administrator-managed email and registration policy.
@@ -117,6 +118,7 @@ func Load() Config {
 		EpayKey:                       os.Getenv("EPAY_KEY"),
 		EpayPayMethods:                envList("EPAY_PAY_METHODS", []string{"alipay", "wxpay"}),
 		EpayCallbackURL:               env("EPAY_CALLBACK_URL", "http://localhost:1011"),
+		ChannelEncryptionKey:          env("CHANNEL_ENCRYPTION_KEY", "infinite-canvas-local-channel-key"),
 	}
 }
 

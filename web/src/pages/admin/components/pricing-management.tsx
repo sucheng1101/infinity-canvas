@@ -35,7 +35,7 @@ export function PricingManagement({ models, pricing, products, loading, onEditPr
                     columns={[
                         { title: "模型", render: (_, row) => <div><div className="font-medium">{row.model.displayName}</div><Tag className="mt-1">{capabilityLabels[row.model.capability] || row.model.capability}</Tag></div> },
                         { title: "计费方式", render: (_, row) => row.active || row.latest ? pricingTypeLabels[String((row.active || row.latest)?.formula.type)] || String((row.active || row.latest)?.formula.type || "-") : <span className="text-stone-400">未设置</span> },
-                        { title: "单价（额度）", render: (_, row) => row.active || row.latest ? Number((row.active || row.latest)?.formula.unitAmount || 0).toLocaleString() : "-" },
+                        { title: "单价（积分）", render: (_, row) => row.active || row.latest ? Number((row.active || row.latest)?.formula.unitAmount || 0).toLocaleString() : "-" },
                         { title: "版本", render: (_, row) => row.active || row.latest ? `v${(row.active || row.latest)?.version}` : "-" },
                         { title: "状态", render: (_, row) => row.active ? <Tag color="success">已启用</Tag> : row.latest?.status === "draft" ? <Tag color="warning">草稿</Tag> : <Tag>未定价</Tag> },
                         {
@@ -58,8 +58,8 @@ export function PricingManagement({ models, pricing, products, loading, onEditPr
                     columns={[
                         { title: "套餐名称", dataIndex: "name", render: (value) => <span className="font-medium">{value}</span> },
                         { title: "支付金额", dataIndex: "payAmountFen", render: (value) => `¥${(value / 100).toFixed(2)}` },
-                        { title: "到账额度", dataIndex: "quotaAmount", render: (value) => Number(value).toLocaleString() },
-                        { title: "赠送额度", dataIndex: "giftQuota", render: (value) => Number(value).toLocaleString() },
+                        { title: "到账积分", dataIndex: "quotaAmount", render: (value) => Number(value).toLocaleString() },
+                        { title: "赠送积分", dataIndex: "giftQuota", render: (value) => Number(value).toLocaleString() },
                         { title: "排序", dataIndex: "sortOrder" },
                         { title: "启用", width: 110, render: (_, product) => <Switch checked={product.status === "active"} checkedChildren="开" unCheckedChildren="关" onChange={(checked) => void onToggleProduct(product, checked)} /> },
                         { title: "操作", width: 100, render: (_, product) => <Button type="link" icon={<Pencil className="size-3.5" />} onClick={() => onEditProduct(product)}>编辑</Button> },

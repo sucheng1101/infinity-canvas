@@ -19,7 +19,8 @@ let modelCache: { expiresAt: number; items: PublishedModel[] } | null = null;
 
 export async function executeHostedGeneration(input: HostedRequest): Promise<HostedOutput> {
     if (input.signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    const model = await resolvePublishedModel(input.capability, input.preferredModel, input.signal);
+    const resolved = await resolvePublishedModel(input.capability, input.preferredModel, input.signal);
+    const model = resolved.model;
     const parameters = input.parameters || {};
     const quote = await hostedApi.quote(model.id, input.capability, parameters, Math.max(1, input.count || 1), input.signal);
     const task = await hostedApi.createGenerationTask({
@@ -28,6 +29,8 @@ export async function executeHostedGeneration(input: HostedRequest): Promise<Hos
         capability: input.capability,
         parameters,
         payload: input.payload,
+        channelId: resolved.channelId,
+        channelModel: resolved.channelModel,
         signal: input.signal,
     });
     const result = await hostedApi.executeGenerationTask(task.id, input.signal);
@@ -100,7 +103,8 @@ export async function hostedVideo(config: AiConfig, prompt: string, references: 
 
 /** Creates the hosted video task only; generation is driven by polling so the server task id can survive a refresh. */
 export async function createHostedVideoTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], signal?: AbortSignal) {
-    const model = await resolvePublishedModel("video", config.model || config.videoModel, signal);
+    const resolved = await resolvePublishedModel("video", config.model || config.videoModel, signal);
+    const model = resolved.model;
     const images = await Promise.all(references.map((reference) => imageToDataUrl(reference)));
     const parameters = { durationSeconds: Number(config.videoSeconds) || 6 };
     const quote = await hostedApi.quote(model.id, "video", parameters, 1, signal);
@@ -117,6 +121,8 @@ export async function createHostedVideoTask(config: AiConfig, prompt: string, re
             generate_audio: config.videoGenerateAudio === "true",
             ...(images.length ? { images } : {}),
         },
+        channelId: resolved.channelId,
+        channelModel: resolved.channelModel,
         signal,
     });
     return { id: task.id, model: model.displayName };
@@ -133,17 +139,29 @@ function readVideo(output: HostedOutput) {
     return binary ? { blob: binary } : { url: readUrl(output), mimeType: "video/mp4" };
 }
 
-async function resolvePublishedModel(capability: HostedRequest["capability"], preferred?: string, signal?: AbortSignal) {
+async function resolvePublishedModel(capability: HostedRequest["capability"], preferred?: string, signal?: AbortSignal): Promise<{ model: PublishedModel; channelId?: number; channelModel?: string }> {
     const now = Date.now();
     if (!modelCache || modelCache.expiresAt < now) {
         modelCache = { expiresAt: now + 30_000, items: (await hostedApi.models(undefined, signal)).items };
     }
     const candidates = modelCache.items.filter((item) => item.capability === capability);
+    const custom = preferred?.match(/^user-channel:(\d+)::(.+)$/);
+    if (custom) {
+        const channelId = Number(custom[1]);
+        const channelModel = custom[2].trim();
+        const channels = (await hostedApi.channels()).items;
+        const channel = channels.find((item) => item.id === channelId);
+        const model = channel?.models.find((item) => item.name === channelModel && item.capability === capability && item.status !== "hidden");
+        if (model) {
+            const published = candidates[0];
+            if (published) return { model: published, channelId, channelModel };
+        }
+    }
     const normalized = preferred?.split("::").pop()?.trim().toLowerCase();
     const exact = candidates.find((item) => item.displayName.toLowerCase() === normalized);
     const selected = exact || candidates[0];
     if (!selected) throw new Error(`管理员暂未发布${capability}模型`);
-    return selected;
+    return { model: selected };
 }
 
 function readImages(output: HostedOutput) {

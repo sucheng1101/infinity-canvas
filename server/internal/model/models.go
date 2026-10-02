@@ -119,15 +119,18 @@ const (
 )
 
 type TopupProduct struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	Name         string    `gorm:"size:128;not null" json:"name"`
-	PayAmountFen int64     `gorm:"not null" json:"payAmountFen"`
-	QuotaAmount  int64     `gorm:"not null" json:"quotaAmount"`
-	GiftQuota    int64     `gorm:"not null;default:0" json:"giftQuota"`
-	Status       string    `gorm:"size:32;index;not null" json:"status"`
-	SortOrder    int       `gorm:"not null;default:0" json:"sortOrder"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID                   uint      `gorm:"primaryKey" json:"id"`
+	Name                 string    `gorm:"size:128;not null" json:"name"`
+	PayAmountFen         int64     `gorm:"not null" json:"payAmountFen"`
+	QuotaAmount          int64     `gorm:"not null" json:"quotaAmount"`
+	GiftQuota            int64     `gorm:"not null;default:0" json:"giftQuota"`
+	CustomChannelEnabled bool      `gorm:"not null;default:false" json:"customChannelEnabled"`
+	CustomChannelLimit   int       `gorm:"not null;default:0" json:"customChannelLimit"`
+	CustomChannelDays    int       `gorm:"not null;default:0" json:"customChannelDays"`
+	Status               string    `gorm:"size:32;index;not null" json:"status"`
+	SortOrder            int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
 }
 
 type TopupOrder struct {
@@ -148,6 +151,37 @@ type TopupOrder struct {
 	CreditedAt      *time.Time `json:"creditedAt,omitempty"`
 	CreatedAt       time.Time  `json:"createdAt"`
 	UpdatedAt       time.Time  `json:"updatedAt"`
+}
+
+type UserChannelEntitlement struct {
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	UserID        uint       `gorm:"index;not null" json:"userId"`
+	SourceOrderID uint       `gorm:"index;not null" json:"sourceOrderId"`
+	ChannelLimit  int        `gorm:"not null;default:0" json:"channelLimit"`
+	ExpiresAt     *time.Time `gorm:"index" json:"expiresAt,omitempty"`
+	Status        string     `gorm:"size:32;index;not null" json:"status"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	UpdatedAt     time.Time  `json:"updatedAt"`
+}
+
+const (
+	UserChannelActive = "active"
+	UserChannelHidden = "hidden"
+)
+
+type UserChannel struct {
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	UserID       uint       `gorm:"index;not null" json:"userId"`
+	Name         string     `gorm:"size:128;not null" json:"name"`
+	Provider     string     `gorm:"size:64;not null" json:"provider"`
+	BaseURL      string     `gorm:"size:512;not null" json:"baseUrl"`
+	APIKeyCipher string     `gorm:"size:2048;not null" json:"-"`
+	ModelsJSON   string     `gorm:"type:text;not null" json:"-"`
+	Status       string     `gorm:"size:32;index;not null" json:"status"`
+	LastTestedAt *time.Time `json:"lastTestedAt,omitempty"`
+	LastError    string     `gorm:"size:512" json:"lastError,omitempty"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 
 type PaymentEvent struct {
@@ -297,6 +331,8 @@ type GenerationTask struct {
 	QuoteID          string     `gorm:"size:36;index;not null" json:"quoteId"`
 	PublishedModelID uint       `gorm:"index;not null" json:"publishedModelId"`
 	Capability       string     `gorm:"size:32;index;not null" json:"capability"`
+	UserChannelID    *uint      `gorm:"index" json:"userChannelId,omitempty"`
+	UserChannelModel string     `gorm:"size:128" json:"userChannelModel,omitempty"`
 	ParametersJSON   string     `gorm:"type:text;not null" json:"-"`
 	PayloadJSON      string     `gorm:"type:text;not null" json:"-"`
 	Status           string     `gorm:"size:32;index;not null" json:"status"`
@@ -328,6 +364,8 @@ type UsageLog struct {
 	UpstreamModel       string     `gorm:"size:128;index" json:"upstreamModel"`
 	RequestType         string     `gorm:"size:32;index" json:"requestType"`
 	ReasoningEffort     string     `gorm:"size:32" json:"reasoningEffort,omitempty"`
+	BillingUnit         string     `gorm:"size:32;index" json:"billingUnit"`
+	BilledUnits         float64    `json:"billedUnits"`
 	Status              string     `gorm:"size:32;index;not null" json:"status"`
 	DurationMs          int64      `json:"durationMs"`
 	InputTokens         int64      `json:"inputTokens"`
@@ -395,6 +433,43 @@ type AuditLog struct {
 	RequestID    string    `gorm:"size:128;index" json:"requestId"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
+
+type SystemUpdateJob struct {
+	ID            string     `gorm:"size:36;primaryKey" json:"id"`
+	TargetVersion string     `gorm:"size:32;index;not null" json:"targetVersion"`
+	Source        string     `gorm:"size:64;not null" json:"source"`
+	Status        string     `gorm:"size:32;index;not null" json:"status"`
+	ErrorMessage  string     `gorm:"size:1000" json:"errorMessage,omitempty"`
+	RequestedBy   uint       `gorm:"index;not null" json:"requestedBy"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time `json:"completedAt,omitempty"`
+}
+
+type AccessEvent struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    *uint     `gorm:"index" json:"userId,omitempty"`
+	EventType string    `gorm:"size:64;index;not null" json:"eventType"`
+	IP        string    `gorm:"size:64;index" json:"ip"`
+	UserAgent string    `gorm:"size:512" json:"userAgent,omitempty"`
+	Success   bool      `gorm:"not null;default:true" json:"success"`
+	Detail    string    `gorm:"size:512" json:"detail,omitempty"`
+	CreatedAt time.Time `gorm:"index" json:"createdAt"`
+}
+
+type IPBlock struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Value     string    `gorm:"size:128;uniqueIndex;not null" json:"value"`
+	Reason    string    `gorm:"size:256" json:"reason,omitempty"`
+	Status    string    `gorm:"size:32;index;not null" json:"status"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+const (
+	IPBlockActive = "active"
+	IPBlockHidden = "hidden"
+)
 
 // RecordAudit appends an administrator audit entry. It runs on the caller's
 // transaction so the trail and the change it describes commit together.

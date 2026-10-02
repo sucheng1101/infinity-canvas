@@ -1,7 +1,7 @@
 import { App, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag } from "antd";
 import { Activity, Boxes, CircleDollarSign, LayoutDashboard, Mail, RefreshCw, Route, Save, Settings2, SlidersHorizontal, Users, ScrollText, WalletCards } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 
 import { adminApi, type AdminChannel, type AdminRoute, type EmailSettings, type InvitationSettings, type PaymentSettings, type PricingVersion } from "@/services/api/admin";
 import type { PublishedModel, RechargeProduct } from "@/services/api/hosted";
@@ -17,6 +17,7 @@ const statusOptions = [
     { value: "hidden", label: "隐藏" },
 ];
 const jsonValue = (value: unknown) => JSON.stringify(value || {});
+const recommendedPricingType = (capability?: string) => capability === "image" ? "per_unit" : capability === "video" ? "per_second" : capability === "text" ? "per_token" : "fixed";
 
 function RouteEditorFields({ channels, models }: { channels: AdminChannel[]; models: PublishedModel[] }) {
     const form = Form.useFormInstance();
@@ -49,6 +50,7 @@ function RouteEditorFields({ channels, models }: { channels: AdminChannel[]; mod
 
 export default function AdminPage() {
     const user = useAuthStore((state) => state.user);
+    const navigate = useNavigate();
     const { message } = App.useApp();
     const [models, setModels] = useState<PublishedModel[]>([]);
     const [channels, setChannels] = useState<AdminChannel[]>([]);
@@ -115,6 +117,9 @@ export default function AdminPage() {
                         unitAmount: values.unitAmount,
                         ...(values.baseAmount ? { baseAmount: values.baseAmount } : {}),
                         ...(values.minimumAmount ? { minimumAmount: values.minimumAmount } : {}),
+                        ...(values.inputTokenAmount ? { inputTokenAmount: values.inputTokenAmount } : {}),
+                        ...(values.outputTokenAmount ? { outputTokenAmount: values.outputTokenAmount } : {}),
+                        ...(values.cachedTokenAmount ? { cachedTokenAmount: values.cachedTokenAmount } : {}),
                     },
                 });
                 if (values.enabled) await adminApi.publishPricing(created.id);
@@ -124,8 +129,11 @@ export default function AdminPage() {
                     {
                         name: values.name,
                         payAmountFen: Math.round(Number(values.payAmountYuan) * 100),
-                        quotaAmount: values.quotaAmount,
+                        quotaAmount: Math.round(Number(values.payAmountYuan) * 100),
                         giftQuota: values.giftQuota || 0,
+                        customChannelEnabled: Boolean(values.customChannelEnabled),
+                        customChannelLimit: Number(values.customChannelLimit || 0),
+                        customChannelDays: Number(values.customChannelDays || 0),
                         status: values.enabled ? "active" : "hidden",
                         sortOrder: values.sortOrder || 0,
                     },
@@ -249,17 +257,20 @@ export default function AdminPage() {
                   : type === "pricing"
                     ? {
                           publishedModelId: item?.model?.id,
-                          pricingType: item?.pricing?.formula?.type || "fixed",
+                          pricingType: item?.pricing?.formula?.type || recommendedPricingType(item?.model?.capability),
                           unitAmount: Number(item?.pricing?.formula?.unitAmount || 1),
                           baseAmount: Number(item?.pricing?.formula?.baseAmount || 0),
                           minimumAmount: Number(item?.pricing?.formula?.minimumAmount || 0),
+                          inputTokenAmount: Number(item?.pricing?.formula?.inputTokenAmount || 0),
+                          outputTokenAmount: Number(item?.pricing?.formula?.outputTokenAmount || 0),
+                          cachedTokenAmount: Number(item?.pricing?.formula?.cachedTokenAmount || 0),
                           enabled: item?.pricing ? item.pricing.status === "active" : true,
                       }
                     : type === "product"
-                      ? { ...item, payAmountYuan: item ? item.payAmountFen / 100 : undefined, enabled: item ? item.status === "active" : true }
+                      ? { ...item, payAmountYuan: item ? item.payAmountFen / 100 : undefined, enabled: item ? item.status === "active" : true, customChannelEnabled: item?.customChannelEnabled || false, customChannelLimit: item?.customChannelLimit || 0, customChannelDays: item?.customChannelDays || 0 }
                       : {};
         return (
-            <Modal open onCancel={() => setModal(undefined)} title={type === "model" ? "模型" : type === "route" ? "模型渠道调度" : type === "pricing" ? "新增定价" : type === "product" ? "充值套餐" : "额度调整"} footer={null}>
+            <Modal open onCancel={() => setModal(undefined)} title={type === "model" ? "模型" : type === "route" ? "模型渠道调度" : type === "pricing" ? "新增定价" : type === "product" ? "充值套餐" : "积分调整"} footer={null}>
                 <Form layout="vertical" initialValues={initial} onFinish={save}>
                     {type === "model" && (
                         <>
@@ -305,17 +316,19 @@ export default function AdminPage() {
                             <Form.Item name="pricingType" label="计费方式" rules={[{ required: true }]}>
                                 <Select options={[{ value: "fixed", label: "固定价格（每次请求）" }, { value: "per_unit", label: "按生成数量" }, { value: "per_second", label: "按秒" }, { value: "per_token", label: "按 Token" }]} />
                             </Form.Item>
-                            <Form.Item name="unitAmount" label="单价（额度）" rules={[{ required: true, message: "请填写单价" }]}>
+                            <Form.Item name="unitAmount" label="单价（积分）" rules={[{ required: true, message: "请填写单价" }]}>
                                 <InputNumber className="w-full" min={1} precision={0} />
                             </Form.Item>
                             <div className="grid grid-cols-2 gap-4">
-                                <Form.Item name="baseAmount" label="基础额度">
+                                <Form.Item name="baseAmount" label="基础积分">
                                     <InputNumber className="w-full" min={0} precision={0} />
                                 </Form.Item>
-                                <Form.Item name="minimumAmount" label="最低消费额度">
+                                <Form.Item name="minimumAmount" label="最低消费积分">
                                     <InputNumber className="w-full" min={0} precision={0} />
                                 </Form.Item>
                             </div>
+                            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-500">建议：生图按张计费，视频按秒计费，文本按 Token 计费。文本可分别填写输入、输出和缓存 Token 单价。</div>
+                            <div className="grid grid-cols-3 gap-3"><Form.Item name="inputTokenAmount" label="输入 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item><Form.Item name="outputTokenAmount" label="输出 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item><Form.Item name="cachedTokenAmount" label="缓存 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item></div>
                             <Form.Item name="enabled" label="保存后启用" valuePropName="checked">
                                 <Switch checkedChildren="开" unCheckedChildren="关" />
                             </Form.Item>
@@ -329,12 +342,12 @@ export default function AdminPage() {
                             <Form.Item name="payAmountYuan" label="支付金额（元）" rules={[{ required: true }]}>
                                 <InputNumber className="w-full" min={1} precision={2} prefix="¥" />
                             </Form.Item>
-                            <Form.Item name="quotaAmount" label="额度" rules={[{ required: true }]}>
-                                <InputNumber min={1} />
-                            </Form.Item>
-                            <Form.Item name="giftQuota" label="赠送额度">
+                            <Form.Item label="基础积分"><Input disabled value="按 1 元 = 100 积分自动计算" /></Form.Item>
+                            <Form.Item name="giftQuota" label="赠送积分">
                                 <InputNumber min={0} />
                             </Form.Item>
+                            <Form.Item name="customChannelEnabled" valuePropName="checked" label="自定义渠道权益"><Switch checkedChildren="开启" unCheckedChildren="关闭" /></Form.Item>
+                            <div className="grid grid-cols-2 gap-4"><Form.Item name="customChannelLimit" label="渠道数量"><InputNumber className="w-full" min={0} /></Form.Item><Form.Item name="customChannelDays" label="权益天数"><InputNumber className="w-full" min={0} placeholder="0 表示长期" /></Form.Item></div>
                             <Form.Item name="enabled" label="启用套餐" valuePropName="checked">
                                 <Switch checkedChildren="开" unCheckedChildren="关" />
                             </Form.Item>
@@ -348,7 +361,7 @@ export default function AdminPage() {
                             <Form.Item name="userId" label="用户 ID" rules={[{ required: true }]}>
                                 <InputNumber min={1} />
                             </Form.Item>
-                            <Form.Item name="delta" label="额度变动（负数为扣减）" rules={[{ required: true }]}>
+                            <Form.Item name="delta" label="积分变动（负数为扣减）" rules={[{ required: true }]}>
                                 <InputNumber />
                             </Form.Item>
                             <Form.Item name="source" label="来源">
@@ -401,21 +414,19 @@ export default function AdminPage() {
     };
 
     return (
-        <main className="h-full overflow-y-auto bg-[#f7f7f5] px-5 py-8 text-stone-950 dark:bg-[#11110f] dark:text-stone-100 sm:px-8">
-            <div className="mx-auto max-w-7xl">
-                <div className="mb-6 flex items-center justify-between">
+        <main className="h-full overflow-y-auto bg-[#f7f7f5] px-4 py-4 text-stone-950 dark:bg-[#11110f] dark:text-stone-100 sm:px-6">
+            <div className="w-full">
+                <div className="mb-4 flex items-center justify-between border-b border-stone-200 pb-4 dark:border-stone-800">
                     <div>
-                        <div className="mb-2 text-xs font-medium uppercase tracking-[.24em] text-orange-600">ADMIN CONSOLE</div>
-                        <h1 className="text-3xl font-semibold tracking-[-.04em]">运营控制台</h1>
-                        <p className="mt-2 text-sm text-stone-500">统一维护模型、渠道、定价与账户额度。</p>
+                        <h1 className="text-xl font-semibold tracking-[-.03em]">运营控制台</h1>
+                        <p className="mt-1 text-xs text-stone-500">模型、渠道、计费和账户管理</p>
                     </div>
                     <Button icon={<RefreshCw className="size-4" />} loading={loading} onClick={() => void load()}>
                         刷新
                     </Button>
                 </div>
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-start">
-                    <aside className="w-full shrink-0 rounded-2xl border border-stone-200 bg-white/80 p-3 dark:border-stone-800 dark:bg-stone-950/70 lg:sticky lg:top-6 lg:w-56">
-                        <div className="mb-3 px-3 text-xs font-semibold uppercase tracking-[.18em] text-stone-400">运营导航</div>
+                    <aside className="w-full shrink-0 rounded-2xl border border-stone-200 bg-white/80 p-3 dark:border-stone-800 dark:bg-stone-950/70 lg:sticky lg:top-4 lg:w-60">
                         <div className="space-y-5">
                             <div>
                                 <div className="mb-1 px-3 text-xs font-medium text-stone-400">运营中心</div>
@@ -451,8 +462,9 @@ export default function AdminPage() {
                                     {[
                                         { key: "operations", label: "账户与支付", icon: WalletCards },
                                         { key: "email", label: "邮箱与注册", icon: Mail },
+                                        { key: "settings", label: "系统设置", icon: Settings2 },
                                     ].map(({ key, label, icon: Icon }) => (
-                                        <Button key={key} type={activeSection === key ? "primary" : "text"} block className="!justify-start" icon={<Icon className="size-4" />} onClick={() => setActiveSection(key)}>
+                                        <Button key={key} type={activeSection === key ? "primary" : "text"} block className="!justify-start" icon={<Icon className="size-4" />} onClick={() => key === "settings" ? navigate("/admin/settings") : setActiveSection(key)}>
                                             {label}
                                         </Button>
                                     ))}
@@ -522,7 +534,7 @@ export default function AdminPage() {
                                                 title: "定价",
                                                 render: (_, model) => {
                                                     const active = pricing.find((item) => item.publishedModelId === model.id && item.status === "active");
-                                                    return active ? <Tag color="success">{Number(active.formula.unitAmount || 0)} 额度</Tag> : <Tag color="warning">未启用</Tag>;
+                                                    return active ? <Tag color="success">{Number(active.formula.unitAmount || 0)} 积分</Tag> : <Tag color="warning">未启用</Tag>;
                                                 },
                                             },
                                             {
@@ -572,10 +584,10 @@ export default function AdminPage() {
                                             <Form.Item name="open" label="开启" valuePropName="checked">
                                                 <Switch />
                                             </Form.Item>
-                                            <Form.Item name="inviterQuota" label="邀请人额度">
+                                            <Form.Item name="inviterQuota" label="邀请人积分">
                                                 <InputNumber min={0} />
                                             </Form.Item>
-                                            <Form.Item name="inviteeQuota" label="新用户额度">
+                                            <Form.Item name="inviteeQuota" label="新用户积分">
                                                 <InputNumber min={0} />
                                             </Form.Item>
                                             <Button type="primary" htmlType="submit">
@@ -609,14 +621,14 @@ export default function AdminPage() {
                                         </Form>
                                     </Card>
                                     <Card
-                                        title="额度调整"
+                                        title="积分调整"
                                         extra={
                                             <Button type="primary" onClick={() => setModal({ type: "quota" })}>
-                                                调整用户额度
+                                                调整用户积分
                                             </Button>
                                         }
                                     >
-                                        <p className="text-sm text-stone-500">使用用户 ID 直接增加或扣减额度，所有操作都会写入额度流水。</p>
+                                        <p className="text-sm text-stone-500">使用用户 ID 直接增加或扣减积分，所有操作都会写入积分流水。</p>
                                     </Card>
                                 </Space>
                             ),

@@ -32,6 +32,8 @@ type CreateInput struct {
 	Capability     string         `json:"capability"`
 	Parameters     map[string]any `json:"parameters"`
 	Payload        map[string]any `json:"payload"`
+	ChannelID      uint           `json:"channelId"`
+	ChannelModel   string         `json:"channelModel"`
 	IdempotencyKey string         `json:"idempotencyKey"`
 }
 
@@ -88,6 +90,14 @@ func (s *Service) Create(userID uint, input CreateInput) (View, error) {
 			Capability: quote.Capability, ParametersJSON: string(parameters), PayloadJSON: string(payload),
 			Status: model.GenerationTaskQueued, ReservedAmount: quote.Amount, IdempotencyKey: input.IdempotencyKey,
 		}
+		if input.ChannelID > 0 {
+			channelModel := strings.TrimSpace(input.ChannelModel)
+			if channelModel == "" || !s.userChannelModelAvailable(tx, userID, input.ChannelID, channelModel, quote.Capability) {
+				return ErrInvalidTask
+			}
+			task.UserChannelID = &input.ChannelID
+			task.UserChannelModel = channelModel
+		}
 		if _, err := s.Quota.ReserveTx(tx, userID, task.ID, quote.Amount, "generation:reserve:"+task.ID); err != nil {
 			return err
 		}
@@ -108,6 +118,27 @@ func (s *Service) Create(userID uint, input CreateInput) (View, error) {
 		return View{}, err
 	}
 	return toView(task)
+}
+
+func (s *Service) userChannelModelAvailable(tx *gorm.DB, userID, channelID uint, name, capability string) bool {
+	var channel model.UserChannel
+	if tx.Where("id = ? AND user_id = ? AND status = ?", channelID, userID, model.UserChannelActive).First(&channel).Error != nil {
+		return false
+	}
+	var models []struct {
+		Name       string `json:"name"`
+		Capability string `json:"capability"`
+		Status     string `json:"status"`
+	}
+	if json.Unmarshal([]byte(channel.ModelsJSON), &models) != nil {
+		return false
+	}
+	for _, item := range models {
+		if item.Name == name && item.Capability == capability && item.Status != model.UserChannelHidden {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Service) Get(userID uint, taskID string) (View, error) {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/mail"
 	"strconv"
@@ -28,6 +29,8 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
 	"github.com/sucheng1101/infinity-canvas/server/internal/relay"
+	"github.com/sucheng1101/infinity-canvas/server/internal/userchannel"
+	versionservice "github.com/sucheng1101/infinity-canvas/server/internal/version"
 	"gorm.io/gorm"
 )
 
@@ -44,6 +47,8 @@ type Router struct {
 	ModelCatalog   *modelcatalog.Service
 	ChannelCatalog *channelcatalog.Service
 	Admin          *adminservice.Service
+	Version        *versionservice.Service
+	UserChannels   *userchannel.Service
 	Redis          *redis.Client
 	Mailer         mailer.Mailer
 }
@@ -59,7 +64,10 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	modelCatalogService := &modelcatalog.Service{DB: db}
 	channelCatalogService := &channelcatalog.Service{DB: db, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	adminService := &adminservice.Service{DB: db, Quota: quotaService}
-	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Redis: redisClient, Mailer: outbound}
+	versionService := &versionservice.Service{DB: db, Client: &http.Client{Timeout: cfg.RelayTimeout}}
+	userChannelService := &userchannel.Service{DB: db, Cfg: cfg, Client: &http.Client{Timeout: cfg.RelayTimeout}}
+	relayService.UserChannels = userChannelService
+	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Redis: redisClient, Mailer: outbound}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(requestID())
@@ -82,6 +90,11 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.POST("/generation-tasks/:id/execute", app.requireAuth(), app.executeGenerationTask)
 	v1.POST("/generation-tasks/:id/cancel", app.requireAuth(), app.cancelGenerationTask)
 	v1.GET("/account/quota", app.requireAuth(), app.accountQuota)
+	v1.GET("/account/channels", app.requireAuth(), app.userChannels)
+	v1.POST("/account/channels", app.requireAuth(), app.userChannelCreate)
+	v1.PUT("/account/channels/:id", app.requireAuth(), app.userChannelUpdate)
+	v1.DELETE("/account/channels/:id", app.requireAuth(), app.userChannelDelete)
+	v1.POST("/account/channels/:id/test", app.requireAuth(), app.userChannelTest)
 	v1.GET("/account/ledger", app.requireAuth(), app.accountLedger)
 	v1.GET("/recharge/products", app.requireAuth(), app.rechargeProducts)
 	v1.POST("/recharge/orders", app.requireAuth(), app.allowGuard("recharge-order", 10, time.Minute), app.createRechargeOrder)
@@ -115,6 +128,14 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.GET("/admin/email-settings", app.requireAdmin(), app.adminEmailSettings)
 	v1.PUT("/admin/email-settings", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.updateAdminEmailSettings)
 	v1.POST("/admin/email-settings/test", app.requireAdmin(), app.testAdminEmailSettings)
+	v1.GET("/admin/system/releases", app.requireAdmin(), app.adminSystemRelease)
+	v1.POST("/admin/system/releases/check", app.requireAdmin(), app.adminSystemRelease)
+	v1.POST("/admin/system/releases/update", app.requireAdmin(), app.allowGuard("admin-write", 5, time.Minute), app.adminSystemUpdate)
+	v1.GET("/admin/security/access", app.requireAdmin(), app.adminSecurityAccess)
+	v1.PUT("/admin/security/access/settings", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.updateAdminSecuritySettings)
+	v1.POST("/admin/security/ip-blocks", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.createIPBlock)
+	v1.DELETE("/admin/security/ip-blocks/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.deleteIPBlock)
+	v1.POST("/admin/security/sessions/:id/revoke", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.revokeSecuritySession)
 	v1.GET("/admin/models", app.requireAdmin(), app.adminModels)
 	v1.POST("/admin/models", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateModel)
 	v1.PUT("/admin/models/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateModel)
@@ -149,6 +170,10 @@ type tokenRequest struct {
 }
 
 func (a *Router) register(c *gin.Context) {
+	if a.ipBlocked(c.ClientIP()) {
+		errorJSON(c, http.StatusForbidden, "ACCESS_IP_BLOCKED", "当前访问地址已被禁止")
+		return
+	}
 	if !a.Cfg.RegistrationEnabled {
 		errorJSON(c, http.StatusForbidden, "REGISTRATION_DISABLED", "当前暂未开放注册")
 		return
@@ -202,6 +227,7 @@ func (a *Router) register(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "REGISTER_FAILED", "注册信息无效")
 		return
 	}
+	a.recordAccessEvent(c, &result.User.ID, "register", true, "")
 	data := gin.H{"user": publicUser(result.User), "verificationRequired": result.VerificationRequired}
 	if a.Cfg.DevExposeTokens {
 		data["verificationToken"] = result.VerificationToken
@@ -325,6 +351,10 @@ func (a *Router) resendVerification(c *gin.Context) {
 }
 
 func (a *Router) login(c *gin.Context) {
+	if a.ipBlocked(c.ClientIP()) {
+		errorJSON(c, http.StatusForbidden, "ACCESS_IP_BLOCKED", "当前访问地址已被禁止")
+		return
+	}
 	var req credentialsRequest
 	if c.ShouldBindJSON(&req) != nil {
 		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "请求参数无效")
@@ -336,6 +366,7 @@ func (a *Router) login(c *gin.Context) {
 	user, token, err := a.Auth.Login(req.Email, req.Password, c.ClientIP(), c.GetHeader("User-Agent"))
 	if err != nil {
 		a.recordLoginFailure(c, req.Email)
+		a.recordAccessEvent(c, nil, "login", false, err.Error())
 		status := http.StatusUnauthorized
 		code, message := "AUTH_INVALID_CREDENTIALS", "邮箱或密码错误"
 		if errors.Is(err, auth.ErrEmailNotVerified) {
@@ -348,6 +379,7 @@ func (a *Router) login(c *gin.Context) {
 		return
 	}
 	a.clearLoginFailures(c, req.Email)
+	a.recordAccessEvent(c, &user.ID, "login", true, "")
 	a.setSessionCookie(c, token)
 	successJSON(c, http.StatusOK, gin.H{"user": publicUser(user)})
 }
@@ -1132,6 +1164,103 @@ func (a *Router) accountQuota(c *gin.Context) {
 	successJSON(c, http.StatusOK, summary)
 }
 
+func (a *Router) userChannels(c *gin.Context) {
+	user, _ := currentUser(c)
+	items, entitlement, err := a.UserChannels.List(user.ID)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "USER_CHANNELS_READ_FAILED", "自定义渠道读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items, "entitlement": entitlement})
+}
+
+func (a *Router) userChannelCreate(c *gin.Context) {
+	user, _ := currentUser(c)
+	var input userchannel.Input
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道参数无效")
+		return
+	}
+	item, err := a.UserChannels.Create(user.ID, input)
+	if errors.Is(err, userchannel.ErrEntitlementRequired) {
+		errorJSON(c, http.StatusForbidden, "CUSTOM_CHANNEL_PLAN_REQUIRED", "请先开通自定义渠道套餐")
+		return
+	}
+	if errors.Is(err, userchannel.ErrInvalidChannel) {
+		errorJSON(c, http.StatusBadRequest, "USER_CHANNEL_INVALID", "渠道配置无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "USER_CHANNEL_CREATE_FAILED", "渠道创建失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+}
+
+func (a *Router) userChannelUpdate(c *gin.Context) {
+	user, _ := currentUser(c)
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道编号无效")
+		return
+	}
+	var input userchannel.Input
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道参数无效")
+		return
+	}
+	item, err := a.UserChannels.Update(user.ID, id, input)
+	if errors.Is(err, userchannel.ErrChannelNotFound) {
+		errorJSON(c, http.StatusNotFound, "USER_CHANNEL_NOT_FOUND", "渠道不存在")
+		return
+	}
+	if errors.Is(err, userchannel.ErrInvalidChannel) {
+		errorJSON(c, http.StatusBadRequest, "USER_CHANNEL_INVALID", "渠道配置无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "USER_CHANNEL_UPDATE_FAILED", "渠道更新失败")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+}
+
+func (a *Router) userChannelDelete(c *gin.Context) {
+	user, _ := currentUser(c)
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道编号无效")
+		return
+	}
+	if err := a.UserChannels.Delete(user.ID, id); errors.Is(err, userchannel.ErrChannelNotFound) {
+		errorJSON(c, http.StatusNotFound, "USER_CHANNEL_NOT_FOUND", "渠道不存在")
+		return
+	} else if err != nil {
+		errorJSON(c, http.StatusBadRequest, "USER_CHANNEL_DELETE_FAILED", "渠道停用失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"ok": true})
+}
+
+func (a *Router) userChannelTest(c *gin.Context) {
+	user, _ := currentUser(c)
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道编号无效")
+		return
+	}
+	item, err := a.UserChannels.Test(user.ID, id)
+	if errors.Is(err, userchannel.ErrChannelNotFound) {
+		errorJSON(c, http.StatusNotFound, "USER_CHANNEL_NOT_FOUND", "渠道不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadGateway, "USER_CHANNEL_TEST_FAILED", "渠道连接测试失败")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+}
+
 func (a *Router) accountLedger(c *gin.Context) {
 	user, _ := currentUser(c)
 	limit, offset := pageParams(c)
@@ -1493,6 +1622,184 @@ func (a *Router) testAdminEmailSettings(c *gin.Context) {
 		return
 	}
 	successJSON(c, http.StatusOK, gin.H{"sent": true})
+}
+
+func (a *Router) adminSystemRelease(c *gin.Context) {
+	release, err := a.Version.Check(c.Request.Context())
+	if err != nil {
+		errorJSON(c, http.StatusBadGateway, "RELEASE_CHECK_FAILED", "版本信息读取失败")
+		return
+	}
+	job, jobErr := a.Version.LatestJob()
+	if jobErr == nil {
+		release.UpdateJob = job
+	}
+	successJSON(c, http.StatusOK, release)
+}
+
+func (a *Router) adminSystemUpdate(c *gin.Context) {
+	var input struct {
+		Version string `json:"version"`
+	}
+	if c.ShouldBindJSON(&input) != nil || strings.TrimSpace(input.Version) == "" {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "目标版本无效")
+		return
+	}
+	job, err := a.Version.QueueUpdate(operatorID(c), input.Version)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "RELEASE_UPDATE_QUEUE_FAILED", "更新任务创建失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operatorID(c), "system.update.request", "system_update", input.Version)
+	successJSON(c, http.StatusAccepted, job)
+}
+
+type securityAccessSettings struct {
+	IPLoggingEnabled bool `json:"ipLoggingEnabled"`
+}
+
+func (a *Router) adminSecurityAccess(c *gin.Context) {
+	settings := securityAccessSettings{IPLoggingEnabled: true}
+	var setting model.OperationSetting
+	if err := a.DB.Where("`key` = ?", "security.access").First(&setting).Error; err == nil {
+		_ = json.Unmarshal([]byte(setting.Value), &settings)
+	}
+	var events []model.AccessEvent
+	if err := a.DB.Order("id DESC").Limit(100).Find(&events).Error; err != nil {
+		errorJSON(c, http.StatusInternalServerError, "SECURITY_EVENTS_READ_FAILED", "安全事件读取失败")
+		return
+	}
+	var sessions []model.Session
+	if err := a.DB.Where("revoked_at IS NULL AND expires_at > ?", time.Now().UTC()).Order("created_at DESC").Limit(100).Find(&sessions).Error; err != nil {
+		errorJSON(c, http.StatusInternalServerError, "SECURITY_SESSIONS_READ_FAILED", "会话读取失败")
+		return
+	}
+	var blocks []model.IPBlock
+	if err := a.DB.Where("status = ?", model.IPBlockActive).Order("id DESC").Find(&blocks).Error; err != nil {
+		errorJSON(c, http.StatusInternalServerError, "SECURITY_BLOCKS_READ_FAILED", "IP 黑名单读取失败")
+		return
+	}
+	var audits []model.AuditLog
+	_ = a.DB.Order("id DESC").Limit(100).Find(&audits).Error
+	successJSON(c, http.StatusOK, gin.H{"settings": settings, "events": events, "sessions": sessions, "blocks": blocks, "audits": audits})
+}
+
+func (a *Router) updateAdminSecuritySettings(c *gin.Context) {
+	operator, _ := currentUser(c)
+	var settings securityAccessSettings
+	if c.ShouldBindJSON(&settings) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "安全设置无效")
+		return
+	}
+	payload, err := json.Marshal(settings)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "安全设置无效")
+		return
+	}
+	var row model.OperationSetting
+	findErr := a.DB.Where("`key` = ?", "security.access").First(&row).Error
+	if errors.Is(findErr, gorm.ErrRecordNotFound) {
+		row = model.OperationSetting{Key: "security.access", Value: string(payload), Version: 1}
+	} else if findErr != nil {
+		errorJSON(c, http.StatusInternalServerError, "SECURITY_SETTINGS_READ_FAILED", "安全设置读取失败")
+		return
+	} else {
+		row.Value, row.Version = string(payload), row.Version+1
+	}
+	row.UpdatedBy = &operator.ID
+	if err := a.DB.Save(&row).Error; err != nil {
+		errorJSON(c, http.StatusBadRequest, "SECURITY_SETTINGS_UPDATE_FAILED", "安全设置保存失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operator.ID, "security.settings.update", "security_access", "")
+	successJSON(c, http.StatusOK, settings)
+}
+
+func (a *Router) createIPBlock(c *gin.Context) {
+	operator, _ := currentUser(c)
+	var input struct {
+		Value  string `json:"value"`
+		Reason string `json:"reason"`
+	}
+	if c.ShouldBindJSON(&input) != nil || strings.TrimSpace(input.Value) == "" || len(input.Value) > 128 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "IP 或网段无效")
+		return
+	}
+	block := model.IPBlock{Value: strings.TrimSpace(input.Value), Reason: strings.TrimSpace(input.Reason), Status: model.IPBlockActive}
+	if err := a.DB.Create(&block).Error; err != nil {
+		errorJSON(c, http.StatusBadRequest, "IP_BLOCK_CREATE_FAILED", "IP 黑名单保存失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operator.ID, "security.ip_block.create", "ip_block", block.ID)
+	successJSON(c, http.StatusCreated, block)
+}
+
+func (a *Router) deleteIPBlock(c *gin.Context) {
+	operator, _ := currentUser(c)
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "编号无效")
+		return
+	}
+	result := a.DB.Model(&model.IPBlock{}).Where("id = ?", id).Update("status", model.IPBlockHidden)
+	if result.Error != nil {
+		errorJSON(c, http.StatusBadRequest, "IP_BLOCK_DELETE_FAILED", "IP 黑名单删除失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operator.ID, "security.ip_block.delete", "ip_block", id)
+	successJSON(c, http.StatusOK, gin.H{"ok": true})
+}
+
+func (a *Router) revokeSecuritySession(c *gin.Context) {
+	operator, _ := currentUser(c)
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "会话编号无效")
+		return
+	}
+	now := time.Now().UTC()
+	result := a.DB.Model(&model.Session{}).Where("id = ? AND revoked_at IS NULL", id).Update("revoked_at", &now)
+	if result.Error != nil {
+		errorJSON(c, http.StatusBadRequest, "SESSION_REVOKE_FAILED", "会话撤销失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operator.ID, "security.session.revoke", "session", id)
+	successJSON(c, http.StatusOK, gin.H{"ok": true})
+}
+
+func (a *Router) recordAccessEvent(c *gin.Context, userID *uint, eventType string, success bool, detail string) {
+	var settings securityAccessSettings
+	settings.IPLoggingEnabled = true
+	var row model.OperationSetting
+	if a.DB.Where("`key` = ?", "security.access").First(&row).Error == nil {
+		_ = json.Unmarshal([]byte(row.Value), &settings)
+	}
+	if !settings.IPLoggingEnabled {
+		return
+	}
+	detail = strings.TrimSpace(detail)
+	if len(detail) > 512 {
+		detail = detail[:512]
+	}
+	_ = a.DB.Create(&model.AccessEvent{UserID: userID, EventType: eventType, IP: c.ClientIP(), UserAgent: c.GetHeader("User-Agent"), Success: success, Detail: detail}).Error
+}
+
+func (a *Router) ipBlocked(value string) bool {
+	var blocks []model.IPBlock
+	if a.DB.Where("status = ?", model.IPBlockActive).Find(&blocks).Error != nil {
+		return false
+	}
+	ip := net.ParseIP(strings.TrimSpace(value))
+	for _, block := range blocks {
+		candidate := strings.TrimSpace(block.Value)
+		if candidate == value {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(candidate); err == nil && ip != nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeEmailDomains(domains []string) []string {

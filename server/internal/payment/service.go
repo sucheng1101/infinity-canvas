@@ -71,9 +71,12 @@ func (s *Service) Products(includeHidden bool) ([]model.TopupProduct, error) {
 
 func (s *Service) UpsertProduct(product model.TopupProduct) (model.TopupProduct, error) {
 	if strings.TrimSpace(product.Name) == "" || product.PayAmountFen < 100 || product.PayAmountFen > 500000 ||
-		product.QuotaAmount <= 0 || product.GiftQuota < 0 {
+		product.GiftQuota < 0 || product.CustomChannelLimit < 0 || product.CustomChannelDays < 0 {
 		return model.TopupProduct{}, errors.New("invalid recharge product")
 	}
+	// The platform uses a fixed 1 RMB = 100 points conversion. PayAmountFen
+	// is numerically equal to the base points, so never accept a second rate.
+	product.QuotaAmount = product.PayAmountFen
 	if product.Status == "" {
 		product.Status = model.TopupProductActive
 	}
@@ -85,7 +88,8 @@ func (s *Service) UpsertProduct(product model.TopupProduct) (model.TopupProduct,
 	}
 	if err := s.DB.Model(&model.TopupProduct{}).Where("id = ?", product.ID).Updates(map[string]any{
 		"name": product.Name, "pay_amount_fen": product.PayAmountFen, "quota_amount": product.QuotaAmount,
-		"gift_quota": product.GiftQuota, "status": product.Status, "sort_order": product.SortOrder,
+		"gift_quota": product.GiftQuota, "custom_channel_enabled": product.CustomChannelEnabled, "custom_channel_limit": product.CustomChannelLimit,
+		"custom_channel_days": product.CustomChannelDays, "status": product.Status, "sort_order": product.SortOrder,
 	}).Error; err != nil {
 		return model.TopupProduct{}, err
 	}
@@ -307,6 +311,20 @@ func (s *Service) HandleEpayWebhook(values url.Values) error {
 		}
 		if err := s.Quota.CreditTx(tx, order.UserID, order.QuotaAmount+order.GiftQuota, "recharge", "topup_order", order.OrderNo, "topup:"+order.OrderNo); err != nil {
 			return err
+		}
+		var product model.TopupProduct
+		if err := tx.First(&product, order.ProductID).Error; err != nil {
+			return err
+		}
+		if product.CustomChannelEnabled && product.CustomChannelLimit > 0 {
+			var expiresAt *time.Time
+			if product.CustomChannelDays > 0 {
+				expires := now.AddDate(0, 0, product.CustomChannelDays)
+				expiresAt = &expires
+			}
+			if err := tx.Create(&model.UserChannelEntitlement{UserID: order.UserID, SourceOrderID: order.ID, ChannelLimit: product.CustomChannelLimit, ExpiresAt: expiresAt, Status: model.UserChannelActive}).Error; err != nil {
+				return err
+			}
 		}
 		order.Status = model.TopupOrderQuotaCredited
 		order.CreditedAt = &now
