@@ -153,6 +153,32 @@ type TopupOrder struct {
 	UpdatedAt       time.Time  `json:"updatedAt"`
 }
 
+const (
+	OperationOrderProcessing           = "processing"
+	OperationOrderSucceeded            = "succeeded"
+	OperationOrderFailed               = "failed"
+	OperationOrderSubscriptionPurchase = "subscription_purchase"
+	OperationOrderChannelUnlock        = "channel_unlock"
+)
+
+// OperationOrder makes balance-backed purchases replay-safe. ResultJSON stores
+// the original response so retries do not repeat the mutation.
+type OperationOrder struct {
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	UserID         uint      `gorm:"uniqueIndex:ux_operation_order_user_type_key;not null" json:"userId"`
+	OrderNo        string    `gorm:"size:64;uniqueIndex;not null" json:"orderNo"`
+	IdempotencyKey string    `gorm:"size:191;uniqueIndex:ux_operation_order_user_type_key;not null" json:"-"`
+	Type           string    `gorm:"size:64;uniqueIndex:ux_operation_order_user_type_key;not null" json:"type"`
+	ProductID      uint      `gorm:"index;not null" json:"productId"`
+	Amount         int64     `gorm:"not null;default:0" json:"amount"`
+	Status         string    `gorm:"size:32;index;not null" json:"status"`
+	ResultJSON     string    `gorm:"type:text" json:"-"`
+	ErrorCode      string    `gorm:"size:64" json:"errorCode,omitempty"`
+	ErrorMessage   string    `gorm:"type:text" json:"errorMessage,omitempty"`
+	CreatedAt      time.Time `json:"createdAt"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
 type UserChannelEntitlement struct {
 	ID            uint       `gorm:"primaryKey" json:"id"`
 	UserID        uint       `gorm:"index;not null" json:"userId"`
@@ -238,14 +264,14 @@ type CustomChannelUnlockPlan struct {
 
 type ModelCostPricing struct {
 	ID               uint      `gorm:"primaryKey" json:"id"`
-	PublishedModelID uint      `gorm:"index;not null" json:"publishedModelId"`
-	ChannelID        uint      `gorm:"index;not null" json:"channelId"`
-	UpstreamModel    string    `gorm:"size:128;not null" json:"upstreamModel"`
+	PublishedModelID uint      `gorm:"uniqueIndex:ux_model_cost_pricing;not null" json:"publishedModelId"`
+	ChannelID        uint      `gorm:"uniqueIndex:ux_model_cost_pricing;not null" json:"channelId"`
+	UpstreamModel    string    `gorm:"uniqueIndex:ux_model_cost_pricing;size:128;not null" json:"upstreamModel"`
 	BillingUnit      string    `gorm:"size:32;not null" json:"billingUnit"`
 	CostPerUnit      int64     `gorm:"not null" json:"costPerUnit"`
 	SellPerUnit      int64     `gorm:"not null" json:"sellPerUnit"`
 	ProfitMargin     float64   `gorm:"not null;default:0" json:"profitMargin"`
-	Status           string    `gorm:"size:32;index;not null" json:"status"`
+	Status           string    `gorm:"uniqueIndex:ux_model_cost_pricing;size:32;index;not null" json:"status"`
 	CreatedAt        time.Time `json:"createdAt"`
 	UpdatedAt        time.Time `json:"updatedAt"`
 }
@@ -465,6 +491,12 @@ type UsageLog struct {
 	ChargedQuota        int64      `json:"chargedQuota"`
 	CostQuota           int64      `json:"costQuota"`
 	ProfitQuota         int64      `json:"profitQuota"`
+	CostPricingID       uint       `gorm:"index" json:"costPricingId"`
+	CostPerUnit         int64      `json:"costPerUnit"`
+	SellPerUnit         int64      `json:"sellPerUnit"`
+	CostTotal           int64      `json:"costTotal"`
+	RevenueTotal        int64      `json:"revenueTotal"`
+	ProfitTotal         int64      `json:"profitTotal"`
 	IP                  string     `gorm:"size:64;index" json:"ip,omitempty"`
 	RetryCount          int        `json:"retryCount"`
 	ErrorCode           string     `gorm:"size:64;index" json:"errorCode,omitempty"`

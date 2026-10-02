@@ -109,6 +109,12 @@ func migrate(db *gorm.DB) error {
 				return tx.AutoMigrate(&model.GenerationTask{})
 			},
 		},
+		{
+			version: "20261002_m11_operation_orders_pricing_snapshots",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.OperationOrder{}, &model.UsageLog{}, &model.ModelCostPricing{})
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64

@@ -54,6 +54,14 @@ func (s *Service) Upsert(input Input, id uint) (model.ModelCostPricing, error) {
 	}
 	row := model.ModelCostPricing{PublishedModelID: input.PublishedModelID, ChannelID: input.ChannelID, UpstreamModel: input.UpstreamModel, BillingUnit: input.BillingUnit, CostPerUnit: input.CostPerUnit, SellPerUnit: input.SellPerUnit, ProfitMargin: margin, Status: status}
 	if id == 0 {
+		var existing model.ModelCostPricing
+		if err := s.DB.Where("published_model_id = ? AND channel_id = ? AND upstream_model = ? AND status = ?", input.PublishedModelID, input.ChannelID, input.UpstreamModel, status).First(&existing).Error; err == nil {
+			id = existing.ID
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return row, err
+		}
+	}
+	if id == 0 {
 		return row, s.DB.Create(&row).Error
 	}
 	if err := s.DB.First(&row, id).Error; err != nil {

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -8,6 +9,7 @@ import (
 )
 
 type Config struct {
+	AppEnv                        string
 	Addr                          string
 	DatabaseDSN                   string
 	RedisAddr                     string
@@ -54,6 +56,19 @@ type Config struct {
 	ChannelEncryptionKey          string
 }
 
+const defaultChannelEncryptionKey = "infinite-canvas-local-channel-key"
+
+func (c Config) Validate() error {
+	environment := strings.ToLower(strings.TrimSpace(c.AppEnv))
+	if environment == "production" || environment == "prod" || environment == "release" {
+		key := strings.TrimSpace(c.ChannelEncryptionKey)
+		if key == "" || key == defaultChannelEncryptionKey || len(key) < 32 {
+			return errors.New("CHANNEL_ENCRYPTION_KEY must be a unique value with at least 32 characters in production")
+		}
+	}
+	return nil
+}
+
 // EmailSettings is the administrator-managed email and registration policy.
 // SMTPPassword is never returned by the admin API.
 type EmailSettings struct {
@@ -75,6 +90,7 @@ type EmailSettings struct {
 
 func Load() Config {
 	return Config{
+		AppEnv:                        env("APP_ENV", "development"),
 		Addr:                          env("SERVER_ADDR", ":1011"),
 		DatabaseDSN:                   env("DATABASE_DSN", "root:password@tcp(127.0.0.1:3306)/infinite_canvas?charset=utf8mb4&parseTime=True&loc=UTC"),
 		RedisAddr:                     env("REDIS_ADDR", "127.0.0.1:6379"),
@@ -118,7 +134,7 @@ func Load() Config {
 		EpayKey:                       os.Getenv("EPAY_KEY"),
 		EpayPayMethods:                envList("EPAY_PAY_METHODS", []string{"alipay", "wxpay"}),
 		EpayCallbackURL:               env("EPAY_CALLBACK_URL", "http://localhost:1011"),
-		ChannelEncryptionKey:          env("CHANNEL_ENCRYPTION_KEY", "infinite-canvas-local-channel-key"),
+		ChannelEncryptionKey:          env("CHANNEL_ENCRYPTION_KEY", defaultChannelEncryptionKey),
 	}
 }
 

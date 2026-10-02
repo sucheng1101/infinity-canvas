@@ -141,6 +141,12 @@ func (s *Service) Create(userID uint, input CreateInput) (View, error) {
 }
 
 func (s *Service) userChannelModelAvailable(tx *gorm.DB, userID, channelID uint, name, capability string) bool {
+	var entitlementCount int64
+	if tx.Model(&model.UserChannelEntitlement{}).
+		Where("user_id = ? AND status = ? AND (expires_at IS NULL OR expires_at > ?)", userID, model.UserChannelActive, time.Now().UTC()).
+		Count(&entitlementCount).Error != nil || entitlementCount == 0 {
+		return false
+	}
 	var channel model.UserChannel
 	if tx.Where("id = ? AND user_id = ? AND status = ?", channelID, userID, model.UserChannelActive).First(&channel).Error != nil {
 		return false

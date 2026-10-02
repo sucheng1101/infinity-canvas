@@ -153,9 +153,11 @@ async function resolvePublishedModel(capability: HostedRequest["capability"], pr
         const channel = channels.find((item) => item.id === channelId);
         const model = channel?.models.find((item) => item.name === channelModel && item.capability === capability && item.status !== "hidden");
         if (model) {
-            const published = candidates[0];
-            if (published) return { model: published, channelId, channelModel };
+            const published = candidates.find((item) => item.sourceModel === channelModel || item.displayName === channelModel);
+            if (!published) throw new Error(`公开模型未绑定渠道模型：${channelModel}`);
+            return { model: published, channelId, channelModel };
         }
+        throw new Error("自定义渠道模型不可用");
     }
     const normalized = preferred?.split("::").pop()?.trim().toLowerCase();
     const exact = candidates.find((item) => item.displayName.toLowerCase() === normalized);

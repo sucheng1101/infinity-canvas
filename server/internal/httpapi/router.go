@@ -942,13 +942,18 @@ func (a *Router) accountSubscription(c *gin.Context) {
 func (a *Router) createSubscriptionOrder(c *gin.Context) {
 	user, _ := currentUser(c)
 	var input struct {
-		PlanID uint `json:"planId"`
+		PlanID         uint   `json:"planId"`
+		IdempotencyKey string `json:"idempotencyKey"`
 	}
 	if c.ShouldBindJSON(&input) != nil || input.PlanID == 0 {
 		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "订阅套餐无效")
 		return
 	}
-	item, err := a.Subscriptions.Purchase(user.ID, input.PlanID)
+	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	if idempotencyKey == "" {
+		idempotencyKey = input.IdempotencyKey
+	}
+	item, err := a.Subscriptions.Purchase(user.ID, input.PlanID, idempotencyKey)
 	if errors.Is(err, subscription.ErrPlanNotFound) {
 		errorJSON(c, http.StatusNotFound, "SUBSCRIPTION_PLAN_NOT_FOUND", "订阅套餐不存在")
 		return
@@ -976,13 +981,18 @@ func (a *Router) channelUnlockPlans(c *gin.Context) {
 func (a *Router) unlockCustomChannels(c *gin.Context) {
 	user, _ := currentUser(c)
 	var input struct {
-		PlanID uint `json:"planId"`
+		PlanID         uint   `json:"planId"`
+		IdempotencyKey string `json:"idempotencyKey"`
 	}
 	if c.ShouldBindJSON(&input) != nil || input.PlanID == 0 {
 		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道解锁套餐无效")
 		return
 	}
-	item, err := a.Subscriptions.UnlockChannel(user.ID, input.PlanID)
+	idempotencyKey := strings.TrimSpace(c.GetHeader("Idempotency-Key"))
+	if idempotencyKey == "" {
+		idempotencyKey = input.IdempotencyKey
+	}
+	item, err := a.Subscriptions.UnlockChannel(user.ID, input.PlanID, idempotencyKey)
 	if errors.Is(err, subscription.ErrUnlockPlanNotFound) {
 		errorJSON(c, http.StatusNotFound, "CHANNEL_UNLOCK_PLAN_NOT_FOUND", "渠道解锁套餐不存在")
 		return

@@ -30,6 +30,7 @@ type Input struct {
 type PublicModel struct {
 	ID           uint           `json:"id"`
 	Capability   string         `json:"capability"`
+	SourceModel  string         `json:"sourceModel,omitempty"`
 	DisplayName  string         `json:"displayName"`
 	PublicConfig map[string]any `json:"publicConfig"`
 	PriceSummary map[string]any `json:"priceSummary,omitempty"`
@@ -222,7 +223,7 @@ func toPublic(row model.PublishedModel, includeAdminFields bool) (PublicModel, e
 		}
 	}
 	result := PublicModel{
-		ID: row.ID, Capability: row.Capability, DisplayName: row.DisplayName,
+		ID: row.ID, Capability: row.Capability, SourceModel: row.SourceModel, DisplayName: row.DisplayName,
 		PublicConfig: config,
 	}
 	if includeAdminFields {

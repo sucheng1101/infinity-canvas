@@ -1,11 +1,13 @@
 package subscription
 
 import (
+	"encoding/json"
 	"errors"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -17,6 +19,8 @@ var (
 	ErrInsufficientQuota       = errors.New("insufficient quota")
 	ErrSubscriptionUnavailable = errors.New("subscription unavailable")
 	ErrUnlockPlanNotFound      = errors.New("custom channel unlock plan not found")
+	ErrOrderInProgress         = errors.New("purchase is already processing")
+	ErrOrderFailed             = errors.New("purchase previously failed")
 )
 
 type Service struct{ DB *gorm.DB }
@@ -158,40 +162,64 @@ func (s *Service) Current(userID uint) (SubscriptionView, error) {
 		return SubscriptionView{}, err
 	}
 	for index := range view.Quotas {
+		hasUsage := false
 		for _, usage := range usages {
 			if usage.PublishedModelID != view.Quotas[index].PublishedModelID {
 				continue
 			}
+			hasUsage = true
 			view.Quotas[index].UsedUnits = usage.UsedUnits
 			view.Quotas[index].RemainingUnits = quotaLimitForView(view.Quotas[index], plan, usage.BillingUnit)
 		}
-		if view.Quotas[index].RemainingUnits == 0 {
+		if !hasUsage {
 			view.Quotas[index].RemainingUnits = quotaLimitForView(view.Quotas[index], plan, billingUnitFromQuota(view.Quotas[index]))
 		}
 	}
 	return SubscriptionView{UserSubscription: row, Plan: view, Quotas: view.Quotas}, nil
 }
 
-func (s *Service) Purchase(userID, planID uint) (SubscriptionView, error) {
-	var row model.UserSubscription
+func (s *Service) Purchase(userID, planID uint, idempotencyKey string) (SubscriptionView, error) {
+	if userID == 0 || planID == 0 {
+		return SubscriptionView{}, ErrInvalidPlan
+	}
+	idempotencyKey = normalizeIdempotencyKey(idempotencyKey)
+	var result SubscriptionView
+	var businessErr error
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		order, found, err := s.findOperationOrder(tx, userID, model.OperationOrderSubscriptionPurchase, idempotencyKey)
+		if err != nil {
+			return err
+		}
+		if found {
+			return decodeOperationResult(order, &result)
+		}
+		order = model.OperationOrder{UserID: userID, OrderNo: "SUB-" + uuid.NewString(), IdempotencyKey: idempotencyKey, Type: model.OperationOrderSubscriptionPurchase, ProductID: planID, Status: model.OperationOrderProcessing}
+		if err := tx.Create(&order).Error; err != nil {
+			return err
+		}
 		var plan model.SubscriptionPlan
 		if err := tx.Where("id = ? AND status = ?", planID, model.SubscriptionPlanActive).First(&plan).Error; err != nil {
-			return ErrPlanNotFound
+			businessErr = ErrPlanNotFound
+			return s.finishFailedOrder(tx, &order, "SUBSCRIPTION_PLAN_NOT_FOUND", businessErr)
+		}
+		order.Amount = plan.PriceQuota
+		if err := tx.Model(&order).Update("amount", order.Amount).Error; err != nil {
+			return err
 		}
 		var account model.QuotaAccount
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&account).Error; err != nil {
 			return err
 		}
 		if account.Balance-account.Reserved < plan.PriceQuota {
-			return ErrInsufficientQuota
+			businessErr = ErrInsufficientQuota
+			return s.finishFailedOrder(tx, &order, "QUOTA_INSUFFICIENT", businessErr)
 		}
 		account.Balance -= plan.PriceQuota
 		if err := tx.Model(&model.QuotaAccount{}).Where("id = ?", account.ID).Update("balance", account.Balance).Error; err != nil {
 			return err
 		}
 		if plan.PriceQuota > 0 {
-			if err := tx.Create(&model.QuotaLedger{UserID: userID, Delta: -plan.PriceQuota, BalanceAfter: account.Balance, Source: "subscription", BusinessType: "subscription_purchase", BusinessID: strings.Join([]string{"plan", formatID(plan.ID)}, ":"), IdempotencyKey: strings.Join([]string{"subscription", formatID(userID), formatID(plan.ID), formatID(uint(time.Now().UnixNano()))}, ":"), Reason: plan.Name}).Error; err != nil {
+			if err := tx.Create(&model.QuotaLedger{UserID: userID, Delta: -plan.PriceQuota, BalanceAfter: account.Balance, Source: "subscription", BusinessType: "subscription_purchase", BusinessID: order.OrderNo, IdempotencyKey: "subscription:" + order.OrderNo, Reason: plan.Name}).Error; err != nil {
 				return err
 			}
 		}
@@ -200,15 +228,37 @@ func (s *Service) Purchase(userID, planID uint) (SubscriptionView, error) {
 		var current model.UserSubscription
 		if tx.Where("user_id = ? AND status = ? AND expires_at > ?", userID, model.SubscriptionActive, now).Order("expires_at DESC").First(&current).Error == nil {
 			start = current.ExpiresAt
-			_ = tx.Model(&current).Update("status", model.SubscriptionExpired).Error
+			if err := tx.Model(&current).Update("status", model.SubscriptionExpired).Error; err != nil {
+				return err
+			}
 		}
-		row = model.UserSubscription{UserID: userID, PlanID: plan.ID, Status: model.SubscriptionActive, StartsAt: start, ExpiresAt: start.AddDate(0, 0, plan.DurationDays)}
-		return tx.Create(&row).Error
+		row := model.UserSubscription{UserID: userID, PlanID: plan.ID, Status: model.SubscriptionActive, StartsAt: start, ExpiresAt: start.AddDate(0, 0, plan.DurationDays)}
+		if err := tx.Create(&row).Error; err != nil {
+			return err
+		}
+		view, err := s.subscriptionViewTx(tx, row, plan)
+		if err != nil {
+			return err
+		}
+		result = view
+		encoded, err := json.Marshal(view)
+		if err != nil {
+			return err
+		}
+		return tx.Model(&order).Updates(map[string]any{"status": model.OperationOrderSucceeded, "result_json": string(encoded)}).Error
 	})
 	if err != nil {
+		if order, lookupErr := s.loadOperationOrder(userID, model.OperationOrderSubscriptionPurchase, idempotencyKey); lookupErr == nil {
+			if decodeErr := decodeOperationResult(order, &result); decodeErr == nil {
+				return result, nil
+			}
+		}
 		return SubscriptionView{}, err
 	}
-	return s.Current(userID)
+	if businessErr != nil {
+		return SubscriptionView{}, businessErr
+	}
+	return result, nil
 }
 
 func (s *Service) ConsumeTx(tx *gorm.DB, userID, modelID uint, capability string, units int64) (bool, uint, error) {
@@ -299,19 +349,41 @@ func (s *Service) UpsertUnlockPlan(input UnlockPlanInput, id uint) (model.Custom
 	return row, s.DB.Save(&row).Error
 }
 
-func (s *Service) UnlockChannel(userID, planID uint) (model.UserChannelEntitlement, error) {
+func (s *Service) UnlockChannel(userID, planID uint, idempotencyKey string) (model.UserChannelEntitlement, error) {
+	if userID == 0 || planID == 0 {
+		return model.UserChannelEntitlement{}, ErrUnlockPlanNotFound
+	}
+	idempotencyKey = normalizeIdempotencyKey(idempotencyKey)
 	var entitlement model.UserChannelEntitlement
+	var businessErr error
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
+		order, found, err := s.findOperationOrder(tx, userID, model.OperationOrderChannelUnlock, idempotencyKey)
+		if err != nil {
+			return err
+		}
+		if found {
+			return decodeOperationResult(order, &entitlement)
+		}
+		order = model.OperationOrder{UserID: userID, OrderNo: "CHN-" + uuid.NewString(), IdempotencyKey: idempotencyKey, Type: model.OperationOrderChannelUnlock, ProductID: planID, Status: model.OperationOrderProcessing}
+		if err := tx.Create(&order).Error; err != nil {
+			return err
+		}
 		var plan model.CustomChannelUnlockPlan
 		if err := tx.Where("id = ? AND status = ?", planID, model.SubscriptionPlanActive).First(&plan).Error; err != nil {
-			return ErrUnlockPlanNotFound
+			businessErr = ErrUnlockPlanNotFound
+			return s.finishFailedOrder(tx, &order, "CHANNEL_UNLOCK_PLAN_NOT_FOUND", businessErr)
+		}
+		order.Amount = plan.PriceQuota
+		if err := tx.Model(&order).Update("amount", order.Amount).Error; err != nil {
+			return err
 		}
 		var account model.QuotaAccount
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&account).Error; err != nil {
 			return err
 		}
 		if account.Balance-account.Reserved < plan.PriceQuota {
-			return ErrInsufficientQuota
+			businessErr = ErrInsufficientQuota
+			return s.finishFailedOrder(tx, &order, "QUOTA_INSUFFICIENT", businessErr)
 		}
 		account.Balance -= plan.PriceQuota
 		if err := tx.Model(&model.QuotaAccount{}).Where("id = ?", account.ID).Update("balance", account.Balance).Error; err != nil {
@@ -319,13 +391,111 @@ func (s *Service) UnlockChannel(userID, planID uint) (model.UserChannelEntitleme
 		}
 		now := time.Now().UTC()
 		expires := now.AddDate(0, 0, plan.DurationDays)
-		if err := tx.Create(&model.QuotaLedger{UserID: userID, Delta: -plan.PriceQuota, BalanceAfter: account.Balance, Source: "channel_unlock", BusinessType: "custom_channel_unlock", BusinessID: strings.Join([]string{"unlock", formatID(plan.ID)}, ":"), IdempotencyKey: strings.Join([]string{"channel_unlock", formatID(userID), formatID(plan.ID), formatID(uint(time.Now().UnixNano()))}, ":"), Reason: plan.Name}).Error; err != nil {
+		if err := tx.Create(&model.QuotaLedger{UserID: userID, Delta: -plan.PriceQuota, BalanceAfter: account.Balance, Source: "channel_unlock", BusinessType: "custom_channel_unlock", BusinessID: order.OrderNo, IdempotencyKey: "channel_unlock:" + order.OrderNo, Reason: plan.Name}).Error; err != nil {
 			return err
 		}
 		entitlement = model.UserChannelEntitlement{UserID: userID, Source: "balance_unlock", UnlockPlanID: &plan.ID, UnlockCost: plan.PriceQuota, ChannelLimit: plan.ChannelLimit, ExpiresAt: &expires, Status: model.UserChannelActive}
-		return tx.Create(&entitlement).Error
+		if err := tx.Create(&entitlement).Error; err != nil {
+			return err
+		}
+		encoded, err := json.Marshal(entitlement)
+		if err != nil {
+			return err
+		}
+		return tx.Model(&order).Updates(map[string]any{"status": model.OperationOrderSucceeded, "result_json": string(encoded)}).Error
 	})
-	return entitlement, err
+	if err != nil {
+		if order, lookupErr := s.loadOperationOrder(userID, model.OperationOrderChannelUnlock, idempotencyKey); lookupErr == nil {
+			if decodeErr := decodeOperationResult(order, &entitlement); decodeErr == nil {
+				return entitlement, nil
+			}
+		}
+		return model.UserChannelEntitlement{}, err
+	}
+	if businessErr != nil {
+		return model.UserChannelEntitlement{}, businessErr
+	}
+	return entitlement, nil
+}
+
+func normalizeIdempotencyKey(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return uuid.NewString()
+	}
+	if len(value) > 191 {
+		return value[:191]
+	}
+	return value
+}
+
+func (s *Service) findOperationOrder(tx *gorm.DB, userID uint, orderType, idempotencyKey string) (model.OperationOrder, bool, error) {
+	var order model.OperationOrder
+	err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ? AND type = ? AND idempotency_key = ?", userID, orderType, idempotencyKey).First(&order).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return order, false, nil
+	}
+	return order, true, err
+}
+
+func (s *Service) loadOperationOrder(userID uint, orderType, idempotencyKey string) (model.OperationOrder, error) {
+	var order model.OperationOrder
+	err := s.DB.Where("user_id = ? AND type = ? AND idempotency_key = ?", userID, orderType, idempotencyKey).First(&order).Error
+	return order, err
+}
+
+func decodeOperationResult(order model.OperationOrder, target any) error {
+	switch order.Status {
+	case model.OperationOrderSucceeded:
+		if strings.TrimSpace(order.ResultJSON) == "" {
+			return errors.New("purchase result is missing")
+		}
+		return json.Unmarshal([]byte(order.ResultJSON), target)
+	case model.OperationOrderFailed:
+		return ErrOrderFailed
+	default:
+		return ErrOrderInProgress
+	}
+}
+
+func (s *Service) finishFailedOrder(tx *gorm.DB, order *model.OperationOrder, code string, cause error) error {
+	return tx.Model(order).Updates(map[string]any{
+		"status":        model.OperationOrderFailed,
+		"error_code":    code,
+		"error_message": cause.Error(),
+	}).Error
+}
+
+func (s *Service) subscriptionViewTx(tx *gorm.DB, row model.UserSubscription, plan model.SubscriptionPlan) (SubscriptionView, error) {
+	var quotas []model.SubscriptionPlanQuota
+	if err := tx.Where("plan_id = ?", plan.ID).Find(&quotas).Error; err != nil {
+		return SubscriptionView{}, err
+	}
+	var usages []model.SubscriptionUsage
+	if err := tx.Where("subscription_id = ?", row.ID).Find(&usages).Error; err != nil {
+		return SubscriptionView{}, err
+	}
+	view := PlanView{SubscriptionPlan: plan, Quotas: make([]QuotaView, 0, len(quotas))}
+	for _, quota := range quotas {
+		item := QuotaView{PublishedModelID: quota.PublishedModelID, ImageCount: quota.ImageCount, VideoSeconds: quota.VideoSeconds, TextTokens: quota.TextTokens}
+		var published model.PublishedModel
+		if tx.First(&published, quota.PublishedModelID).Error == nil {
+			item.ModelName = published.DisplayName
+		}
+		hasUsage := false
+		for _, usage := range usages {
+			if usage.PublishedModelID == quota.PublishedModelID {
+				hasUsage = true
+				item.UsedUnits = usage.UsedUnits
+				item.RemainingUnits = quotaLimitForView(item, plan, usage.BillingUnit)
+			}
+		}
+		if !hasUsage {
+			item.RemainingUnits = quotaLimitForView(item, plan, billingUnitFromQuota(item))
+		}
+		view.Quotas = append(view.Quotas, item)
+	}
+	return SubscriptionView{UserSubscription: row, Plan: view, Quotas: view.Quotas}, nil
 }
 
 func (s *Service) planView(plan model.SubscriptionPlan, withUsage bool) (PlanView, error) {
@@ -336,6 +506,10 @@ func (s *Service) planView(plan model.SubscriptionPlan, withUsage bool) (PlanVie
 	result := PlanView{SubscriptionPlan: plan, Quotas: make([]QuotaView, 0, len(rows))}
 	for _, row := range rows {
 		item := QuotaView{PublishedModelID: row.PublishedModelID, ImageCount: row.ImageCount, VideoSeconds: row.VideoSeconds, TextTokens: row.TextTokens}
+		var published model.PublishedModel
+		if s.DB.First(&published, row.PublishedModelID).Error == nil {
+			item.ModelName = published.DisplayName
+		}
 		result.Quotas = append(result.Quotas, item)
 	}
 	return result, nil

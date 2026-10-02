@@ -29,6 +29,7 @@ export type ChannelUnlockPlan = { id: number; name: string; priceQuota: number; 
 export type PublishedModel = {
     id: number;
     capability: "image" | "text" | "video" | "audio" | string;
+    sourceModel?: string;
     displayName: string;
     publicConfig: Record<string, unknown>;
     status?: "active" | "hidden";
@@ -72,9 +73,15 @@ export const hostedApi = {
     products: () => request<{ items: RechargeProduct[] }>("/recharge/products"),
     subscriptionPlans: () => request<{ items: SubscriptionPlan[] }>("/subscriptions/plans"),
     subscription: () => request<UserSubscription>("/account/subscription"),
-    purchaseSubscription: (planId: number) => request<UserSubscription>("/subscriptions/orders", { method: "POST", body: JSON.stringify({ planId }) }),
+    purchaseSubscription: (planId: number) => {
+        const idempotencyKey = crypto.randomUUID();
+        return request<UserSubscription>("/subscriptions/orders", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ planId, idempotencyKey }) });
+    },
     channelUnlockPlans: () => request<{ items: ChannelUnlockPlan[] }>("/account/channel-unlock-plans"),
-    unlockChannels: (planId: number) => request<{ id: number; channelLimit: number; expiresAt?: string }>("/account/channels/unlock", { method: "POST", body: JSON.stringify({ planId }) }),
+    unlockChannels: (planId: number) => {
+        const idempotencyKey = crypto.randomUUID();
+        return request<{ id: number; channelLimit: number; expiresAt?: string }>("/account/channels/unlock", { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body: JSON.stringify({ planId, idempotencyKey }) });
+    },
     channels: () => request<{ items: UserChannel[]; entitlement: UserChannelEntitlement }>("/account/channels"),
     createChannel: (body: Record<string, unknown>) => request<UserChannel>("/account/channels", { method: "POST", body: JSON.stringify(body) }),
     updateChannel: (id: number, body: Record<string, unknown>) => request<UserChannel>(`/account/channels/${id}`, { method: "PUT", body: JSON.stringify(body) }),

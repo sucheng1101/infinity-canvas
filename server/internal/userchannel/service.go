@@ -213,6 +213,9 @@ func (s *Service) Test(userID, id uint) (View, error) {
 }
 
 func (s *Service) Resolve(userID, id uint, modelName, capability string) (Route, error) {
+	if !s.hasActiveEntitlement(userID) {
+		return Route{}, ErrEntitlementRequired
+	}
 	var row model.UserChannel
 	if err := s.DB.Where("id = ? AND user_id = ? AND status = ?", id, userID, model.UserChannelActive).First(&row).Error; err != nil {
 		return Route{}, ErrChannelNotFound
@@ -231,6 +234,17 @@ func (s *Service) Resolve(userID, id uint, modelName, capability string) (Route,
 		}
 	}
 	return Route{}, ErrInvalidChannel
+}
+
+func (s *Service) hasActiveEntitlement(userID uint) bool {
+	if userID == 0 {
+		return false
+	}
+	var count int64
+	now := time.Now().UTC()
+	return s.DB.Model(&model.UserChannelEntitlement{}).
+		Where("user_id = ? AND status = ? AND (expires_at IS NULL OR expires_at > ?)", userID, model.UserChannelActive, now).
+		Count(&count).Error == nil && count > 0
 }
 
 type preparedInput struct {

@@ -11,11 +11,15 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/mailer"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
 	"github.com/sucheng1101/infinity-canvas/server/internal/store"
+	"github.com/sucheng1101/infinity-canvas/server/internal/subscription"
 	"gorm.io/gorm"
 )
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatal(err)
+	}
 	db, redisClient, err := store.Open(cfg)
 	if err != nil {
 		log.Fatal(err)
@@ -45,7 +49,7 @@ func main() {
 // reapStaleTasks releases quota stranded by tasks that were left running when
 // the process died, since only the owning process can settle or fail them.
 func reapStaleTasks(db *gorm.DB, cfg config.Config) {
-	service := &generation.Service{DB: db, Quota: &quota.Service{DB: db}}
+	service := &generation.Service{DB: db, Quota: &quota.Service{DB: db}, Subscriptions: &subscription.Service{DB: db}}
 	interval := cfg.RelayTimeout + time.Minute
 	if interval < time.Minute {
 		interval = time.Minute
