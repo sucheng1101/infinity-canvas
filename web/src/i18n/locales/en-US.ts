@@ -340,6 +340,7 @@ export default {
         prompts: "Prompt Library",
         assets: "My Assets",
         config: "Settings",
+        "model-plaza": "Model Plaza",
     },
     topNav: {
         openMenu: "Open navigation menu",

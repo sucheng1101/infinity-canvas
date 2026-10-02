@@ -34,8 +34,49 @@ type PublicModel struct {
 	DisplayName  string         `json:"displayName"`
 	PublicConfig map[string]any `json:"publicConfig"`
 	PriceSummary map[string]any `json:"priceSummary,omitempty"`
+	Performance  map[string]any `json:"performance,omitempty"`
 	Status       string         `json:"status,omitempty"`
 	SortOrder    int            `json:"sortOrder,omitempty"`
+}
+
+// Performance returns a small rolling summary for the model plaza. It only
+// exposes aggregate relay metrics and never includes user, prompt, or channel
+// details.
+func (s *Service) Performance(publishedModelID uint) map[string]any {
+	from := time.Now().UTC().Add(-24 * time.Hour)
+	var logs []struct {
+		Status      string `gorm:"column:status"`
+		DurationMs  int64  `gorm:"column:duration_ms"`
+		OutputToken int64  `gorm:"column:output_tokens"`
+	}
+	if err := s.DB.Model(&model.UsageLog{}).
+		Select("status, duration_ms, output_tokens").
+		Where("published_model_id = ? AND created_at >= ?", publishedModelID, from).
+		Find(&logs).Error; err != nil {
+		return nil
+	}
+	if len(logs) == 0 {
+		return nil
+	}
+	var totalDuration, totalOutput int64
+	succeeded := 0
+	for _, item := range logs {
+		totalDuration += item.DurationMs
+		totalOutput += item.OutputToken
+		if item.Status == model.UsageLogSuccess {
+			succeeded++
+		}
+	}
+	result := map[string]any{
+		"windowHours":    24,
+		"requests":       len(logs),
+		"successRate":    float64(succeeded) / float64(len(logs)) * 100,
+		"averageLatency": totalDuration / int64(len(logs)),
+	}
+	if totalDuration > 0 && totalOutput > 0 {
+		result["averageTps"] = float64(totalOutput) / (float64(totalDuration) / 1000)
+	}
+	return result
 }
 
 func (s *Service) List(capability string, includeHidden bool) ([]PublicModel, error) {

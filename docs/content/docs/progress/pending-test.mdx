@@ -254,3 +254,9 @@ The Chinese version contains the complete item-by-item acceptance checklist.
 - 修改渠道成本价或售价后，历史使用日志仍保留调用时的成本单价、售价单价、成本、收入和利润快照。
 - `APP_ENV=production` 使用默认或过短 `CHANNEL_ENCRYPTION_KEY` 时服务启动失败；开发环境仍能正常启动。
 - 成本定价相同的模型/渠道/上游模型/状态重复保存时更新原记录，不产生重复活动价格。
+## Model Plaza
+
+- Logged-in users should see the Model Plaza between Settings and My Assets in the top navigation, with a full-width workspace for published models.
+- Model cards should show unified price, quota price, billing unit, capability tags, and performance summary; clicking a card should open the details drawer.
+- Capability filters, model search, reset, and mobile navigation should work; unmatched searches should show an empty state.
+- When usage data exists, the models endpoint should include rolling 24-hour request count, success rate, average latency, and text throughput; missing metrics should not block the catalog.

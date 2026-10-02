@@ -1,4 +1,4 @@
-import { FileText, Images, LayoutDashboard, Maximize2, Settings2, Sparkles } from "lucide-react";
+import { FileText, Images, LayoutDashboard, Maximize2, Settings2, Sparkles, Store } from "lucide-react";
 
 export const navigationTools = [
     {
@@ -18,12 +18,16 @@ export const navigationTools = [
         icon: FileText,
     },
     {
-        slug: "assets",
-        icon: Images,
-    },
-    {
         slug: "config",
         icon: Settings2,
+    },
+    {
+        slug: "model-plaza",
+        icon: Store,
+    },
+    {
+        slug: "assets",
+        icon: Images,
     },
 ] as const;
 

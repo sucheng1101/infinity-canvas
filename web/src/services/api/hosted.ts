@@ -32,6 +32,8 @@ export type PublishedModel = {
     sourceModel?: string;
     displayName: string;
     publicConfig: Record<string, unknown>;
+    priceSummary?: { type?: string; unitAmount?: number; currency?: string };
+    performance?: { windowHours?: number; requests?: number; successRate?: number; averageLatency?: number; averageTps?: number };
     status?: "active" | "hidden";
     sortOrder?: number;
 };

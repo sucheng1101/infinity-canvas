@@ -490,6 +490,7 @@ func (a *Router) models(c *gin.Context) {
 		if summary, ok := a.Pricing.Summary(items[index].ID); ok {
 			items[index].PriceSummary = gin.H{"type": summary.Type, "unitAmount": summary.UnitAmount, "currency": summary.Currency}
 		}
+		items[index].Performance = a.ModelCatalog.Performance(items[index].ID)
 	}
 	successJSON(c, http.StatusOK, gin.H{"items": items})
 }

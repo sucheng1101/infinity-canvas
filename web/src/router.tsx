@@ -16,6 +16,7 @@ import NotFound from "@/pages/not-found";
 import PromptsPage from "@/pages/prompts";
 import WorkbenchPage from "@/pages/workbench";
 import ProjectsPage from "@/pages/projects";
+import ModelPlazaPage from "@/pages/model-plaza";
 import AdminPage from "@/pages/admin";
 import AdminSettingsPage from "@/pages/admin/settings";
 import ChannelsPage from "@/pages/channels";
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
                     { path: "/projects", element: <ProjectsPage /> },
                     { path: "/projects/:id", element: <EcommerceCanvasProjectPage /> },
                     { path: "/assets", element: <AssetsPage /> },
+                    { path: "/model-plaza", element: <ModelPlazaPage /> },
                     { path: "/billing", element: <BillingPage /> },
                     { path: "/channels", element: <ChannelsPage /> },
                     { path: "/admin", element: <AdminPage /> },
