@@ -1,7 +1,7 @@
 import { App, Button, Card, Checkbox, Descriptions, Form, Input, InputNumber, Select, Space, Spin, Switch, Table, Tabs, Tag } from "antd";
 import { ArrowLeft, CheckCircle2, RefreshCw, Save, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 
 import { adminApi, type EmailSettings, type PaymentSettings, type SecurityAccess, type SystemRelease } from "@/services/api/admin";
 import { useAuthStore } from "@/stores/use-auth-store";
@@ -54,7 +54,7 @@ export default function AdminSettingsPage() {
         if (user?.role === "admin") void load();
     }, [user?.role]);
 
-    if (user?.role !== "admin") return null;
+    if (user?.role !== "admin") return <Navigate to="/app" replace />;
 
     const saveEmail = async (values: EmailSettings) => {
         try {
