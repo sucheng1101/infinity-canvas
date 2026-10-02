@@ -144,6 +144,8 @@ export type AdminUsageLog = {
     upstreamModel: string;
     requestType: string;
     reasoningEffort?: string;
+    requestedQuality?: string;
+    actualQuality?: string;
     billingUnit: string;
     billedUnits: number;
     status: "running" | "succeeded" | "failed";

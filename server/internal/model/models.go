@@ -480,6 +480,8 @@ type UsageLog struct {
 	UpstreamModel       string     `gorm:"size:128;index" json:"upstreamModel"`
 	RequestType         string     `gorm:"size:32;index" json:"requestType"`
 	ReasoningEffort     string     `gorm:"size:32" json:"reasoningEffort,omitempty"`
+	RequestedQuality    string     `gorm:"size:32" json:"requestedQuality,omitempty"`
+	ActualQuality       string     `gorm:"size:32" json:"actualQuality,omitempty"`
 	BillingUnit         string     `gorm:"size:32;index" json:"billingUnit"`
 	BilledUnits         float64    `json:"billedUnits"`
 	Status              string     `gorm:"size:32;index;not null" json:"status"`

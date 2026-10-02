@@ -211,8 +211,9 @@ func (s *Service) beginUsage(task model.GenerationTask, meta ExecuteMeta) uint {
 		TaskID: task.ID, RequestID: strings.TrimSpace(meta.RequestID), UserID: task.UserID,
 		PublishedModelID: task.PublishedModelID, Capability: task.Capability,
 		RequestType: meta.RequestType, ReasoningEffort: meta.ReasoningEffort,
-		BillingUnit: billingUnit(task.Capability),
-		Status:      model.UsageLogRunning, IP: strings.TrimSpace(meta.IP), StartedAt: time.Now().UTC(),
+		RequestedQuality: requestedImageQuality(task),
+		BillingUnit:      billingUnit(task.Capability),
+		Status:           model.UsageLogRunning, IP: strings.TrimSpace(meta.IP), StartedAt: time.Now().UTC(),
 		RequestSummaryJSON: summarizeTask(task),
 	}
 	var published model.PublishedModel
@@ -265,6 +266,11 @@ func (s *Service) finishUsage(id uint, status string, task model.GenerationTask,
 	}
 	if response != nil {
 		updates["response_summary_json"] = summarizeResponse(response)
+		if strings.ToLower(strings.TrimSpace(task.Capability)) == "image" {
+			if quality := actualImageQuality(response); quality != "" {
+				updates["actual_quality"] = quality
+			}
+		}
 	}
 	_ = s.DB.Model(&model.UsageLog{}).Where("id = ?", id).Updates(updates)
 }
@@ -319,6 +325,58 @@ func summarizeTask(task model.GenerationTask) string {
 	var parameters map[string]any
 	_ = json.Unmarshal([]byte(task.ParametersJSON), &parameters)
 	return encodeSummary(map[string]any{"payloadKeys": mapKeys(payload), "parameterKeys": mapKeys(parameters), "payloadBytes": len(task.PayloadJSON)})
+}
+
+func requestedImageQuality(task model.GenerationTask) string {
+	if strings.ToLower(strings.TrimSpace(task.Capability)) != "image" {
+		return ""
+	}
+	for _, raw := range []string{task.ParametersJSON, task.PayloadJSON} {
+		var value map[string]any
+		if json.Unmarshal([]byte(raw), &value) != nil {
+			continue
+		}
+		if quality := qualityValue(value, "quality"); quality != "" {
+			return quality
+		}
+	}
+	return ""
+}
+
+func actualImageQuality(response map[string]any) string {
+	if response == nil {
+		return ""
+	}
+	for _, key := range []string{"actual_quality", "actualQuality", "output_quality", "outputQuality", "quality"} {
+		if quality := qualityValue(response, key); quality != "" {
+			return quality
+		}
+	}
+	for _, key := range []string{"data", "images", "output", "result"} {
+		if nested, ok := response[key].([]any); ok {
+			for _, value := range nested {
+				if item, ok := value.(map[string]any); ok {
+					if quality := actualImageQuality(item); quality != "" {
+						return quality
+					}
+				}
+			}
+		}
+		if nested, ok := response[key].(map[string]any); ok {
+			if quality := actualImageQuality(nested); quality != "" {
+				return quality
+			}
+		}
+	}
+	return ""
+}
+
+func qualityValue(value map[string]any, key string) string {
+	quality, ok := value[key].(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(quality)
 }
 
 func summarizeResponse(response map[string]any) string {
