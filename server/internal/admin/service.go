@@ -327,6 +327,310 @@ type UsageStats struct {
 	AverageDurationMs float64 `json:"averageDurationMs"`
 }
 
+// OrderFilter describes the operator-facing order list. The list intentionally
+// combines paid recharge orders and balance-backed operation orders while
+// keeping their source-specific fields separate.
+type OrderFilter struct {
+	Type     string
+	Status   string
+	Query    string
+	From     time.Time
+	To       time.Time
+	Page     int
+	PageSize int
+}
+
+type OrderView struct {
+	ID              uint       `json:"id"`
+	Kind            string     `json:"kind"`
+	OrderNo         string     `json:"orderNo"`
+	UserID          uint       `json:"userId"`
+	Username        string     `json:"username"`
+	ProductID       uint       `json:"productId"`
+	ProductName     string     `json:"productName"`
+	Amount          int64      `json:"amount"`
+	PayAmountFen    int64      `json:"payAmountFen"`
+	QuotaAmount     int64      `json:"quotaAmount"`
+	GiftQuota       int64      `json:"giftQuota"`
+	PaymentProvider string     `json:"paymentProvider,omitempty"`
+	PaymentMethod   string     `json:"paymentMethod,omitempty"`
+	Status          string     `json:"status"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	PaidAt          *time.Time `json:"paidAt,omitempty"`
+	CreditedAt      *time.Time `json:"creditedAt,omitempty"`
+	ExpiresAt       *time.Time `json:"expiresAt,omitempty"`
+}
+
+type OrderListResult struct {
+	Items    []OrderView `json:"items"`
+	Total    int64       `json:"total"`
+	Page     int         `json:"page"`
+	PageSize int         `json:"pageSize"`
+}
+
+type GenerationFilter struct {
+	Query      string
+	Status     string
+	Capability string
+	Page       int
+	PageSize   int
+}
+
+type GenerationView struct {
+	ID                  string     `json:"id"`
+	UserID              uint       `json:"userId"`
+	Username            string     `json:"username"`
+	ModelID             uint       `json:"modelId"`
+	ModelName           string     `json:"modelName"`
+	Capability          string     `json:"capability"`
+	ChannelID           *uint      `json:"channelId,omitempty"`
+	ChannelName         string     `json:"channelName,omitempty"`
+	ChannelModel        string     `json:"channelModel,omitempty"`
+	Status              string     `json:"status"`
+	ReservedAmount      int64      `json:"reservedAmount"`
+	SettledAmount       int64      `json:"settledAmount"`
+	SubscriptionCovered bool       `json:"subscriptionCovered"`
+	ErrorCode           string     `json:"errorCode,omitempty"`
+	ErrorMessage        string     `json:"errorMessage,omitempty"`
+	StartedAt           *time.Time `json:"startedAt,omitempty"`
+	CompletedAt         *time.Time `json:"completedAt,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+}
+
+type GenerationListResult struct {
+	Items    []GenerationView `json:"items"`
+	Total    int64            `json:"total"`
+	Page     int              `json:"page"`
+	PageSize int              `json:"pageSize"`
+}
+
+type AuditFilter struct {
+	Query    string
+	Action   string
+	Resource string
+	Page     int
+	PageSize int
+}
+
+type AuditView struct {
+	model.AuditLog
+	OperatorName string `json:"operatorName,omitempty"`
+}
+
+type AuditListResult struct {
+	Items    []AuditView `json:"items"`
+	Total    int64       `json:"total"`
+	Page     int         `json:"page"`
+	PageSize int         `json:"pageSize"`
+}
+
+type FinanceSummary struct {
+	RechargeOrders int64 `json:"rechargeOrders"`
+	RechargeFen    int64 `json:"rechargeFen"`
+	UsageCount     int64 `json:"usageCount"`
+	RevenueQuota   int64 `json:"revenueQuota"`
+	CostQuota      int64 `json:"costQuota"`
+	ProfitQuota    int64 `json:"profitQuota"`
+	FailedCount    int64 `json:"failedCount"`
+}
+
+func (s *Service) ListOrders(filter OrderFilter) (OrderListResult, error) {
+	page, pageSize := normalizePage(filter.Page, filter.PageSize)
+	var topups []model.TopupOrder
+	query := s.DB.Model(&model.TopupOrder{})
+	if filter.Type == "" || filter.Type == "recharge" {
+		if filter.Status != "" {
+			query = query.Where("status = ?", filter.Status)
+		}
+		if !filter.From.IsZero() {
+			query = query.Where("created_at >= ?", filter.From)
+		}
+		if !filter.To.IsZero() {
+			query = query.Where("created_at < ?", filter.To)
+		}
+		if filter.Query != "" {
+			query = query.Where("order_no LIKE ? OR user_id IN (?)", "%"+filter.Query+"%", s.DB.Model(&model.User{}).Select("id").Where("username LIKE ? OR email LIKE ?", "%"+filter.Query+"%", "%"+filter.Query+"%"))
+		}
+		if err := query.Order("created_at DESC").Find(&topups).Error; err != nil {
+			return OrderListResult{}, err
+		}
+	}
+	var operations []model.OperationOrder
+	query = s.DB.Model(&model.OperationOrder{})
+	if filter.Type == "" || filter.Type == "operation" {
+		if filter.Status != "" {
+			query = query.Where("status = ?", filter.Status)
+		}
+		if !filter.From.IsZero() {
+			query = query.Where("created_at >= ?", filter.From)
+		}
+		if !filter.To.IsZero() {
+			query = query.Where("created_at < ?", filter.To)
+		}
+		if filter.Query != "" {
+			query = query.Where("order_no LIKE ? OR user_id IN (?)", "%"+filter.Query+"%", s.DB.Model(&model.User{}).Select("id").Where("username LIKE ? OR email LIKE ?", "%"+filter.Query+"%", "%"+filter.Query+"%"))
+		}
+		if err := query.Order("created_at DESC").Find(&operations).Error; err != nil {
+			return OrderListResult{}, err
+		}
+	}
+	items := make([]OrderView, 0, len(topups)+len(operations))
+	for _, order := range topups {
+		var product model.TopupProduct
+		_ = s.DB.First(&product, order.ProductID).Error
+		items = append(items, OrderView{ID: order.ID, Kind: "recharge", OrderNo: order.OrderNo, UserID: order.UserID, ProductID: order.ProductID, ProductName: product.Name, Amount: order.QuotaAmount + order.GiftQuota, PayAmountFen: order.PayAmountFen, QuotaAmount: order.QuotaAmount, GiftQuota: order.GiftQuota, PaymentProvider: order.PaymentProvider, PaymentMethod: order.PaymentMethod, Status: order.Status, CreatedAt: order.CreatedAt, PaidAt: order.PaidAt, CreditedAt: order.CreditedAt, ExpiresAt: &order.ExpiresAt})
+	}
+	for _, order := range operations {
+		name := "订阅购买"
+		if order.Type == model.OperationOrderChannelUnlock {
+			name = "自定义渠道解锁"
+		}
+		items = append(items, OrderView{ID: order.ID, Kind: "operation", OrderNo: order.OrderNo, UserID: order.UserID, ProductID: order.ProductID, ProductName: name, Amount: order.Amount, Status: order.Status, CreatedAt: order.CreatedAt})
+	}
+	for index := 1; index < len(items); index++ {
+		current := items[index]
+		cursor := index - 1
+		for cursor >= 0 && items[cursor].CreatedAt.Before(current.CreatedAt) {
+			items[cursor+1] = items[cursor]
+			cursor--
+		}
+		items[cursor+1] = current
+	}
+	total := int64(len(items))
+	start := (page - 1) * pageSize
+	if start >= len(items) {
+		items = []OrderView{}
+	} else {
+		end := start + pageSize
+		if end > len(items) {
+			end = len(items)
+		}
+		items = items[start:end]
+	}
+	users := map[uint]string{}
+	for index := range items {
+		if _, ok := users[items[index].UserID]; !ok {
+			var user model.User
+			if s.DB.First(&user, items[index].UserID).Error == nil {
+				users[user.ID] = user.Username
+			}
+		}
+		items[index].Username = users[items[index].UserID]
+	}
+	return OrderListResult{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
+func (s *Service) ListGenerations(filter GenerationFilter) (GenerationListResult, error) {
+	page, pageSize := normalizePage(filter.Page, filter.PageSize)
+	query := s.DB.Model(&model.GenerationTask{})
+	if filter.Status != "" {
+		query = query.Where("status = ?", filter.Status)
+	}
+	if filter.Capability != "" {
+		query = query.Where("capability = ?", filter.Capability)
+	}
+	if filter.Query != "" {
+		like := "%" + filter.Query + "%"
+		query = query.Where("id LIKE ? OR user_id IN (?)", like, s.DB.Model(&model.User{}).Select("id").Where("username LIKE ? OR email LIKE ?", like, like))
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return GenerationListResult{}, err
+	}
+	var tasks []model.GenerationTask
+	if err := query.Order("created_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&tasks).Error; err != nil {
+		return GenerationListResult{}, err
+	}
+	items := make([]GenerationView, 0, len(tasks))
+	for _, task := range tasks {
+		item := GenerationView{ID: task.ID, UserID: task.UserID, ModelID: task.PublishedModelID, Capability: task.Capability, ChannelID: task.UserChannelID, ChannelModel: task.UserChannelModel, Status: task.Status, ReservedAmount: task.ReservedAmount, SettledAmount: task.SettledAmount, SubscriptionCovered: task.SubscriptionCovered, ErrorCode: task.ErrorCode, ErrorMessage: task.ErrorMessage, StartedAt: task.StartedAt, CompletedAt: task.CompletedAt, CreatedAt: task.CreatedAt}
+		var user model.User
+		if s.DB.First(&user, task.UserID).Error == nil {
+			item.Username = user.Username
+		}
+		var published model.PublishedModel
+		if s.DB.First(&published, task.PublishedModelID).Error == nil {
+			item.ModelName = published.DisplayName
+		}
+		if task.UserChannelID != nil {
+			var channel model.UserChannel
+			if s.DB.First(&channel, *task.UserChannelID).Error == nil {
+				item.ChannelName = channel.Name
+			}
+		}
+		items = append(items, item)
+	}
+	return GenerationListResult{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
+func (s *Service) ListAuditLogs(filter AuditFilter) (AuditListResult, error) {
+	page, pageSize := normalizePage(filter.Page, filter.PageSize)
+	query := s.DB.Model(&model.AuditLog{})
+	if filter.Action != "" {
+		query = query.Where("action LIKE ?", "%"+filter.Action+"%")
+	}
+	if filter.Resource != "" {
+		query = query.Where("resource_type = ?", filter.Resource)
+	}
+	if filter.Query != "" {
+		like := "%" + filter.Query + "%"
+		query = query.Where("action LIKE ? OR resource_id LIKE ?", like, like)
+	}
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return AuditListResult{}, err
+	}
+	var logs []model.AuditLog
+	if err := query.Order("id DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&logs).Error; err != nil {
+		return AuditListResult{}, err
+	}
+	items := make([]AuditView, 0, len(logs))
+	for _, log := range logs {
+		item := AuditView{AuditLog: log}
+		if log.OperatorID != nil {
+			var user model.User
+			if s.DB.First(&user, *log.OperatorID).Error == nil {
+				item.OperatorName = user.Username
+			}
+		}
+		items = append(items, item)
+	}
+	return AuditListResult{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
+func (s *Service) FinanceSummary(from, to time.Time) (FinanceSummary, error) {
+	if from.IsZero() {
+		from = time.Now().UTC().AddDate(0, 0, -30)
+	}
+	if to.IsZero() {
+		to = time.Now().UTC()
+	}
+	var summary FinanceSummary
+	if err := s.DB.Model(&model.TopupOrder{}).Where("status = ? AND created_at >= ? AND created_at < ?", model.TopupOrderQuotaCredited, from, to).Count(&summary.RechargeOrders).Error; err != nil {
+		return summary, err
+	}
+	if err := s.DB.Model(&model.TopupOrder{}).Where("status = ? AND created_at >= ? AND created_at < ?", model.TopupOrderQuotaCredited, from, to).Select("COALESCE(SUM(pay_amount_fen),0)").Scan(&summary.RechargeFen).Error; err != nil {
+		return summary, err
+	}
+	query := s.DB.Model(&model.UsageLog{}).Where("created_at >= ? AND created_at < ?", from, to)
+	if err := query.Count(&summary.UsageCount).Error; err != nil {
+		return summary, err
+	}
+	if err := query.Select("COALESCE(SUM(revenue_total),0)").Scan(&summary.RevenueQuota).Error; err != nil {
+		return summary, err
+	}
+	if err := query.Select("COALESCE(SUM(cost_total),0)").Scan(&summary.CostQuota).Error; err != nil {
+		return summary, err
+	}
+	if err := query.Select("COALESCE(SUM(profit_total),0)").Scan(&summary.ProfitQuota).Error; err != nil {
+		return summary, err
+	}
+	if err := query.Where("status = ?", model.UsageLogFailed).Count(&summary.FailedCount).Error; err != nil {
+		return summary, err
+	}
+	return summary, nil
+}
+
 func (s *Service) ListUsageLogs(filter UsageFilter) (UsageListResult, error) {
 	page, pageSize := normalizePage(filter.Page, filter.PageSize)
 	query := s.DB.Model(&model.UsageLog{})

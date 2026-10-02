@@ -74,6 +74,7 @@
 /api/v1/admin/invitation-risk-events
 /api/v1/admin/orders
 /api/v1/admin/generations
+/api/v1/admin/finance/summary
 /api/v1/admin/audit-logs
 ```
 

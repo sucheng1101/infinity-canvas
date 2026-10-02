@@ -12,6 +12,7 @@ import { PricingManagement } from "./components/pricing-management";
 import { UsageLogManagement } from "./components/usage-log-management";
 import { UserManagement } from "./components/user-management";
 import { SubscriptionManagement } from "./components/subscription-management";
+import { OperationsManagement } from "./components/operations-management";
 
 const statusOptions = [
     { value: "active", label: "启用" },
@@ -512,6 +513,11 @@ export default function AdminPage() {
                             children: <UsageLogManagement />,
                         },
                         {
+                            key: "operations",
+                            label: "订单与财务",
+                            children: <OperationsManagement />,
+                        },
+                        {
                             key: "models",
                             label: "模型目录",
                             children: (
@@ -582,7 +588,7 @@ export default function AdminPage() {
                             children: <SubscriptionManagement models={models} channels={channels} />,
                         },
                         {
-                            key: "operations",
+                            key: "account-payment",
                             label: "账户与支付",
                             children: (
                                 <Space direction="vertical" className="w-full" size="large">

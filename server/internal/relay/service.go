@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/generation"
@@ -32,6 +33,8 @@ type Service struct {
 	Generation   *generation.Service
 	Client       *http.Client
 	UserChannels *userchannel.Service
+	runsMu       sync.Mutex
+	runs         map[string]context.CancelFunc
 }
 
 type ExecuteMeta struct {
@@ -64,6 +67,14 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metad
 	if task.Status == model.GenerationTaskSucceeded || task.Status == model.GenerationTaskFailed || task.Status == model.GenerationTaskCancelled {
 		return toTaskView(task)
 	}
+	runCtx, cancel := context.WithCancel(ctx)
+	if !s.registerRun(task.ID, cancel) {
+		if reloadErr := s.DB.First(&task, "id = ?", task.ID).Error; reloadErr != nil {
+			return generation.View{}, reloadErr
+		}
+		return toTaskView(task)
+	}
+	defer s.unregisterRun(task.ID)
 	if err := s.Generation.Start(task.ID); err != nil {
 		// Another request may already own execution. Return the current state rather
 		// than sending the same upstream request twice.
@@ -84,6 +95,16 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metad
 	}
 	usageID := s.beginUsage(task, meta)
 	failWithLog := func(code string, cause error) (generation.View, error) {
+		if errors.Is(cause, context.Canceled) {
+			if cancelled, cancelErr := s.Generation.Cancel(task.UserID, task.ID); cancelErr == nil {
+				s.finishUsage(usageID, model.UsageLogFailed, task, 0, "TASK_CANCELLED", cause, nil, 0)
+				return cancelled, cause
+			}
+			if current, readErr := s.Generation.Get(task.UserID, task.ID); readErr == nil && current.Status == model.GenerationTaskCancelled {
+				s.finishUsage(usageID, model.UsageLogFailed, task, 0, "TASK_CANCELLED", cause, nil, 0)
+				return current, cause
+			}
+		}
 		view, failure := s.fail(task.ID, code, cause)
 		s.finishUsage(usageID, model.UsageLogFailed, task, 0, code, cause, nil, 0)
 		return view, failure
@@ -103,7 +124,7 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metad
 		return failWithLog("CAPABILITY_UNSUPPORTED", err)
 	}
 	requestURL := joinURL(selected.channel.BaseURL, path)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, strings.NewReader(body))
+	req, err := http.NewRequestWithContext(runCtx, http.MethodPost, requestURL, strings.NewReader(body))
 	if err != nil {
 		return failWithLog("UPSTREAM_REQUEST_INVALID", err)
 	}
@@ -138,6 +159,42 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metad
 	s.finishUsage(usageID, model.UsageLogSuccess, task, view.SettledAmount, "", nil, output, inputTokens+outputTokens+cachedTokens)
 	_ = s.DB.Model(&model.UsageLog{}).Where("id = ?", usageID).Updates(map[string]any{"input_tokens": inputTokens, "output_tokens": outputTokens, "cached_tokens": cachedTokens, "total_tokens": totalTokens})
 	return view, nil
+}
+
+// Cancel interrupts an in-flight upstream request. The persisted task state is
+// still changed by the HTTP handler through Generation.Cancel, so queued tasks
+// and tasks that have already completed use the same state machine.
+func (s *Service) Cancel(taskID string) bool {
+	s.runsMu.Lock()
+	cancel, ok := s.runs[taskID]
+	if ok {
+		delete(s.runs, taskID)
+	}
+	s.runsMu.Unlock()
+	if ok {
+		cancel()
+	}
+	return ok
+}
+
+func (s *Service) registerRun(taskID string, cancel context.CancelFunc) bool {
+	s.runsMu.Lock()
+	if s.runs == nil {
+		s.runs = map[string]context.CancelFunc{}
+	}
+	if _, exists := s.runs[taskID]; exists {
+		s.runsMu.Unlock()
+		return false
+	}
+	s.runs[taskID] = cancel
+	s.runsMu.Unlock()
+	return true
+}
+
+func (s *Service) unregisterRun(taskID string) {
+	s.runsMu.Lock()
+	delete(s.runs, taskID)
+	s.runsMu.Unlock()
 }
 
 func (s *Service) fail(taskID, code string, cause error) (generation.View, error) {

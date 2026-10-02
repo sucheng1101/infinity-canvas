@@ -177,6 +177,48 @@ export type AdminUsageResult = {
     pageSize: number;
     stats: { total: number; succeeded: number; failed: number; running: number; chargedQuota: number; totalTokens: number; averageDurationMs: number };
 };
+export type AdminOrder = {
+    id: number;
+    kind: "recharge" | "operation";
+    orderNo: string;
+    userId: number;
+    username?: string;
+    productId: number;
+    productName: string;
+    amount: number;
+    payAmountFen: number;
+    quotaAmount: number;
+    giftQuota: number;
+    paymentProvider?: string;
+    paymentMethod?: string;
+    status: string;
+    createdAt: string;
+    paidAt?: string;
+    creditedAt?: string;
+    expiresAt?: string;
+};
+export type AdminGeneration = {
+    id: string;
+    userId: number;
+    username?: string;
+    modelId: number;
+    modelName: string;
+    capability: string;
+    channelId?: number;
+    channelName?: string;
+    channelModel?: string;
+    status: string;
+    reservedAmount: number;
+    settledAmount: number;
+    subscriptionCovered: boolean;
+    errorCode?: string;
+    errorMessage?: string;
+    startedAt?: string;
+    completedAt?: string;
+    createdAt: string;
+};
+export type AdminAuditLog = { id: number; operatorId?: number; operatorName?: string; action: string; resourceType: string; resourceId: string; requestId?: string; createdAt: string };
+export type AdminFinanceSummary = { rechargeOrders: number; rechargeFen: number; usageCount: number; revenueQuota: number; costQuota: number; profitQuota: number; failedCount: number };
 
 type Envelope<T> = { data: T; requestId?: string; error?: { message?: string } };
 const apiBase = (import.meta.env.VITE_HOSTED_API_BASE || "/api/v1").replace(/\/$/, "");
@@ -241,6 +283,10 @@ export const adminApi = {
     userUsage: (id: number, page = 1, pageSize = 20) => request<AdminUsageResult>(`/admin/users/${id}/usage?page=${page}&pageSize=${pageSize}`),
     usageLogs: (params: Record<string, string | number | undefined> = {}) => request<AdminUsageResult>(`/admin/usage-logs?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
     usageLog: (id: number) => request<AdminUsageLog>(`/admin/usage-logs/${id}`),
+    orders: (params: Record<string, string | number | undefined> = {}) => request<{ items: AdminOrder[]; total: number; page: number; pageSize: number }>(`/admin/orders?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
+    generations: (params: Record<string, string | number | undefined> = {}) => request<{ items: AdminGeneration[]; total: number; page: number; pageSize: number }>(`/admin/generations?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
+    auditLogs: (params: Record<string, string | number | undefined> = {}) => request<{ items: AdminAuditLog[]; total: number; page: number; pageSize: number }>(`/admin/audit-logs?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
+    financeSummary: (params: Record<string, string | number | undefined> = {}) => request<AdminFinanceSummary>(`/admin/finance/summary?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
     subscriptionPlans: () => request<{ items: AdminSubscriptionPlan[] }>("/admin/subscription-plans"),
     saveSubscriptionPlan: (body: Record<string, unknown>, id?: number) => request<AdminSubscriptionPlan>(id ? `/admin/subscription-plans/${id}` : "/admin/subscription-plans", json(body, id ? "PUT" : "POST")),
     channelUnlockPlans: () => request<{ items: AdminChannelUnlockPlan[] }>("/admin/channel-unlock-plans"),

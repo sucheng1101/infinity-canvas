@@ -128,6 +128,10 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.GET("/admin/users/:id/usage", app.requireAdmin(), app.adminUserUsage)
 	v1.GET("/admin/usage-logs", app.requireAdmin(), app.adminUsageLogs)
 	v1.GET("/admin/usage-logs/:id", app.requireAdmin(), app.adminUsageLog)
+	v1.GET("/admin/orders", app.requireAdmin(), app.adminOrders)
+	v1.GET("/admin/generations", app.requireAdmin(), app.adminGenerations)
+	v1.GET("/admin/audit-logs", app.requireAdmin(), app.adminAuditLogs)
+	v1.GET("/admin/finance/summary", app.requireAdmin(), app.adminFinanceSummary)
 	v1.GET("/admin/invitation-settings", app.requireAdmin(), app.adminInvitationSettings)
 	v1.PUT("/admin/invitation-settings", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.updateAdminInvitationSettings)
 	v1.POST("/admin/quota-adjustments", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminQuotaAdjustment)
@@ -825,6 +829,64 @@ func (a *Router) adminUsageLog(c *gin.Context) {
 	successJSON(c, http.StatusOK, item)
 }
 
+func (a *Router) adminOrders(c *gin.Context) {
+	page, pageSize := pageParams(c)
+	from, to := parseTimeRange(c.Query("from"), c.Query("to"))
+	result, err := a.Admin.ListOrders(adminservice.OrderFilter{Type: c.Query("type"), Status: c.Query("status"), Query: c.Query("query"), From: from, To: to, Page: page, PageSize: pageSize})
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "ADMIN_ORDERS_READ_FAILED", "订单列表读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, result)
+}
+
+func (a *Router) adminGenerations(c *gin.Context) {
+	page, pageSize := pageParams(c)
+	result, err := a.Admin.ListGenerations(adminservice.GenerationFilter{Query: c.Query("query"), Status: c.Query("status"), Capability: c.Query("capability"), Page: page, PageSize: pageSize})
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "ADMIN_GENERATIONS_READ_FAILED", "生成任务读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, result)
+}
+
+func (a *Router) adminAuditLogs(c *gin.Context) {
+	page, pageSize := pageParams(c)
+	result, err := a.Admin.ListAuditLogs(adminservice.AuditFilter{Query: c.Query("query"), Action: c.Query("action"), Resource: c.Query("resource"), Page: page, PageSize: pageSize})
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "ADMIN_AUDIT_READ_FAILED", "审计日志读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, result)
+}
+
+func (a *Router) adminFinanceSummary(c *gin.Context) {
+	from, to := parseTimeRange(c.Query("from"), c.Query("to"))
+	result, err := a.Admin.FinanceSummary(from, to)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "ADMIN_FINANCE_READ_FAILED", "财务统计读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, result)
+}
+
+func parseTimeRange(fromValue, toValue string) (time.Time, time.Time) {
+	parse := func(value string) time.Time {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return time.Time{}
+		}
+		if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+			return parsed.UTC()
+		}
+		if parsed, err := time.Parse("2006-01-02", value); err == nil {
+			return parsed.UTC()
+		}
+		return time.Time{}
+	}
+	return parse(fromValue), parse(toValue)
+}
+
 func parseAdminID(value string) (uint, error) {
 	id, err := strconv.ParseUint(value, 10, 64)
 	if err != nil || id == 0 {
@@ -835,6 +897,9 @@ func parseAdminID(value string) (uint, error) {
 
 func (a *Router) cancelGenerationTask(c *gin.Context) {
 	user, _ := currentUser(c)
+	// Interrupt a running upstream HTTP request before settling the persisted
+	// task. Queued tasks simply skip this branch and use the normal transition.
+	a.Relay.Cancel(c.Param("id"))
 	task, err := a.Generation.Cancel(user.ID, c.Param("id"))
 	if errors.Is(err, generation.ErrTaskNotFound) {
 		errorJSON(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
