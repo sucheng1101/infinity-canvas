@@ -20,6 +20,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/auth"
 	"github.com/sucheng1101/infinity-canvas/server/internal/channelcatalog"
 	"github.com/sucheng1101/infinity-canvas/server/internal/config"
+	"github.com/sucheng1101/infinity-canvas/server/internal/costpricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/generation"
 	"github.com/sucheng1101/infinity-canvas/server/internal/invitation"
 	"github.com/sucheng1101/infinity-canvas/server/internal/mailer"
@@ -29,6 +30,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
 	"github.com/sucheng1101/infinity-canvas/server/internal/relay"
+	"github.com/sucheng1101/infinity-canvas/server/internal/subscription"
 	"github.com/sucheng1101/infinity-canvas/server/internal/userchannel"
 	versionservice "github.com/sucheng1101/infinity-canvas/server/internal/version"
 	"gorm.io/gorm"
@@ -49,6 +51,8 @@ type Router struct {
 	Admin          *adminservice.Service
 	Version        *versionservice.Service
 	UserChannels   *userchannel.Service
+	Subscriptions  *subscription.Service
+	CostPricing    *costpricing.Service
 	Redis          *redis.Client
 	Mailer         mailer.Mailer
 }
@@ -59,15 +63,17 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	invitationService := &invitation.Service{DB: db, Cfg: cfg, Quota: quotaService}
 	paymentService := &payment.Service{DB: db, Cfg: cfg, Quota: quotaService}
 	pricingService := &pricing.Service{DB: db, QuoteTTL: cfg.QuoteTTL}
-	generationService := &generation.Service{DB: db, Quota: quotaService, Pricing: pricingService}
+	subscriptionService := &subscription.Service{DB: db}
+	generationService := &generation.Service{DB: db, Quota: quotaService, Pricing: pricingService, Subscriptions: subscriptionService}
 	relayService := &relay.Service{DB: db, Generation: generationService, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	modelCatalogService := &modelcatalog.Service{DB: db}
 	channelCatalogService := &channelcatalog.Service{DB: db, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	adminService := &adminservice.Service{DB: db, Quota: quotaService}
 	versionService := &versionservice.Service{DB: db, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	userChannelService := &userchannel.Service{DB: db, Cfg: cfg, Client: &http.Client{Timeout: cfg.RelayTimeout}}
+	costPricingService := &costpricing.Service{DB: db}
 	relayService.UserChannels = userChannelService
-	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Redis: redisClient, Mailer: outbound}
+	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Subscriptions: subscriptionService, CostPricing: costPricingService, Redis: redisClient, Mailer: outbound}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(requestID())
@@ -97,6 +103,11 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.POST("/account/channels/:id/test", app.requireAuth(), app.userChannelTest)
 	v1.GET("/account/ledger", app.requireAuth(), app.accountLedger)
 	v1.GET("/recharge/products", app.requireAuth(), app.rechargeProducts)
+	v1.GET("/subscriptions/plans", app.requireAuth(), app.subscriptionPlans)
+	v1.GET("/account/subscription", app.requireAuth(), app.accountSubscription)
+	v1.POST("/subscriptions/orders", app.requireAuth(), app.allowGuard("subscription-order", 10, time.Minute), app.createSubscriptionOrder)
+	v1.GET("/account/channel-unlock-plans", app.requireAuth(), app.channelUnlockPlans)
+	v1.POST("/account/channels/unlock", app.requireAuth(), app.allowGuard("channel-unlock", 10, time.Minute), app.unlockCustomChannels)
 	v1.POST("/recharge/orders", app.requireAuth(), app.allowGuard("recharge-order", 10, time.Minute), app.createRechargeOrder)
 	v1.GET("/recharge/orders/:id", app.requireAuth(), app.rechargeOrder)
 	v1.POST("/payments/epay/webhook", app.allowGuard("epay-webhook", 120, time.Minute), app.epayWebhook)
@@ -154,6 +165,15 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.POST("/admin/pricing", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreatePricing)
 	v1.POST("/admin/pricing/:id/publish", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminPublishPricing)
 	v1.POST("/admin/pricing/:id/retire", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminRetirePricing)
+	v1.GET("/admin/subscription-plans", app.requireAdmin(), app.adminSubscriptionPlans)
+	v1.POST("/admin/subscription-plans", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateSubscriptionPlan)
+	v1.PUT("/admin/subscription-plans/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateSubscriptionPlan)
+	v1.GET("/admin/channel-unlock-plans", app.requireAdmin(), app.adminChannelUnlockPlans)
+	v1.POST("/admin/channel-unlock-plans", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateChannelUnlockPlan)
+	v1.PUT("/admin/channel-unlock-plans/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateChannelUnlockPlan)
+	v1.GET("/admin/model-cost-pricing", app.requireAdmin(), app.adminModelCostPricing)
+	v1.POST("/admin/model-cost-pricing", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateModelCostPricing)
+	v1.PUT("/admin/model-cost-pricing/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateModelCostPricing)
 	return r
 }
 
@@ -894,6 +914,238 @@ func (a *Router) adminRetirePricing(c *gin.Context) {
 		return
 	}
 	successJSON(c, http.StatusOK, gin.H{"ok": true})
+}
+
+func (a *Router) subscriptionPlans(c *gin.Context) {
+	items, err := a.Subscriptions.Plans(false)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "SUBSCRIPTION_PLANS_READ_FAILED", "订阅套餐读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) accountSubscription(c *gin.Context) {
+	user, _ := currentUser(c)
+	item, err := a.Subscriptions.Current(user.ID)
+	if errors.Is(err, subscription.ErrSubscriptionUnavailable) {
+		successJSON(c, http.StatusOK, gin.H{"active": false})
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "SUBSCRIPTION_READ_FAILED", "当前订阅读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"active": true, "subscription": item})
+}
+
+func (a *Router) createSubscriptionOrder(c *gin.Context) {
+	user, _ := currentUser(c)
+	var input struct {
+		PlanID uint `json:"planId"`
+	}
+	if c.ShouldBindJSON(&input) != nil || input.PlanID == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "订阅套餐无效")
+		return
+	}
+	item, err := a.Subscriptions.Purchase(user.ID, input.PlanID)
+	if errors.Is(err, subscription.ErrPlanNotFound) {
+		errorJSON(c, http.StatusNotFound, "SUBSCRIPTION_PLAN_NOT_FOUND", "订阅套餐不存在")
+		return
+	}
+	if errors.Is(err, subscription.ErrInsufficientQuota) {
+		errorJSON(c, http.StatusConflict, "QUOTA_INSUFFICIENT", "积分余额不足")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "SUBSCRIPTION_PURCHASE_FAILED", "订阅购买失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+}
+
+func (a *Router) channelUnlockPlans(c *gin.Context) {
+	items, err := a.Subscriptions.UnlockPlans(false)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "CHANNEL_UNLOCK_PLANS_READ_FAILED", "渠道解锁套餐读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) unlockCustomChannels(c *gin.Context) {
+	user, _ := currentUser(c)
+	var input struct {
+		PlanID uint `json:"planId"`
+	}
+	if c.ShouldBindJSON(&input) != nil || input.PlanID == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道解锁套餐无效")
+		return
+	}
+	item, err := a.Subscriptions.UnlockChannel(user.ID, input.PlanID)
+	if errors.Is(err, subscription.ErrUnlockPlanNotFound) {
+		errorJSON(c, http.StatusNotFound, "CHANNEL_UNLOCK_PLAN_NOT_FOUND", "渠道解锁套餐不存在")
+		return
+	}
+	if errors.Is(err, subscription.ErrInsufficientQuota) {
+		errorJSON(c, http.StatusConflict, "QUOTA_INSUFFICIENT", "积分余额不足")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_UNLOCK_FAILED", "渠道解锁失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+}
+
+func (a *Router) adminSubscriptionPlans(c *gin.Context) {
+	items, err := a.Subscriptions.Plans(true)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "SUBSCRIPTION_PLANS_READ_FAILED", "订阅套餐读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminCreateSubscriptionPlan(c *gin.Context) {
+	var input subscription.PlanInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "订阅套餐参数无效")
+		return
+	}
+	item, err := a.Subscriptions.UpsertPlan(input, 0)
+	if errors.Is(err, subscription.ErrInvalidPlan) {
+		errorJSON(c, http.StatusBadRequest, "SUBSCRIPTION_PLAN_INVALID", "订阅套餐参数无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "SUBSCRIPTION_PLAN_CREATE_FAILED", "订阅套餐创建失败")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+}
+
+func (a *Router) adminUpdateSubscriptionPlan(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "订阅套餐编号无效")
+		return
+	}
+	var input subscription.PlanInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "订阅套餐参数无效")
+		return
+	}
+	item, err := a.Subscriptions.UpsertPlan(input, id)
+	if errors.Is(err, subscription.ErrPlanNotFound) {
+		errorJSON(c, http.StatusNotFound, "SUBSCRIPTION_PLAN_NOT_FOUND", "订阅套餐不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "SUBSCRIPTION_PLAN_UPDATE_FAILED", "订阅套餐更新失败")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+}
+
+func (a *Router) adminChannelUnlockPlans(c *gin.Context) {
+	items, err := a.Subscriptions.UnlockPlans(true)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "CHANNEL_UNLOCK_PLANS_READ_FAILED", "渠道解锁套餐读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminCreateChannelUnlockPlan(c *gin.Context) {
+	var input subscription.UnlockPlanInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道解锁套餐参数无效")
+		return
+	}
+	item, err := a.Subscriptions.UpsertUnlockPlan(input, 0)
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_UNLOCK_PLAN_INVALID", "渠道解锁套餐参数无效")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+}
+
+func (a *Router) adminUpdateChannelUnlockPlan(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道解锁套餐编号无效")
+		return
+	}
+	var input subscription.UnlockPlanInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道解锁套餐参数无效")
+		return
+	}
+	item, err := a.Subscriptions.UpsertUnlockPlan(input, id)
+	if errors.Is(err, subscription.ErrUnlockPlanNotFound) {
+		errorJSON(c, http.StatusNotFound, "CHANNEL_UNLOCK_PLAN_NOT_FOUND", "渠道解锁套餐不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "CHANNEL_UNLOCK_PLAN_INVALID", "渠道解锁套餐参数无效")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+}
+
+func (a *Router) adminModelCostPricing(c *gin.Context) {
+	items, err := a.CostPricing.List()
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "MODEL_COST_PRICING_READ_FAILED", "渠道成本价读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
+
+func (a *Router) adminCreateModelCostPricing(c *gin.Context) {
+	var input costpricing.Input
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道成本价参数无效")
+		return
+	}
+	item, err := a.CostPricing.Upsert(input, 0)
+	if errors.Is(err, costpricing.ErrPriceConfirmationRequired) {
+		errorJSON(c, http.StatusConflict, "PRICE_CONFIRMATION_REQUIRED", "售价低于成本价，请确认后再保存")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "MODEL_COST_PRICING_INVALID", "渠道成本价参数无效")
+		return
+	}
+	successJSON(c, http.StatusCreated, item)
+}
+
+func (a *Router) adminUpdateModelCostPricing(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道成本价编号无效")
+		return
+	}
+	var input costpricing.Input
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "渠道成本价参数无效")
+		return
+	}
+	item, err := a.CostPricing.Upsert(input, id)
+	if errors.Is(err, costpricing.ErrPriceConfirmationRequired) {
+		errorJSON(c, http.StatusConflict, "PRICE_CONFIRMATION_REQUIRED", "售价低于成本价，请确认后再保存")
+		return
+	}
+	if errors.Is(err, costpricing.ErrNotFound) {
+		errorJSON(c, http.StatusNotFound, "MODEL_COST_PRICING_NOT_FOUND", "渠道成本价不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "MODEL_COST_PRICING_INVALID", "渠道成本价参数无效")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
 }
 
 func (a *Router) adminModels(c *gin.Context) {

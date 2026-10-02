@@ -153,6 +153,8 @@ export type AdminUsageLog = {
     cachedTokens: number;
     totalTokens: number;
     chargedQuota: number;
+    costQuota: number;
+    profitQuota: number;
     ip?: string;
     retryCount: number;
     errorCode?: string;
@@ -164,6 +166,10 @@ export type AdminUsageLog = {
 };
 
 export type AdminUserDetail = { user: AdminUser; ledger: Array<Record<string, unknown>>; usage: AdminUsageLog[] };
+export type AdminSubscriptionQuota = { publishedModelId: number; imageCount: number; videoSeconds: number; textTokens: number; modelName?: string };
+export type AdminSubscriptionPlan = { id: number; name: string; cycle: string; priceQuota: number; durationDays: number; status: string; sortOrder: number; quotas: AdminSubscriptionQuota[] };
+export type AdminChannelUnlockPlan = { id: number; name: string; priceQuota: number; durationDays: number; channelLimit: number; status: string };
+export type AdminModelCostPricing = { id: number; publishedModelId: number; channelId: number; upstreamModel: string; billingUnit: string; costPerUnit: number; sellPerUnit: number; profitMargin: number; status: string };
 export type AdminUsageResult = {
     items: AdminUsageLog[];
     total: number;
@@ -235,4 +241,10 @@ export const adminApi = {
     userUsage: (id: number, page = 1, pageSize = 20) => request<AdminUsageResult>(`/admin/users/${id}/usage?page=${page}&pageSize=${pageSize}`),
     usageLogs: (params: Record<string, string | number | undefined> = {}) => request<AdminUsageResult>(`/admin/usage-logs?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
     usageLog: (id: number) => request<AdminUsageLog>(`/admin/usage-logs/${id}`),
+    subscriptionPlans: () => request<{ items: AdminSubscriptionPlan[] }>("/admin/subscription-plans"),
+    saveSubscriptionPlan: (body: Record<string, unknown>, id?: number) => request<AdminSubscriptionPlan>(id ? `/admin/subscription-plans/${id}` : "/admin/subscription-plans", json(body, id ? "PUT" : "POST")),
+    channelUnlockPlans: () => request<{ items: AdminChannelUnlockPlan[] }>("/admin/channel-unlock-plans"),
+    saveChannelUnlockPlan: (body: Record<string, unknown>, id?: number) => request<AdminChannelUnlockPlan>(id ? `/admin/channel-unlock-plans/${id}` : "/admin/channel-unlock-plans", json(body, id ? "PUT" : "POST")),
+    modelCostPricing: () => request<{ items: AdminModelCostPricing[] }>("/admin/model-cost-pricing"),
+    saveModelCostPricing: (body: Record<string, unknown>, id?: number) => request<AdminModelCostPricing>(id ? `/admin/model-cost-pricing/${id}` : "/admin/model-cost-pricing", json(body, id ? "PUT" : "POST")),
 };

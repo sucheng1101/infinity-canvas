@@ -322,7 +322,8 @@ func (s *Service) HandleEpayWebhook(values url.Values) error {
 				expires := now.AddDate(0, 0, product.CustomChannelDays)
 				expiresAt = &expires
 			}
-			if err := tx.Create(&model.UserChannelEntitlement{UserID: order.UserID, SourceOrderID: order.ID, ChannelLimit: product.CustomChannelLimit, ExpiresAt: expiresAt, Status: model.UserChannelActive}).Error; err != nil {
+			orderID := order.ID
+			if err := tx.Create(&model.UserChannelEntitlement{UserID: order.UserID, SourceOrderID: &orderID, Source: "topup", ChannelLimit: product.CustomChannelLimit, ExpiresAt: expiresAt, Status: model.UserChannelActive}).Error; err != nil {
 				return err
 			}
 		}

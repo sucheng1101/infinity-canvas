@@ -10,6 +10,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
 	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
+	"github.com/sucheng1101/infinity-canvas/server/internal/subscription"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -21,9 +22,10 @@ var (
 )
 
 type Service struct {
-	DB      *gorm.DB
-	Quota   *quota.Service
-	Pricing *pricing.Service
+	DB            *gorm.DB
+	Quota         *quota.Service
+	Pricing       *pricing.Service
+	Subscriptions *subscription.Service
 }
 
 type CreateInput struct {
@@ -38,19 +40,22 @@ type CreateInput struct {
 }
 
 type View struct {
-	ID             string         `json:"id"`
-	QuoteID        string         `json:"quoteId"`
-	ModelID        uint           `json:"modelId"`
-	Capability     string         `json:"capability"`
-	Status         string         `json:"status"`
-	ReservedAmount int64          `json:"reservedAmount"`
-	SettledAmount  int64          `json:"settledAmount"`
-	Output         map[string]any `json:"output,omitempty"`
-	ErrorCode      string         `json:"errorCode,omitempty"`
-	ErrorMessage   string         `json:"errorMessage,omitempty"`
-	StartedAt      *time.Time     `json:"startedAt,omitempty"`
-	CompletedAt    *time.Time     `json:"completedAt,omitempty"`
-	CreatedAt      time.Time      `json:"createdAt"`
+	ID                  string         `json:"id"`
+	QuoteID             string         `json:"quoteId"`
+	ModelID             uint           `json:"modelId"`
+	Capability          string         `json:"capability"`
+	Status              string         `json:"status"`
+	ReservedAmount      int64          `json:"reservedAmount"`
+	SettledAmount       int64          `json:"settledAmount"`
+	SubscriptionUnit    string         `json:"subscriptionUnit,omitempty"`
+	SubscriptionUnits   int64          `json:"subscriptionUnits,omitempty"`
+	SubscriptionCovered bool           `json:"subscriptionCovered,omitempty"`
+	Output              map[string]any `json:"output,omitempty"`
+	ErrorCode           string         `json:"errorCode,omitempty"`
+	ErrorMessage        string         `json:"errorMessage,omitempty"`
+	StartedAt           *time.Time     `json:"startedAt,omitempty"`
+	CompletedAt         *time.Time     `json:"completedAt,omitempty"`
+	CreatedAt           time.Time      `json:"createdAt"`
 }
 
 func (s *Service) Create(userID uint, input CreateInput) (View, error) {
@@ -90,6 +95,19 @@ func (s *Service) Create(userID uint, input CreateInput) (View, error) {
 			Capability: quote.Capability, ParametersJSON: string(parameters), PayloadJSON: string(payload),
 			Status: model.GenerationTaskQueued, ReservedAmount: quote.Amount, IdempotencyKey: input.IdempotencyKey,
 		}
+		units := billingUnits(quote.Capability, input.Parameters, quote.Count)
+		if s.Subscriptions != nil && units > 0 {
+			covered, subscriptionID, consumeErr := s.Subscriptions.ConsumeTx(tx, userID, quote.PublishedModelID, quote.Capability, units)
+			if consumeErr != nil {
+				return consumeErr
+			}
+			if covered {
+				task.SubscriptionUnit = subscriptionUnit(quote.Capability)
+				task.SubscriptionUnits = units
+				task.SubscriptionCovered = true
+				task.SubscriptionID = &subscriptionID
+			}
+		}
 		if input.ChannelID > 0 {
 			channelModel := strings.TrimSpace(input.ChannelModel)
 			if channelModel == "" || !s.userChannelModelAvailable(tx, userID, input.ChannelID, channelModel, quote.Capability) {
@@ -98,8 +116,10 @@ func (s *Service) Create(userID uint, input CreateInput) (View, error) {
 			task.UserChannelID = &input.ChannelID
 			task.UserChannelModel = channelModel
 		}
-		if _, err := s.Quota.ReserveTx(tx, userID, task.ID, quote.Amount, "generation:reserve:"+task.ID); err != nil {
-			return err
+		if !task.SubscriptionCovered {
+			if _, err := s.Quota.ReserveTx(tx, userID, task.ID, quote.Amount, "generation:reserve:"+task.ID); err != nil {
+				return err
+			}
 		}
 		if err := tx.Create(&task).Error; err != nil {
 			return err
@@ -205,14 +225,19 @@ func (s *Service) Complete(taskID string, output map[string]any, settledAmount i
 		if task.Status != model.GenerationTaskRunning && task.Status != model.GenerationTaskQueued {
 			return ErrInvalidTransition
 		}
+		if task.SubscriptionCovered {
+			settledAmount = 0
+		}
 		if settledAmount < 0 {
 			settledAmount = task.ReservedAmount
 		}
 		if settledAmount > task.ReservedAmount {
 			return quota.ErrReservationAmount
 		}
-		if err := s.Quota.SettleTx(tx, task.ID, settledAmount); err != nil {
-			return err
+		if !task.SubscriptionCovered {
+			if err := s.Quota.SettleTx(tx, task.ID, settledAmount); err != nil {
+				return err
+			}
 		}
 		now := time.Now().UTC()
 		task.Status, task.SettledAmount, task.OutputJSON, task.CompletedAt = model.GenerationTaskSucceeded, settledAmount, string(encoded), &now
@@ -233,8 +258,14 @@ func (s *Service) Fail(taskID, code, message string) (View, error) {
 		if task.Status == model.GenerationTaskSucceeded || task.Status == model.GenerationTaskFailed || task.Status == model.GenerationTaskCancelled {
 			return ErrInvalidTransition
 		}
-		if err := s.Quota.ReleaseTx(tx, task.ID); err != nil {
-			return err
+		if !task.SubscriptionCovered {
+			if err := s.Quota.ReleaseTx(tx, task.ID); err != nil {
+				return err
+			}
+		} else if s.Subscriptions != nil && task.SubscriptionID != nil {
+			if err := s.Subscriptions.ReleaseTx(tx, *task.SubscriptionID, task.UserID, task.PublishedModelID, task.SubscriptionUnit, task.SubscriptionUnits); err != nil {
+				return err
+			}
 		}
 		now := time.Now().UTC()
 		task.Status, task.ErrorCode, task.ErrorMessage, task.CompletedAt = model.GenerationTaskFailed, strings.TrimSpace(code), strings.TrimSpace(message), &now
@@ -255,8 +286,14 @@ func (s *Service) Cancel(userID uint, taskID string) (View, error) {
 		if task.Status != model.GenerationTaskQueued && task.Status != model.GenerationTaskRunning {
 			return ErrInvalidTransition
 		}
-		if err := s.Quota.ReleaseTx(tx, task.ID); err != nil {
-			return err
+		if !task.SubscriptionCovered {
+			if err := s.Quota.ReleaseTx(tx, task.ID); err != nil {
+				return err
+			}
+		} else if s.Subscriptions != nil && task.SubscriptionID != nil {
+			if err := s.Subscriptions.ReleaseTx(tx, *task.SubscriptionID, task.UserID, task.PublishedModelID, task.SubscriptionUnit, task.SubscriptionUnits); err != nil {
+				return err
+			}
 		}
 		now := time.Now().UTC()
 		task.Status, task.CompletedAt = model.GenerationTaskCancelled, &now
@@ -269,11 +306,53 @@ func (s *Service) Cancel(userID uint, taskID string) (View, error) {
 }
 
 func toView(task model.GenerationTask) (View, error) {
-	view := View{ID: task.ID, QuoteID: task.QuoteID, ModelID: task.PublishedModelID, Capability: task.Capability, Status: task.Status, ReservedAmount: task.ReservedAmount, SettledAmount: task.SettledAmount, ErrorCode: task.ErrorCode, ErrorMessage: task.ErrorMessage, StartedAt: task.StartedAt, CompletedAt: task.CompletedAt, CreatedAt: task.CreatedAt}
+	view := View{ID: task.ID, QuoteID: task.QuoteID, ModelID: task.PublishedModelID, Capability: task.Capability, Status: task.Status, ReservedAmount: task.ReservedAmount, SettledAmount: task.SettledAmount, SubscriptionUnit: task.SubscriptionUnit, SubscriptionUnits: task.SubscriptionUnits, SubscriptionCovered: task.SubscriptionCovered, ErrorCode: task.ErrorCode, ErrorMessage: task.ErrorMessage, StartedAt: task.StartedAt, CompletedAt: task.CompletedAt, CreatedAt: task.CreatedAt}
 	if strings.TrimSpace(task.OutputJSON) != "" {
 		if err := json.Unmarshal([]byte(task.OutputJSON), &view.Output); err != nil {
 			return View{}, err
 		}
 	}
 	return view, nil
+}
+
+func billingUnits(capability string, parameters map[string]any, count int) int64 {
+	value := func(key string) int64 {
+		switch typed := parameters[key].(type) {
+		case float64:
+			return int64(typed)
+		case int:
+			return int64(typed)
+		case int64:
+			return typed
+		default:
+			return 0
+		}
+	}
+	switch capability {
+	case "image":
+		if units := value("count"); units > 0 {
+			return units
+		}
+		if count > 0 {
+			return int64(count)
+		}
+	case "video":
+		return value("durationSeconds")
+	case "text":
+		return value("inputTokens")
+	}
+	return 0
+}
+
+func subscriptionUnit(capability string) string {
+	switch capability {
+	case "image":
+		return "image"
+	case "video":
+		return "second"
+	case "text":
+		return "token"
+	default:
+		return "request"
+	}
 }

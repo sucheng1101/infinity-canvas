@@ -97,6 +97,18 @@ func migrate(db *gorm.DB) error {
 				return tx.AutoMigrate(&model.TopupProduct{}, &model.TopupOrder{}, &model.UserChannelEntitlement{}, &model.UserChannel{}, &model.SystemUpdateJob{}, &model.GenerationTask{}, &model.UsageLog{}, &model.AccessEvent{}, &model.IPBlock{})
 			},
 		},
+		{
+			version: "20261002_m9_subscriptions_costs_unlocks",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.UserChannelEntitlement{}, &model.SubscriptionPlan{}, &model.SubscriptionPlanQuota{}, &model.UserSubscription{}, &model.SubscriptionUsage{}, &model.CustomChannelUnlockPlan{}, &model.ModelCostPricing{})
+			},
+		},
+		{
+			version: "20261002_m10_subscription_task_release",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.GenerationTask{})
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64

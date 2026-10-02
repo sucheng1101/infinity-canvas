@@ -11,6 +11,7 @@ import { ChannelManagement } from "./components/channel-management";
 import { PricingManagement } from "./components/pricing-management";
 import { UsageLogManagement } from "./components/usage-log-management";
 import { UserManagement } from "./components/user-management";
+import { SubscriptionManagement } from "./components/subscription-management";
 
 const statusOptions = [
     { value: "active", label: "启用" },
@@ -449,6 +450,7 @@ export default function AdminPage() {
                                         { key: "models", label: "模型目录", icon: Boxes },
                                         { key: "channels", label: "渠道管理", icon: Route },
                                         { key: "pricing", label: "定价与充值", icon: CircleDollarSign },
+                                        { key: "subscriptions", label: "订阅与成本", icon: CircleDollarSign },
                                     ].map(({ key, label, icon: Icon }) => (
                                         <Button key={key} type={activeSection === key ? "primary" : "text"} block className="!justify-start" icon={<Icon className="size-4" />} onClick={() => setActiveSection(key)}>
                                             {label}
@@ -573,6 +575,11 @@ export default function AdminPage() {
                             key: "pricing",
                             label: "定价与充值",
                             children: <PricingManagement models={models} pricing={pricing} products={products} loading={loading} onEditPricing={(model, item) => setModal({ type: "pricing", item: { model, pricing: item } })} onTogglePricing={togglePricing} onEditProduct={(product) => setModal({ type: "product", item: product })} onToggleProduct={toggleProduct} />,
+                        },
+                        {
+                            key: "subscriptions",
+                            label: "订阅与成本",
+                            children: <SubscriptionManagement models={models} channels={channels} />,
                         },
                         {
                             key: "operations",

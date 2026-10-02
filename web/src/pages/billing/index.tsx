@@ -2,7 +2,7 @@ import { App, Button, Card, Col, Empty, List, Progress, Radio, Row, Skeleton, St
 import { ArrowUpRight, Coins, Copy, Gift, History, UsersRound, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-import { hostedApi, type InvitationSelf, type QuotaLedger, type QuotaSummary, type RechargeProduct } from "@/services/api/hosted";
+import { hostedApi, type InvitationSelf, type QuotaLedger, type QuotaSummary, type RechargeProduct, type SubscriptionPlan, type UserSubscription } from "@/services/api/hosted";
 
 const formatQuota = (value: number) => new Intl.NumberFormat("zh-CN").format(value);
 const formatMoney = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
@@ -29,6 +29,8 @@ export default function BillingPage() {
     const [ledger, setLedger] = useState<QuotaLedger[]>([]);
     const [products, setProducts] = useState<RechargeProduct[]>([]);
     const [invitation, setInvitation] = useState<InvitationSelf>();
+    const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
+    const [subscription, setSubscription] = useState<UserSubscription>();
     const [loading, setLoading] = useState(true);
     const [buying, setBuying] = useState<number>();
     const [paymentMethod, setPaymentMethod] = useState("alipay");
@@ -36,16 +38,20 @@ export default function BillingPage() {
     const load = async () => {
         setLoading(true);
         try {
-            const [quotaResult, ledgerResult, productsResult, invitationResult] = await Promise.all([
+            const [quotaResult, ledgerResult, productsResult, invitationResult, subscriptionResult, currentSubscription] = await Promise.all([
                 hostedApi.quota(),
                 hostedApi.ledger(),
                 hostedApi.products(),
                 hostedApi.invitation(),
+                hostedApi.subscriptionPlans(),
+                hostedApi.subscription(),
             ]);
             setQuota(quotaResult);
             setLedger(ledgerResult.items);
             setProducts(productsResult.items);
             setInvitation(invitationResult);
+            setSubscriptionPlans(subscriptionResult.items);
+            setSubscription(currentSubscription);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "账户信息读取失败");
         } finally {
@@ -84,6 +90,15 @@ export default function BillingPage() {
         } finally {
             setBuying(undefined);
         }
+    };
+
+    const buySubscription = async (plan: SubscriptionPlan) => {
+        try {
+            const result = await hostedApi.purchaseSubscription(plan.id);
+            setSubscription(result);
+            message.success("订阅已开通");
+            await load();
+        } catch (error) { message.error(error instanceof Error ? error.message : "订阅购买失败"); }
     };
 
     const copyInviteCode = async () => {
@@ -154,6 +169,12 @@ export default function BillingPage() {
                                     </Card>
                                 </Col>
                             ))}</Row> : <Card><Empty description="管理员还没有发布充值套餐" /></Card>}
+                        </section>
+
+                        <section className="mt-8">
+                            <div className="mb-4"><h2 className="text-xl font-semibold">订阅套餐</h2><span className="text-xs text-stone-400">订阅额度按具体模型记录：生图按张、视频按秒、文本按 Token；额度用完后自动使用积分。</span></div>
+                            {subscription?.active ? <Card className="mb-4 !border-emerald-200 !bg-emerald-50/70"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="font-medium">当前订阅：{subscription.subscription?.plan.name}</div><div className="mt-1 text-sm text-stone-600">有效期至 {subscription.subscription?.expiresAt ? new Date(subscription.subscription.expiresAt).toLocaleDateString() : "-"}</div></div><Tag color="success">已开通</Tag></div></Card> : null}
+                            {subscriptionPlans.length ? <Row gutter={[16, 16]}>{subscriptionPlans.map((plan) => <Col key={plan.id} xs={24} sm={12} lg={8}><Card className="h-full !border-stone-200 dark:!border-stone-800"><div className="flex items-start justify-between"><div><div className="font-semibold">{plan.name}</div><div className="mt-2 text-3xl font-semibold">{formatQuota(plan.priceQuota)} <span className="text-sm font-normal text-stone-400">积分</span></div></div><Tag color="blue">{plan.durationDays} 天</Tag></div><div className="mt-4 space-y-2 text-xs text-stone-500">{plan.quotas.map((quota) => <div key={quota.publishedModelId} className="rounded-lg bg-stone-50 px-3 py-2 dark:bg-stone-950"><div className="font-medium text-stone-700 dark:text-stone-200">{quota.modelName || `模型 #${quota.publishedModelId}`}</div><div>生图 {quota.imageCount} 张 · 视频 {quota.videoSeconds} 秒 · 文本 {formatQuota(quota.textTokens)} Token</div></div>)}</div><Button type="primary" block className="mt-5" onClick={() => void buySubscription(plan)}>立即订阅</Button></Card></Col>)}</Row> : <Card><Empty description="暂无可购买订阅套餐" /></Card>}
                         </section>
 
                         <section className="mt-8">

@@ -156,12 +156,98 @@ type TopupOrder struct {
 type UserChannelEntitlement struct {
 	ID            uint       `gorm:"primaryKey" json:"id"`
 	UserID        uint       `gorm:"index;not null" json:"userId"`
-	SourceOrderID uint       `gorm:"index;not null" json:"sourceOrderId"`
+	SourceOrderID *uint      `gorm:"index" json:"sourceOrderId,omitempty"`
+	Source        string     `gorm:"size:32;index;not null;default:topup" json:"source"`
+	UnlockPlanID  *uint      `gorm:"index" json:"unlockPlanId,omitempty"`
+	UnlockCost    int64      `gorm:"not null;default:0" json:"unlockCost"`
 	ChannelLimit  int        `gorm:"not null;default:0" json:"channelLimit"`
 	ExpiresAt     *time.Time `gorm:"index" json:"expiresAt,omitempty"`
 	Status        string     `gorm:"size:32;index;not null" json:"status"`
 	CreatedAt     time.Time  `json:"createdAt"`
 	UpdatedAt     time.Time  `json:"updatedAt"`
+}
+
+const (
+	SubscriptionPlanActive = "active"
+	SubscriptionPlanHidden = "hidden"
+	SubscriptionDaily      = "daily"
+	SubscriptionWeekly     = "weekly"
+	SubscriptionMonthly    = "monthly"
+	SubscriptionQuarterly  = "quarterly"
+	SubscriptionYearly     = "yearly"
+	SubscriptionActive     = "active"
+	SubscriptionExpired    = "expired"
+	SubscriptionCancelled  = "cancelled"
+)
+
+type SubscriptionPlan struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	Name         string    `gorm:"size:128;not null" json:"name"`
+	Cycle        string    `gorm:"size:32;index;not null" json:"cycle"`
+	PriceQuota   int64     `gorm:"not null" json:"priceQuota"`
+	DurationDays int       `gorm:"not null" json:"durationDays"`
+	Status       string    `gorm:"size:32;index;not null" json:"status"`
+	SortOrder    int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type SubscriptionPlanQuota struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	PlanID           uint      `gorm:"uniqueIndex:ux_subscription_plan_model;not null" json:"planId"`
+	PublishedModelID uint      `gorm:"uniqueIndex:ux_subscription_plan_model;not null" json:"publishedModelId"`
+	ImageCount       int64     `gorm:"not null;default:0" json:"imageCount"`
+	VideoSeconds     int64     `gorm:"not null;default:0" json:"videoSeconds"`
+	TextTokens       int64     `gorm:"not null;default:0" json:"textTokens"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+type UserSubscription struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	UserID    uint      `gorm:"index;not null" json:"userId"`
+	PlanID    uint      `gorm:"index;not null" json:"planId"`
+	Status    string    `gorm:"size:32;index;not null" json:"status"`
+	StartsAt  time.Time `gorm:"index;not null" json:"startsAt"`
+	ExpiresAt time.Time `gorm:"index;not null" json:"expiresAt"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type SubscriptionUsage struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	SubscriptionID   uint      `gorm:"uniqueIndex:ux_subscription_usage_model;not null" json:"subscriptionId"`
+	UserID           uint      `gorm:"index;not null" json:"userId"`
+	PublishedModelID uint      `gorm:"uniqueIndex:ux_subscription_usage_model;not null" json:"publishedModelId"`
+	BillingUnit      string    `gorm:"size:32;not null" json:"billingUnit"`
+	UsedUnits        int64     `gorm:"not null;default:0" json:"usedUnits"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+type CustomChannelUnlockPlan struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	Name         string    `gorm:"size:128;not null" json:"name"`
+	PriceQuota   int64     `gorm:"not null" json:"priceQuota"`
+	DurationDays int       `gorm:"not null;default:30" json:"durationDays"`
+	ChannelLimit int       `gorm:"not null;default:1" json:"channelLimit"`
+	Status       string    `gorm:"size:32;index;not null" json:"status"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+type ModelCostPricing struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	PublishedModelID uint      `gorm:"index;not null" json:"publishedModelId"`
+	ChannelID        uint      `gorm:"index;not null" json:"channelId"`
+	UpstreamModel    string    `gorm:"size:128;not null" json:"upstreamModel"`
+	BillingUnit      string    `gorm:"size:32;not null" json:"billingUnit"`
+	CostPerUnit      int64     `gorm:"not null" json:"costPerUnit"`
+	SellPerUnit      int64     `gorm:"not null" json:"sellPerUnit"`
+	ProfitMargin     float64   `gorm:"not null;default:0" json:"profitMargin"`
+	Status           string    `gorm:"size:32;index;not null" json:"status"`
+	CreatedAt        time.Time `json:"createdAt"`
+	UpdatedAt        time.Time `json:"updatedAt"`
 }
 
 const (
@@ -326,26 +412,30 @@ const (
 )
 
 type GenerationTask struct {
-	ID               string     `gorm:"size:36;primaryKey" json:"id"`
-	UserID           uint       `gorm:"index;not null" json:"userId"`
-	QuoteID          string     `gorm:"size:36;index;not null" json:"quoteId"`
-	PublishedModelID uint       `gorm:"index;not null" json:"publishedModelId"`
-	Capability       string     `gorm:"size:32;index;not null" json:"capability"`
-	UserChannelID    *uint      `gorm:"index" json:"userChannelId,omitempty"`
-	UserChannelModel string     `gorm:"size:128" json:"userChannelModel,omitempty"`
-	ParametersJSON   string     `gorm:"type:text;not null" json:"-"`
-	PayloadJSON      string     `gorm:"type:text;not null" json:"-"`
-	Status           string     `gorm:"size:32;index;not null" json:"status"`
-	ReservedAmount   int64      `gorm:"not null" json:"reservedAmount"`
-	SettledAmount    int64      `gorm:"not null;default:0" json:"settledAmount"`
-	OutputJSON       string     `gorm:"type:text" json:"-"`
-	ErrorCode        string     `gorm:"size:64" json:"errorCode,omitempty"`
-	ErrorMessage     string     `gorm:"type:text" json:"errorMessage,omitempty"`
-	IdempotencyKey   string     `gorm:"size:191;uniqueIndex;not null" json:"-"`
-	StartedAt        *time.Time `json:"startedAt,omitempty"`
-	CompletedAt      *time.Time `json:"completedAt,omitempty"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	UpdatedAt        time.Time  `json:"updatedAt"`
+	ID                  string     `gorm:"size:36;primaryKey" json:"id"`
+	UserID              uint       `gorm:"index;not null" json:"userId"`
+	QuoteID             string     `gorm:"size:36;index;not null" json:"quoteId"`
+	PublishedModelID    uint       `gorm:"index;not null" json:"publishedModelId"`
+	Capability          string     `gorm:"size:32;index;not null" json:"capability"`
+	UserChannelID       *uint      `gorm:"index" json:"userChannelId,omitempty"`
+	UserChannelModel    string     `gorm:"size:128" json:"userChannelModel,omitempty"`
+	ParametersJSON      string     `gorm:"type:text;not null" json:"-"`
+	PayloadJSON         string     `gorm:"type:text;not null" json:"-"`
+	Status              string     `gorm:"size:32;index;not null" json:"status"`
+	ReservedAmount      int64      `gorm:"not null" json:"reservedAmount"`
+	SettledAmount       int64      `gorm:"not null;default:0" json:"settledAmount"`
+	SubscriptionUnit    string     `gorm:"size:32" json:"subscriptionUnit,omitempty"`
+	SubscriptionUnits   int64      `gorm:"not null;default:0" json:"subscriptionUnits"`
+	SubscriptionCovered bool       `gorm:"not null;default:false" json:"subscriptionCovered"`
+	SubscriptionID      *uint      `gorm:"index" json:"-"`
+	OutputJSON          string     `gorm:"type:text" json:"-"`
+	ErrorCode           string     `gorm:"size:64" json:"errorCode,omitempty"`
+	ErrorMessage        string     `gorm:"type:text" json:"errorMessage,omitempty"`
+	IdempotencyKey      string     `gorm:"size:191;uniqueIndex;not null" json:"-"`
+	StartedAt           *time.Time `json:"startedAt,omitempty"`
+	CompletedAt         *time.Time `json:"completedAt,omitempty"`
+	CreatedAt           time.Time  `json:"createdAt"`
+	UpdatedAt           time.Time  `json:"updatedAt"`
 }
 
 // UsageLog stores a redacted, queryable record for each relay execution.
@@ -373,6 +463,8 @@ type UsageLog struct {
 	CachedTokens        int64      `json:"cachedTokens"`
 	TotalTokens         int64      `json:"totalTokens"`
 	ChargedQuota        int64      `json:"chargedQuota"`
+	CostQuota           int64      `json:"costQuota"`
+	ProfitQuota         int64      `json:"profitQuota"`
 	IP                  string     `gorm:"size:64;index" json:"ip,omitempty"`
 	RetryCount          int        `json:"retryCount"`
 	ErrorCode           string     `gorm:"size:64;index" json:"errorCode,omitempty"`

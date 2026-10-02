@@ -22,6 +22,10 @@ export type InvitationSelf = {
 export type UserChannelModel = { name: string; capability: string; status: string };
 export type UserChannel = { id: number; name: string; provider: string; baseUrl: string; apiKeySet: boolean; apiKeyMasked?: string; models: UserChannelModel[]; status: string; lastTestedAt?: string; lastError?: string; createdAt: string };
 export type UserChannelEntitlement = { enabled: boolean; channelLimit: number; used: number; expiresAt?: string };
+export type SubscriptionQuota = { publishedModelId: number; modelName?: string; imageCount: number; videoSeconds: number; textTokens: number; usedUnits: number; remainingUnits: number };
+export type SubscriptionPlan = { id: number; name: string; cycle: string; priceQuota: number; durationDays: number; status: string; sortOrder: number; quotas: SubscriptionQuota[] };
+export type UserSubscription = { active: boolean; subscription?: { id: number; plan: SubscriptionPlan; quotas: SubscriptionQuota[]; startsAt: string; expiresAt: string } };
+export type ChannelUnlockPlan = { id: number; name: string; priceQuota: number; durationDays: number; channelLimit: number; status: string };
 export type PublishedModel = {
     id: number;
     capability: "image" | "text" | "video" | "audio" | string;
@@ -66,6 +70,11 @@ export const hostedApi = {
     quota: () => request<QuotaSummary>("/account/quota"),
     ledger: () => request<{ items: QuotaLedger[]; nextCursor: string }>("/account/ledger?limit=20"),
     products: () => request<{ items: RechargeProduct[] }>("/recharge/products"),
+    subscriptionPlans: () => request<{ items: SubscriptionPlan[] }>("/subscriptions/plans"),
+    subscription: () => request<UserSubscription>("/account/subscription"),
+    purchaseSubscription: (planId: number) => request<UserSubscription>("/subscriptions/orders", { method: "POST", body: JSON.stringify({ planId }) }),
+    channelUnlockPlans: () => request<{ items: ChannelUnlockPlan[] }>("/account/channel-unlock-plans"),
+    unlockChannels: (planId: number) => request<{ id: number; channelLimit: number; expiresAt?: string }>("/account/channels/unlock", { method: "POST", body: JSON.stringify({ planId }) }),
     channels: () => request<{ items: UserChannel[]; entitlement: UserChannelEntitlement }>("/account/channels"),
     createChannel: (body: Record<string, unknown>) => request<UserChannel>("/account/channels", { method: "POST", body: JSON.stringify(body) }),
     updateChannel: (id: number, body: Record<string, unknown>) => request<UserChannel>(`/account/channels/${id}`, { method: "PUT", body: JSON.stringify(body) }),

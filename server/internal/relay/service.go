@@ -188,6 +188,13 @@ func (s *Service) finishUsage(id uint, status string, task model.GenerationTask,
 	}
 	now := time.Now().UTC()
 	updates := map[string]any{"status": status, "completed_at": now, "duration_ms": now.Sub(item.StartedAt).Milliseconds(), "charged_quota": charged, "total_tokens": totalTokens, "billed_units": billedUnits(task, totalTokens)}
+	units := billedUnits(task, totalTokens)
+	var cost model.ModelCostPricing
+	if item.ChannelID > 0 && item.UpstreamModel != "" && s.DB.Where("published_model_id = ? AND channel_id = ? AND upstream_model = ? AND status = ?", task.PublishedModelID, item.ChannelID, item.UpstreamModel, "active").First(&cost).Error == nil {
+		costQuota := int64(units * float64(cost.CostPerUnit))
+		updates["cost_quota"] = costQuota
+		updates["profit_quota"] = charged - costQuota
+	}
 	if code != "" {
 		updates["error_code"] = code
 	}
