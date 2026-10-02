@@ -87,8 +87,8 @@
 
 ## 4. API 变更
 
-- `POST /api/subscriptions/:id/purchase` 请求体增加 `idempotencyKey`。
-- `POST /api/custom-channel-unlocks/:id/purchase` 请求体增加 `idempotencyKey`。
+- `POST /api/v1/subscriptions/orders` 请求体增加 `idempotencyKey`，并支持 `Idempotency-Key` 请求头。
+- `POST /api/v1/account/channels/unlock` 请求体增加 `idempotencyKey`，并支持 `Idempotency-Key` 请求头。
 - 管理端成本价格列表/编辑接口返回快照字段对应的单价单位和利润率；现有接口路径保持不变。
 - 重复幂等请求返回 HTTP 200 与第一次成功响应，业务响应结构不变。
 
