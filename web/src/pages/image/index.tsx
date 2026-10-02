@@ -20,6 +20,7 @@ import { requestEdit, requestGeneration } from "@/services/api/image";
 import { deleteStoredImages, ensureImagePreview, getImagePreviewRevision, previewUrlFor, resolveImageUrl, subscribeImagePreviews, uploadImage } from "@/services/image-storage";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
+import { useHostedModelQuality } from "@/hooks/use-hosted-model-quality";
 import type { ReferenceImage } from "@/types/image";
 import i18n from "@/i18n";
 import { isImageFile } from "@/lib/image-format";
@@ -57,6 +58,7 @@ type GenerationLog = {
     imageCount: number;
     size: string;
     quality: string;
+    outputMode: string;
     status: "success" | "partial" | "failed";
     images: GeneratedImage[];
     attempts: GenerationAttempt[];
@@ -71,7 +73,7 @@ type GenerationAttempt = {
     error?: string;
 };
 
-type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "size" | "count">;
+type GenerationLogConfig = Pick<AiConfig, "model" | "imageModel" | "quality" | "outputMode" | "size" | "count">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
@@ -584,6 +586,12 @@ export default function ImagePage({ workbenchMode, onWorkbenchModeChange }: { wo
 function GenerationSettings({ config, model, updateConfig, openConfigDialog }: { config: AiConfig; model: string; updateConfig: UpdateAiConfig; openConfigDialog: (shouldPromptContinue?: boolean) => void }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const { t } = useTranslation();
+    const qualitySpec = useHostedModelQuality("image", model);
+    useEffect(() => {
+        if (!qualitySpec?.options?.length) return;
+        if (!qualitySpec.options.some((option) => option.key === config.quality)) updateConfig("quality", qualitySpec.options[0].key);
+        if (qualitySpec.outputModes?.length && !qualitySpec.outputModes.some((option) => option.key === config.outputMode)) updateConfig("outputMode", qualitySpec.outputModes[0].key);
+    }, [config.outputMode, config.quality, qualitySpec, updateConfig]);
 
     return (
         <>
@@ -592,7 +600,7 @@ function GenerationSettings({ config, model, updateConfig, openConfigDialog }: {
                 <ModelPicker config={config} value={model} onChange={(value) => updateConfig("imageModel", value)} capability="image" fullWidth onMissingConfig={() => openConfigDialog(false)} />
             </label>
             <div className="col-span-2">
-                <ImageSettingsPanel config={config} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" maxCount={10} />
+                <ImageSettingsPanel config={config} qualitySpec={qualitySpec} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" maxCount={10} />
             </div>
         </>
     );
@@ -843,6 +851,7 @@ async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog>
         imageCount: log.imageCount || log.successCount || 0,
         size: log.size || config.size || "",
         quality: log.quality || config.quality || "",
+        outputMode: log.outputMode || config.outputMode || "native",
         status: log.status || "success",
         images,
         attempts: log.attempts || [],
@@ -865,6 +874,7 @@ function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
         model: log.config?.model || log.model || "",
         imageModel: log.config?.imageModel || log.model || "",
         quality: log.config?.quality || log.quality || "",
+        outputMode: log.config?.outputMode || "native",
         size: log.config?.size || log.size || "",
         count: log.config?.count || String(log.imageCount || log.successCount || 1),
     };
@@ -917,6 +927,7 @@ function buildLog({
         model: config.model,
         imageModel: config.imageModel,
         quality: config.quality,
+        outputMode: config.outputMode,
         size: config.size,
         count: config.count,
     };
@@ -935,6 +946,7 @@ function buildLog({
         imageCount: Number(logConfig.count) || successCount,
         size: logConfig.size,
         quality: logConfig.quality,
+        outputMode: logConfig.outputMode,
         status,
         images,
         attempts,

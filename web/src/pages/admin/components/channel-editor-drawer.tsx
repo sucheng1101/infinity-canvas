@@ -1,10 +1,11 @@
-import { App, Button, Drawer, Input, InputNumber, Modal, Select, Space, Table, Tag } from "antd";
+import { App, Button, Checkbox, Drawer, Input, InputNumber, Modal, Select, Space, Table, Tag } from "antd";
 import { KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useEffect, useState } from "react";
 
 import { ModelScriptEditor } from "@/components/layout/model-script-editor";
-import { adminApi, type AdminChannel, type AdminChannelInput, type AdminChannelModel } from "@/services/api/admin";
+import { adminApi, type AdminChannel, type AdminChannelInput, type AdminChannelModel, type AdminModelCostPricing } from "@/services/api/admin";
+import type { PublishedModel } from "@/services/api/hosted";
 import { guessCapability, type ModelCapability } from "@/stores/use-config-store";
 
 type DraftKey = {
@@ -29,6 +30,8 @@ type DraftChannel = {
 };
 
 type ScriptTarget = { name: string; capability: ModelCapability; value: string };
+type QualitySpec = NonNullable<AdminChannelModel["qualitySpec"]>;
+type ChannelModelCost = { id?: number; publishedModelId: number; billingUnit: string; costPerUnit: number; sellPerUnit: number; status: "active" | "hidden" };
 
 const capabilityOptions = [
     { label: "生图", value: "image" },
@@ -36,6 +39,16 @@ const capabilityOptions = [
     { label: "文本", value: "text" },
     { label: "音频", value: "audio" },
 ];
+
+const qualityOptions = (capability: ModelCapability, scheme: string, supports8K = false) => {
+    if (scheme === "none") return [];
+    const options = scheme === "tier"
+        ? [{ key: "auto", label: "自动" }, { key: "low", label: "低质量" }, { key: "medium", label: "中质量" }, { key: "high", label: "高质量" }]
+        : capability === "video"
+            ? [{ key: "720p", label: "720p" }, { key: "1080p", label: "1080p" }, { key: "2k", label: "2K" }, { key: "4k", label: "4K" }]
+            : [{ key: "1k", label: "1K" }, { key: "2k", label: "2K" }, { key: "4k", label: "4K" }];
+    return supports8K ? [...options, { key: "8k", label: "8K" }] : options;
+};
 
 function createDraft(channel: AdminChannel | null): DraftChannel {
     if (!channel) {
@@ -54,8 +67,8 @@ function createDraft(channel: AdminChannel | null): DraftChannel {
     };
 }
 
-export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { open: boolean; channel: AdminChannel | null; onSave: (input: AdminChannelInput) => Promise<void>; onClose: () => void }) {
-    const { message } = App.useApp();
+export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave, onClose }: { open: boolean; channel: AdminChannel | null; models: PublishedModel[]; costs: AdminModelCostPricing[]; onSave: (input: AdminChannelInput, modelCosts: Array<ChannelModelCost & { upstreamModel: string }>) => Promise<void>; onClose: () => void }) {
+    const { message, modal } = App.useApp();
     const [draft, setDraft] = useState<DraftChannel>(() => createDraft(channel));
     const [saving, setSaving] = useState(false);
     const [fetchingAll, setFetchingAll] = useState(false);
@@ -66,6 +79,9 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
     const [scriptTarget, setScriptTarget] = useState<ScriptTarget | null>(null);
     const [modelEditor, setModelEditor] = useState<AdminChannelModel | null>(null);
     const [modelCapability, setModelCapability] = useState<ModelCapability>("text");
+    const [modelQualitySpec, setModelQualitySpec] = useState<QualitySpec>({});
+    const [modelCost, setModelCost] = useState<ChannelModelCost | null>(null);
+    const [configuredCosts, setConfiguredCosts] = useState<Record<string, ChannelModelCost>>({});
 
     useEffect(() => {
         if (!open) return;
@@ -75,7 +91,14 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
         setSelectedModels([]);
         setScriptTarget(null);
         setModelEditor(null);
-    }, [channel, open]);
+        setModelQualitySpec({});
+        const initialCosts: Record<string, ChannelModelCost> = {};
+        (channel ? costs.filter((item) => item.channelId === channel.id) : []).forEach((item) => {
+            initialCosts[item.upstreamModel] = { id: item.id, publishedModelId: item.publishedModelId, billingUnit: item.billingUnit, costPerUnit: item.costPerUnit, sellPerUnit: item.sellPerUnit, status: item.status === "hidden" ? "hidden" : "active" };
+        });
+        setConfiguredCosts(initialCosts);
+        setModelCost(null);
+    }, [channel, costs, open]);
 
     const patch = (value: Partial<DraftChannel>) => setDraft((current) => ({ ...current, ...value }));
     const setKeys = (modelApiKeys: DraftKey[]) => patch({ modelApiKeys });
@@ -87,10 +110,21 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
     const removeModel = (name: string) => {
         setModels(draft.models.filter((model) => model.name !== name));
         setKeys(draft.modelApiKeys.map((item) => ({ ...item, models: item.models.filter((model) => model !== name) })));
+        setConfiguredCosts((current) => { const next = { ...current }; delete next[name]; return next; });
     };
     const setCapability = (name: string, capability: ModelCapability) => setModels(draft.models.map((model) => (model.name === name ? { ...model, capability } : model)));
     const setScript = (name: string, script: string) => setModels(draft.models.map((model) => (model.name === name ? { ...model, script: script || undefined } : model)));
     const setModelStatus = (name: string, status: "active" | "hidden") => setModels(draft.models.map((model) => (model.name === name ? { ...model, status } : model)));
+    const setQualitySpec = (name: string, qualitySpec: QualitySpec) => setModels(draft.models.map((model) => (model.name === name ? { ...model, qualitySpec } : model)));
+    const defaultBillingUnit = (capability: string) => capability === "image" ? "image" : capability === "video" ? "second" : capability === "text" ? "token" : "request";
+    const findPublishedModel = (name: string) => models.find((item) => item.sourceModel === name || item.displayName === name);
+    const openModelEditor = (item: AdminChannelModel) => {
+        setModelEditor(item);
+        setModelCapability(item.capability);
+        setModelQualitySpec(item.qualitySpec || {});
+        const published = findPublishedModel(item.name);
+        setModelCost(configuredCosts[item.name] || { publishedModelId: published?.id || 0, billingUnit: defaultBillingUnit(item.capability), costPerUnit: 0, sellPerUnit: Number(published?.priceSummary?.unitAmount || 0), status: "active" });
+    };
 
     const readKeyModels = async (item: DraftKey) => {
         if (!draft.baseUrl.trim()) throw new Error("请先填写 Base URL");
@@ -176,6 +210,12 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
             message.error(baseUrlChanged ? "更换 Base URL 后请重新输入所有模型专用 Key" : "请填写每个 Key 的名称和密钥");
             return;
         }
+        const costsToSave = Object.entries(configuredCosts).map(([upstreamModel, item]) => ({ ...item, upstreamModel })).filter((item) => item.publishedModelId > 0);
+        const lossMaking = costsToSave.filter((item) => item.sellPerUnit < item.costPerUnit);
+        if (lossMaking.length) {
+            const confirmed = await new Promise<boolean>((resolve) => modal.confirm({ title: "售价低于渠道成本", content: `有 ${lossMaking.length} 个渠道模型的售价低于成本，保存后会产生负利润。仍要保存吗？`, okText: "确认保存", cancelText: "返回修改", onOk: () => resolve(true), onCancel: () => resolve(false) }));
+            if (!confirmed) return;
+        }
         setSaving(true);
         try {
             await onSave({
@@ -187,7 +227,7 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                 settings: draft.settings,
                 status: draft.status,
                 sortOrder: draft.sortOrder,
-            });
+            }, costsToSave);
         } finally {
             setSaving(false);
         }
@@ -288,7 +328,7 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                             width: 220,
                             render: (_, item: AdminChannelModel) => (
                                 <Space size="small">
-                                    <Button size="small" type="link" onClick={() => { setModelEditor(item); setModelCapability(item.capability); }}>编辑</Button>
+                                    <Button size="small" type="link" onClick={() => openModelEditor(item)}>编辑</Button>
                                     <Button size="small" type="link" onClick={() => setModelStatus(item.name, item.status === "hidden" ? "active" : "hidden")}>{item.status === "hidden" ? "启用" : "禁用"}</Button>
                                     <Button size="small" danger type="link" icon={<Trash2 className="size-3.5" />} onClick={() => removeModel(item.name)}>删除</Button>
                                 </Space>
@@ -322,7 +362,11 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                 title="编辑渠道模型"
                 onCancel={() => setModelEditor(null)}
                 onOk={() => {
-                    if (modelEditor) setCapability(modelEditor.name, modelCapability);
+                    if (modelEditor) {
+                        setCapability(modelEditor.name, modelCapability);
+                        setQualitySpec(modelEditor.name, modelQualitySpec);
+                        if (modelCost && modelCost.publishedModelId > 0) setConfiguredCosts((current) => ({ ...current, [modelEditor.name]: modelCost }));
+                    }
                     setModelEditor(null);
                 }}
                 okText="保存"
@@ -336,6 +380,24 @@ export function AdminChannelEditorDrawer({ open, channel, onSave, onClose }: { o
                         <span className="mb-1 block text-sm font-medium">能力</span>
                         <Select className="w-full" value={modelCapability} options={capabilityOptions} onChange={setModelCapability} />
                     </label>
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium">官方质量标准</span>
+                        <Select className="w-full" value={modelQualitySpec.scheme || "tier"} onChange={(scheme) => setModelQualitySpec((current) => ({ ...current, scheme, options: qualityOptions(modelCapability, scheme, Boolean(current.supports8K)) }))} options={[{ value: "tier", label: "低 / 中 / 高" }, { value: "resolution", label: "1K / 2K / 4K / 8K" }, { value: "none", label: "不区分质量" }]} />
+                    </label>
+                    <div className="flex flex-wrap gap-4 rounded-lg border border-stone-200 px-3 py-2 text-sm dark:border-stone-800">
+                        <Checkbox checked={Boolean(modelQualitySpec.supports8K)} onChange={(event) => setModelQualitySpec((current) => ({ ...current, supports8K: event.target.checked, options: qualityOptions(modelCapability, current.scheme || "tier", event.target.checked) }))}>开放 8K</Checkbox>
+                        <Checkbox checked={Boolean(modelQualitySpec.supportsUpscale)} onChange={(event) => setModelQualitySpec((current) => ({ ...current, supportsUpscale: event.target.checked }))}>开放超分</Checkbox>
+                    </div>
+                    <div className="rounded-lg border border-stone-200 p-3 dark:border-stone-800">
+                        <div className="mb-2 text-sm font-medium">渠道模型成本与售价</div>
+                        <div className="mb-3 text-xs text-stone-500">售价沿用公开模型基础定价，可按渠道填写成本；成本高于售价保存时会再次确认。</div>
+                        <div className="space-y-3">
+                            <label className="block"><span className="mb-1 block text-sm">公开模型</span><Select className="w-full" value={modelCost?.publishedModelId || undefined} options={models.filter((item) => item.capability === modelCapability).map((item) => ({ value: item.id, label: item.displayName }))} onChange={(publishedModelId) => setModelCost((current) => ({ ...(current || { billingUnit: defaultBillingUnit(modelCapability), costPerUnit: 0, sellPerUnit: 0, status: "active" }), publishedModelId }))} placeholder="选择公开模型" /></label>
+                            <label className="block"><span className="mb-1 block text-sm">计费单位</span><Select className="w-full" value={modelCost?.billingUnit || defaultBillingUnit(modelCapability)} options={[{ value: "image", label: "按张" }, { value: "second", label: "按秒" }, { value: "token", label: "按 Token" }, { value: "request", label: "按次" }]} onChange={(billingUnit) => setModelCost((current) => ({ ...(current || { publishedModelId: 0, costPerUnit: 0, sellPerUnit: 0, status: "active" }), billingUnit }))} /></label>
+                            <div className="grid grid-cols-2 gap-3"><label className="block"><span className="mb-1 block text-sm">渠道成本（积分）</span><InputNumber className="w-full" min={0} value={modelCost?.costPerUnit} onChange={(costPerUnit) => setModelCost((current) => ({ ...(current || { publishedModelId: 0, billingUnit: defaultBillingUnit(modelCapability), sellPerUnit: 0, status: "active" }), costPerUnit: Number(costPerUnit || 0) }))} /></label><label className="block"><span className="mb-1 block text-sm">用户售价（积分）</span><InputNumber className="w-full" min={0} value={modelCost?.sellPerUnit} onChange={(sellPerUnit) => setModelCost((current) => ({ ...(current || { publishedModelId: 0, billingUnit: defaultBillingUnit(modelCapability), costPerUnit: 0, status: "active" }), sellPerUnit: Number(sellPerUnit || 0) }))} /></label></div>
+                            <Checkbox checked={modelCost?.status === "active"} onChange={(event) => setModelCost((current) => current ? { ...current, status: event.target.checked ? "active" : "hidden" } : current)}>启用该渠道成本价</Checkbox>
+                        </div>
+                    </div>
                     <Button onClick={() => modelEditor && setScriptTarget({ name: modelEditor.name, capability: modelCapability, value: modelEditor.script || "" })}>
                         {modelEditor?.script ? "编辑调用脚本" : "配置调用脚本"}
                     </Button>

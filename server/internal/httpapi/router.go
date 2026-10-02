@@ -488,7 +488,7 @@ func (a *Router) models(c *gin.Context) {
 	}
 	for index := range items {
 		if summary, ok := a.Pricing.Summary(items[index].ID); ok {
-			items[index].PriceSummary = gin.H{"type": summary.Type, "unitAmount": summary.UnitAmount, "currency": summary.Currency}
+			items[index].PriceSummary = gin.H{"type": summary.Type, "unitAmount": summary.UnitAmount, "currency": summary.Currency, "variants": summary.Variants}
 		}
 		items[index].Performance = a.ModelCatalog.Performance(items[index].ID)
 	}
@@ -1229,6 +1229,12 @@ func (a *Router) adminModels(c *gin.Context) {
 	if err != nil {
 		errorJSON(c, http.StatusInternalServerError, "MODELS_READ_FAILED", "模型目录读取失败")
 		return
+	}
+	for index := range items {
+		if summary, ok := a.Pricing.Summary(items[index].ID); ok {
+			items[index].PriceSummary = gin.H{"type": summary.Type, "unitAmount": summary.UnitAmount, "currency": summary.Currency, "variants": summary.Variants}
+		}
+		items[index].Performance = a.ModelCatalog.Performance(items[index].ID)
 	}
 	successJSON(c, http.StatusOK, gin.H{"items": items})
 }

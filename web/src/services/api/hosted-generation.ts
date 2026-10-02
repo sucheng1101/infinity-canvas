@@ -46,12 +46,13 @@ export async function hostedImages(config: AiConfig, prompt: string, references:
         capability: "image",
         preferredModel: config.model || config.imageModel,
         count: Number(config.count) || 1,
-        parameters: { quality, size, count: Number(config.count) || 1 },
+        parameters: { quality, size, outputMode: config.outputMode || "native", count: Number(config.count) || 1 },
         payload: {
             prompt,
             n: Number(config.count) || 1,
             ...(quality ? { quality } : {}),
             ...(size ? { size } : {}),
+            ...(config.outputMode ? { output_mode: config.outputMode } : {}),
             ...(config.background?.trim() ? { background: config.background.trim() } : {}),
             ...(images.length ? { images } : {}),
         },
@@ -87,12 +88,13 @@ export async function hostedVideo(config: AiConfig, prompt: string, references: 
     const output = await executeHostedGeneration({
         capability: "video",
         preferredModel: config.model || config.videoModel,
-        parameters: { durationSeconds: Number(config.videoSeconds) || 6 },
+        parameters: { durationSeconds: Number(config.videoSeconds) || 6, resolution: config.vquality, outputMode: config.outputMode || "native" },
         payload: {
             prompt,
             seconds: Number(config.videoSeconds) || 6,
             size: config.size,
             resolution: config.vquality,
+            output_mode: config.outputMode || "native",
             generate_audio: config.videoGenerateAudio === "true",
             ...(images.length ? { images } : {}),
         },
@@ -106,7 +108,7 @@ export async function createHostedVideoTask(config: AiConfig, prompt: string, re
     const resolved = await resolvePublishedModel("video", config.model || config.videoModel, signal);
     const model = resolved.model;
     const images = await Promise.all(references.map((reference) => imageToDataUrl(reference)));
-    const parameters = { durationSeconds: Number(config.videoSeconds) || 6 };
+    const parameters = { durationSeconds: Number(config.videoSeconds) || 6, resolution: config.vquality, outputMode: config.outputMode || "native" };
     const quote = await hostedApi.quote(model.id, "video", parameters, 1, signal);
     const task = await hostedApi.createGenerationTask({
         quoteId: quote.quoteId,
@@ -118,6 +120,7 @@ export async function createHostedVideoTask(config: AiConfig, prompt: string, re
             seconds: Number(config.videoSeconds) || 6,
             size: config.size,
             resolution: config.vquality,
+            output_mode: config.outputMode || "native",
             generate_audio: config.videoGenerateAudio === "true",
             ...(images.length ? { images } : {}),
         },

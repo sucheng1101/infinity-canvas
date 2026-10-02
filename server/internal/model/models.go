@@ -359,16 +359,17 @@ type UpstreamChannelKey struct {
 }
 
 type UpstreamChannelModel struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	ChannelID    uint      `gorm:"uniqueIndex:ux_channel_model;not null" json:"channelId"`
-	ChannelKeyID *uint     `gorm:"index" json:"channelKeyId,omitempty"`
-	Name         string    `gorm:"uniqueIndex:ux_channel_model;size:128;not null" json:"name"`
-	Capability   string    `gorm:"size:32;index;not null" json:"capability"`
-	Script       string    `gorm:"type:text;not null" json:"-"`
-	Status       string    `gorm:"size:32;index;not null;default:active" json:"status"`
-	SortOrder    int       `gorm:"not null;default:0" json:"sortOrder"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	ChannelID       uint      `gorm:"uniqueIndex:ux_channel_model;not null" json:"channelId"`
+	ChannelKeyID    *uint     `gorm:"index" json:"channelKeyId,omitempty"`
+	Name            string    `gorm:"uniqueIndex:ux_channel_model;size:128;not null" json:"name"`
+	Capability      string    `gorm:"size:32;index;not null" json:"capability"`
+	Script          string    `gorm:"type:text;not null" json:"-"`
+	QualitySpecJSON string    `gorm:"type:text" json:"-"`
+	Status          string    `gorm:"size:32;index;not null;default:active" json:"status"`
+	SortOrder       int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 type ModelRoute struct {

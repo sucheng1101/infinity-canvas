@@ -260,3 +260,11 @@ The Chinese version contains the complete item-by-item acceptance checklist.
 - Model cards should show unified price, quota price, billing unit, capability tags, and performance summary; clicking a card should open the details drawer.
 - Capability filters, model search, reset, and mobile navigation should work; unmatched searches should show an empty state.
 - When usage data exists, the models endpoint should include rolling 24-hour request count, success rate, average latency, and text throughput; missing metrics should not block the catalog.
+
+## 模型质量、渠道成本与模型广场（待验收）
+
+- 管理员编辑渠道模型时可选择低/中/高或 1K/2K/4K 质量标准，并按渠道独立开启 8K 与超分；未开启的渠道不应让用户侧出现对应选项。
+- 同一模型存在原生与超分两种输出方式时，图像设置、视频设置和报价参数应保持一致，切换模型后会自动回退到该模型支持的第一项质量与输出方式。
+- 定价弹窗可为质量/分辨率/输出方式录入独立积分单价；生成报价会依据请求参数匹配对应变体，未匹配时使用基础单价。
+- 渠道编辑器的模型编辑弹窗可直接选择公开模型、计费单位、渠道成本和用户售价；售价低于成本时首次保存应弹出二次确认，确认后才写入成本定价。
+- 模型广场默认显示积分，切换人民币后按固定 1 元 = 100 积分换算；卡片与详情应展示质量档位、8K/超分能力和价格变体。

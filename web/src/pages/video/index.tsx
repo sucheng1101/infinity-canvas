@@ -21,6 +21,7 @@ import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import { boolConfig, modelOptionLabel, modelOptionName, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { useHostedModelQuality } from "@/hooks/use-hosted-model-quality";
 import type { ReferenceImage } from "@/types/image";
 import i18n from "@/i18n";
 import { isImageFile } from "@/lib/image-format";
@@ -62,7 +63,7 @@ type GenerationLog = {
     error?: string;
 };
 
-type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vquality" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoMode">;
+type GenerationLogConfig = Pick<AiConfig, "model" | "videoModel" | "size" | "vquality" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoMode" | "outputMode">;
 
 type UpdateAiConfig = <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
 
@@ -514,6 +515,12 @@ export default function VideoPage({ workbenchMode, onWorkbenchModeChange }: { wo
 function GenerationSettings({ config, model, updateConfig, openConfigDialog }: { config: AiConfig; model: string; updateConfig: UpdateAiConfig; openConfigDialog: (shouldPromptContinue?: boolean) => void }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const { t } = useTranslation();
+    const qualitySpec = useHostedModelQuality("video", model);
+    useEffect(() => {
+        if (!qualitySpec?.options?.length) return;
+        if (!qualitySpec.options.some((option) => option.key === config.vquality || option.key.replace(/p$/, "") === config.vquality)) updateConfig("vquality", qualitySpec.options[0].key);
+        if (qualitySpec.outputModes?.length && !qualitySpec.outputModes.some((option) => option.key === config.outputMode)) updateConfig("outputMode", qualitySpec.outputModes[0].key);
+    }, [config.outputMode, config.vquality, qualitySpec, updateConfig]);
 
     return (
         <>
@@ -522,7 +529,7 @@ function GenerationSettings({ config, model, updateConfig, openConfigDialog }: {
                 <ModelPicker config={config} value={model} onChange={(value) => updateConfig("videoModel", value)} capability="video" fullWidth onMissingConfig={() => openConfigDialog(false)} />
             </label>
             <div className="col-span-2">
-                <VideoSettingsPanel config={config} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" />
+                <VideoSettingsPanel config={config} qualitySpec={qualitySpec} onConfigChange={(key, value) => updateConfig(key, value)} theme={theme} showTitle={false} className="space-y-4" />
             </div>
         </>
     );
@@ -734,6 +741,7 @@ function normalizeLogConfig(log: Partial<GenerationLog>): GenerationLogConfig {
         videoModel: log.config?.videoModel || log.model || "",
         size: log.config?.size || log.size || "",
         vquality: normalizeResolution(log.config?.vquality || log.resolution || ""),
+        outputMode: log.config?.outputMode || "native",
         videoSeconds: log.config?.videoSeconds || log.seconds || "",
         videoGenerateAudio: log.config?.videoGenerateAudio || "true",
         videoWatermark: log.config?.videoWatermark || "false",
@@ -747,6 +755,7 @@ function buildLog({ prompt, model, config, references, durationMs, status, task,
         videoModel: config.videoModel,
         size: config.size,
         vquality: normalizeResolution(config.vquality),
+        outputMode: config.outputMode,
         videoSeconds: config.videoSeconds,
         videoGenerateAudio: config.videoGenerateAudio,
         videoWatermark: config.videoWatermark,
@@ -780,6 +789,7 @@ function buildVideoConfig(config: AiConfig, model: string): AiConfig {
         size: normalizeVideoSize(config.size),
         videoSeconds: normalizeVideoSeconds(config.videoSeconds),
         vquality: normalizeResolution(config.vquality),
+        outputMode: config.outputMode,
         videoGenerateAudio: String(boolConfig(config.videoGenerateAudio, true)),
         videoWatermark: String(boolConfig(config.videoWatermark, false)),
         videoMode: config.videoMode === "reference" ? "reference" : "frames",

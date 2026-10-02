@@ -8,6 +8,7 @@ import { type CanvasTheme } from "@/lib/canvas-theme";
 import { clampVideoSeconds, computeVideoSize, inferVideoRatio, parseVideoResolution, readVideoDimensions, VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN, videoRatioOptions } from "@/lib/media-size";
 import { isMinimaxH3Model, minimaxH3Resolution, minimaxH3ResolutionOptions, videoResolutionDisplayLabel } from "@/lib/video-model-presets";
 import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
+import type { HostedQualitySpec } from "@/hooks/use-hosted-model-quality";
 
 const resolutionOptions = [
     { value: "480", label: "480p" },
@@ -25,18 +26,20 @@ export const videoSecondsRange = { min: VIDEO_SECONDS_MIN, max: VIDEO_SECONDS_MA
 
 type VideoSettingsPanelProps = {
     config: AiConfig;
-    onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoMode", value: string) => void;
+    onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoMode" | "outputMode", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
+    qualitySpec?: HostedQualitySpec;
 };
 
-export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5" }: VideoSettingsPanelProps) {
+export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", qualitySpec }: VideoSettingsPanelProps) {
     const { t } = useTranslation();
     const seconds = Number(clampVideoSeconds(config.videoSeconds || "6"));
     const videoMode = normalizeVideoModeValue(config.videoMode);
     const model = modelOptionName(config.model || config.videoModel);
     const isMinimax = isMinimaxH3Model(model);
+    const qualityResolutionOptions = qualitySpec?.options?.length ? qualitySpec.options : resolutionOptions.map((item) => ({ key: item.value, label: item.label }));
     const resolution = isMinimax ? minimaxH3Resolution(config.vquality).value : parseVideoResolution(config.vquality);
     const selectedRatio = inferVideoRatio(config.size || "auto");
     const dimensions = readVideoDimensions(config.size || "auto", resolution, selectedRatio);
@@ -63,8 +66,8 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                             ))
                         ) : (
                             <>
-                                {resolutionOptions.map((item) => (
-                                    <OptionPill key={item.value} selected={resolution === item.value} theme={theme} onClick={() => selectResolution(item.value)}>
+                                {qualityResolutionOptions.map((item) => (
+                                    <OptionPill key={item.key} selected={String(resolution) === item.key.replace(/p$/, "")} theme={theme} onClick={() => selectResolution(item.key.replace(/p$/, ""))}>
                                         {item.label}
                                     </OptionPill>
                                 ))}
@@ -73,6 +76,7 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         )}
                     </div>
                 </SettingGroup>
+                {qualitySpec?.outputModes?.length ? <SettingGroup title="输出方式" color={theme.node.muted}><div className="grid grid-cols-2 gap-2.5">{qualitySpec.outputModes.map((item) => <OptionPill key={item.key} selected={(config.outputMode || "native") === item.key} theme={theme} onClick={() => onConfigChange("outputMode", item.key)}>{item.label}</OptionPill>)}</div></SettingGroup> : null}
                 <SettingGroup title={t("settingsPanels.video.size")} color={theme.node.muted}>
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2.5">
                         <DimensionInput prefix="W" value={dimensions.width} disabled={selectedRatio === "auto"} theme={theme} onChange={(value) => updateDimension("width", value, dimensions, onConfigChange)} />

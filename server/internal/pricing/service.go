@@ -66,9 +66,10 @@ type QuoteView struct {
 }
 
 type PublicSummary struct {
-	Type       string `json:"type"`
-	UnitAmount int64  `json:"unitAmount"`
-	Currency   string `json:"currency"`
+	Type       string           `json:"type"`
+	UnitAmount int64            `json:"unitAmount"`
+	Currency   string           `json:"currency"`
+	Variants   []map[string]any `json:"variants,omitempty"`
 }
 
 func (s *Service) Summary(publishedModelID uint) (PublicSummary, bool) {
@@ -83,7 +84,7 @@ func (s *Service) Summary(publishedModelID uint) (PublicSummary, bool) {
 	}
 	kind, _ := formula["type"].(string)
 	unit := int64(numberOr(formula["unitAmount"], 0))
-	return PublicSummary{Type: kind, UnitAmount: unit, Currency: row.Currency}, true
+	return PublicSummary{Type: kind, UnitAmount: unit, Currency: row.Currency, Variants: formulaVariants(formula)}, true
 }
 
 func (s *Service) List(includeRetired bool) ([]View, error) {
@@ -208,7 +209,7 @@ func (s *Service) Quote(userID uint, input QuoteInput) (QuoteView, error) {
 	if err := s.DB.Create(&quote).Error; err != nil {
 		return QuoteView{}, err
 	}
-	return QuoteView{QuoteID: quote.ID, ModelID: quote.PublishedModelID, Amount: quote.Amount, Currency: quote.Currency, PriceVersion: price.Version, ExpiresAt: quote.ExpiresAt, Summary: summary(formula, input.Count)}, nil
+	return QuoteView{QuoteID: quote.ID, ModelID: quote.PublishedModelID, Amount: quote.Amount, Currency: quote.Currency, PriceVersion: price.Version, ExpiresAt: quote.ExpiresAt, Summary: summary(formula, input.Parameters, input.Count)}, nil
 }
 
 func (s *Service) ValidateQuoteTx(tx *gorm.DB, userID uint, quoteID string, modelID uint, parameters map[string]any) (model.Quote, error) {
@@ -295,6 +296,7 @@ func decodeFormula(payload string) (map[string]any, error) {
 }
 
 func calculate(formula, parameters map[string]any, count int) (int64, error) {
+	formula = applyVariant(formula, parameters)
 	kind, _ := formula["type"].(string)
 	if kind == "" {
 		kind = "fixed"
@@ -334,8 +336,100 @@ func calculate(formula, parameters map[string]any, count int) (int64, error) {
 	return int64(math.Ceil(amount)), nil
 }
 
-func summary(formula map[string]any, count int) map[string]any {
-	return map[string]any{"type": formula["type"], "count": count, "unitAmount": formula["unitAmount"]}
+func summary(formula, parameters map[string]any, count int) map[string]any {
+	result := map[string]any{"type": formula["type"], "count": count, "unitAmount": formula["unitAmount"]}
+	if variant := selectedVariant(formula, parameters); variant != "" {
+		result["variant"] = variant
+	}
+	return result
+}
+
+func formulaVariants(formula map[string]any) []map[string]any {
+	items, ok := formula["variants"].([]any)
+	if !ok {
+		return nil
+	}
+	result := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		value, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		key, _ := value["key"].(string)
+		if strings.TrimSpace(key) == "" {
+			continue
+		}
+		result = append(result, map[string]any{"key": key, "label": value["label"], "unitAmount": value["unitAmount"]})
+	}
+	return result
+}
+
+func applyVariant(formula map[string]any, parameters map[string]any) map[string]any {
+	variantKey := selectedVariant(formula, parameters)
+	if variantKey == "" {
+		return formula
+	}
+	items, ok := formula["variants"].([]any)
+	if !ok {
+		return formula
+	}
+	selected := map[string]any{}
+	for _, item := range items {
+		value, ok := item.(map[string]any)
+		if ok && value["key"] == variantKey {
+			selected = value
+			break
+		}
+	}
+	if len(selected) == 0 {
+		return formula
+	}
+	result := make(map[string]any, len(formula))
+	for key, value := range formula {
+		if key != "variants" {
+			result[key] = value
+		}
+	}
+	for key, value := range selected {
+		if key != "key" && key != "label" {
+			result[key] = value
+		}
+	}
+	return result
+}
+
+func selectedVariant(formula, parameters map[string]any) string {
+	if value, ok := parameters["variant"].(string); ok && strings.TrimSpace(value) != "" {
+		return strings.TrimSpace(value)
+	}
+	quality, _ := parameters["quality"].(string)
+	resolution, _ := parameters["resolution"].(string)
+	outputMode, _ := parameters["outputMode"].(string)
+	keys := []string{}
+	if strings.TrimSpace(quality) != "" && strings.TrimSpace(outputMode) != "" {
+		keys = append(keys, strings.TrimSpace(quality)+":"+strings.TrimSpace(outputMode))
+	}
+	if strings.TrimSpace(resolution) != "" && strings.TrimSpace(outputMode) != "" {
+		keys = append(keys, strings.TrimSpace(resolution)+":"+strings.TrimSpace(outputMode))
+	}
+	if strings.TrimSpace(outputMode) != "" {
+		keys = append(keys, strings.TrimSpace(outputMode))
+	}
+	for _, key := range []string{"quality", "resolution", "outputMode"} {
+		if value, ok := parameters[key].(string); ok && strings.TrimSpace(value) != "" {
+			keys = append(keys, strings.TrimSpace(value))
+		}
+	}
+	items, _ := formula["variants"].([]any)
+	for _, candidate := range keys {
+		for _, item := range items {
+			value, ok := item.(map[string]any)
+			if ok && value["key"] == candidate {
+				return candidate
+			}
+		}
+	}
+	return ""
 }
 
 func number(value any) (float64, bool) {

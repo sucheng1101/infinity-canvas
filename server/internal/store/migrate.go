@@ -115,6 +115,12 @@ func migrate(db *gorm.DB) error {
 				return tx.AutoMigrate(&model.OperationOrder{}, &model.UsageLog{}, &model.ModelCostPricing{})
 			},
 		},
+		{
+			version: "20261003_m12_model_quality_specs",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.UpstreamChannelModel{})
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64

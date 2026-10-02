@@ -19,6 +19,7 @@ export type AdminChannelModel = {
     name: string;
     capability: "image" | "video" | "text" | "audio";
     script?: string;
+    qualitySpec?: { scheme?: string; options?: Array<{ key: string; label: string }>; supports8K?: boolean; supportsUpscale?: boolean; outputModes?: Array<{ key: string; label: string }> };
     status?: "active" | "hidden";
 };
 

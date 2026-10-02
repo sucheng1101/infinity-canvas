@@ -6,6 +6,7 @@ import i18n from "@/i18n";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { computeMediaSize, computeMediaSizeFromShortSide, inferMediaRatio, inferMediaScale, mediaRatioOptions, mediaScaleOptions, parseAspectRatio, readMediaDimensions } from "@/lib/media-size";
 import type { AiConfig } from "@/stores/use-config-store";
+import type { HostedQualitySpec } from "@/hooks/use-hosted-model-quality";
 
 const qualityOptions = [
     { value: "auto", labelKey: "auto" },
@@ -21,18 +22,21 @@ export const imageScaleOptions = mediaScaleOptions.map((value) => ({ value, labe
 
 type ImageSettingsPanelProps = {
     config: AiConfig;
-    onConfigChange: (key: "quality" | "size" | "count" | "background", value: string) => void;
+    onConfigChange: (key: "quality" | "size" | "count" | "background" | "outputMode", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
     maxCount?: number;
     quickCount?: number;
+    qualitySpec?: HostedQualitySpec;
 };
 
-export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
+export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10, qualitySpec }: ImageSettingsPanelProps) {
     const { t } = useTranslation();
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
     const quality = config.quality || "auto";
+    const qualityItems = qualitySpec?.options?.length ? qualitySpec.options : qualityOptions.map((item) => ({ value: item.value, label: t(`settingsPanels.common.${item.labelKey}`) }));
+    const outputModes = qualitySpec?.outputModes?.length ? qualitySpec.outputModes : qualitySpec?.supportsUpscale ? [{ key: "native", label: "原生" }, { key: "upscale", label: "超分" }] : [];
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
     const activeSize = config.size || "auto";
     const transparentBackground = config.background === "transparent";
@@ -73,13 +77,14 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.quality")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
-                        {qualityOptions.map((item) => (
-                            <OptionPill key={item.value} selected={quality === item.value} theme={theme} onClick={() => onConfigChange("quality", item.value)}>
-                                {t(`settingsPanels.common.${item.labelKey}`)}
+                        {qualityItems.map((item) => (
+                            <OptionPill key={"value" in item ? item.value : item.key} selected={quality === ("value" in item ? item.value : item.key)} theme={theme} onClick={() => onConfigChange("quality", "value" in item ? item.value : item.key)}>
+                                {"value" in item ? item.label : item.label}
                             </OptionPill>
                         ))}
                     </div>
                 </div>
+                {outputModes.length ? <div className="space-y-2.5"><SettingTitle color={theme.node.muted}>输出方式</SettingTitle><div className="grid grid-cols-2 gap-2.5">{outputModes.map((item) => <OptionPill key={item.key} selected={(config.outputMode || "native") === item.key} theme={theme} onClick={() => onConfigChange("outputMode", item.key)}>{item.label}</OptionPill>)}</div></div> : null}
                 <div className="space-y-2.5">
                     <div className="flex items-center justify-between gap-3">
                         <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.size")}</SettingTitle>

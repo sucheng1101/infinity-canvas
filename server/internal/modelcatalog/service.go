@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
+	"github.com/sucheng1101/infinity-canvas/server/internal/modelquality"
 	"gorm.io/gorm"
 )
 
@@ -23,6 +24,7 @@ type Input struct {
 	Capability   string         `json:"capability"`
 	DisplayName  string         `json:"displayName"`
 	PublicConfig map[string]any `json:"publicConfig"`
+	QualitySpec  map[string]any `json:"qualitySpec,omitempty"`
 	Status       string         `json:"status"`
 	SortOrder    int            `json:"sortOrder"`
 }
@@ -33,6 +35,7 @@ type PublicModel struct {
 	SourceModel  string         `json:"sourceModel,omitempty"`
 	DisplayName  string         `json:"displayName"`
 	PublicConfig map[string]any `json:"publicConfig"`
+	QualitySpec  map[string]any `json:"qualitySpec,omitempty"`
 	PriceSummary map[string]any `json:"priceSummary,omitempty"`
 	Performance  map[string]any `json:"performance,omitempty"`
 	Status       string         `json:"status,omitempty"`
@@ -110,6 +113,7 @@ func (s *Service) List(capability string, includeHidden bool) ([]PublicModel, er
 		if err != nil {
 			return nil, err
 		}
+		item.QualitySpec = s.QualitySpec(row)
 		result = append(result, item)
 	}
 	return result, nil
@@ -265,11 +269,59 @@ func toPublic(row model.PublishedModel, includeAdminFields bool) (PublicModel, e
 	}
 	result := PublicModel{
 		ID: row.ID, Capability: row.Capability, SourceModel: row.SourceModel, DisplayName: row.DisplayName,
-		PublicConfig: config,
+		PublicConfig: config, QualitySpec: specMap(modelquality.Default(row.Capability, modelName(row))),
 	}
 	if includeAdminFields {
 		result.Status = row.Status
 		result.SortOrder = row.SortOrder
 	}
 	return result, nil
+}
+
+// QualitySpec returns the union of quality capabilities exposed by active
+// channel models. This keeps 8K opt-in: it appears only when at least one
+// configured channel advertises it.
+func (s *Service) QualitySpec(row model.PublishedModel) map[string]any {
+	var channelModels []model.UpstreamChannelModel
+	query := s.DB.Where("status = ?", model.ChannelModelActive)
+	if row.SourceModel != "" {
+		query = query.Where("name = ?", row.SourceModel)
+	}
+	if err := query.Find(&channelModels).Error; err != nil || len(channelModels) == 0 {
+		return specMap(modelquality.Default(row.Capability, modelName(row)))
+	}
+	specs := make([]modelquality.Spec, 0, len(channelModels))
+	for _, channelModel := range channelModels {
+		if channelModel.Capability != row.Capability {
+			continue
+		}
+		var spec modelquality.Spec
+		if strings.TrimSpace(channelModel.QualitySpecJSON) != "" {
+			_ = json.Unmarshal([]byte(channelModel.QualitySpecJSON), &spec)
+		}
+		specs = append(specs, modelquality.Normalize(spec, row.Capability, modelName(row)))
+	}
+	if len(specs) == 0 {
+		return specMap(modelquality.Default(row.Capability, modelName(row)))
+	}
+	return specMap(modelquality.Merge(specs...))
+}
+
+func modelName(row model.PublishedModel) string {
+	if strings.TrimSpace(row.SourceModel) != "" {
+		return row.SourceModel
+	}
+	return row.DisplayName
+}
+
+func specMap(spec modelquality.Spec) map[string]any {
+	options := make([]map[string]any, 0, len(spec.Options))
+	for _, option := range spec.Options {
+		options = append(options, map[string]any{"key": option.Key, "label": option.Label})
+	}
+	modes := make([]map[string]any, 0, len(spec.OutputModes))
+	for _, option := range spec.OutputModes {
+		modes = append(modes, map[string]any{"key": option.Key, "label": option.Label})
+	}
+	return map[string]any{"scheme": spec.Scheme, "options": options, "supports8K": spec.Supports8K, "supportsUpscale": spec.SupportsUpscale, "outputModes": modes}
 }

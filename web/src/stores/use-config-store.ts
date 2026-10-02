@@ -58,6 +58,7 @@ export type AiConfig = {
     reasoningEffort: ReasoningEffort;
     models: string[];
     quality: string;
+    outputMode: string;
     size: string;
     background: string;
     count: string;
@@ -118,6 +119,7 @@ export const defaultConfig: AiConfig = {
     reasoningEffort: "auto",
     models: defaultFixedChannels().flatMap((channel) => channel.models.map((model) => `${channel.id}${CHANNEL_MODEL_SEPARATOR}${model.name}`)),
     quality: "auto",
+    outputMode: "native",
     size: "3:4",
     background: "",
     count: "1",
@@ -426,6 +428,7 @@ export function normalizeAiConfig(input: Partial<AiConfig>): AiConfig {
         audioFormat: config.audioFormat || defaultConfig.audioFormat,
         audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
         audioInstructions: config.audioInstructions || "",
+        outputMode: config.outputMode || "native",
         reasoningEffort: config.reasoningEffort || "auto",
         videoSeconds: config.videoSeconds || "6",
         vquality: config.vquality || "720",

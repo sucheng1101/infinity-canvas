@@ -3,7 +3,7 @@ import { Activity, Boxes, CircleDollarSign, LayoutDashboard, Mail, RefreshCw, Ro
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
-import { adminApi, type AdminChannel, type AdminRoute, type EmailSettings, type InvitationSettings, type PaymentSettings, type PricingVersion } from "@/services/api/admin";
+import { adminApi, type AdminChannel, type AdminModelCostPricing, type AdminRoute, type EmailSettings, type InvitationSettings, type PaymentSettings, type PricingVersion } from "@/services/api/admin";
 import type { PublishedModel, RechargeProduct } from "@/services/api/hosted";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { AdminChannelEditorDrawer } from "./components/channel-editor-drawer";
@@ -20,6 +20,13 @@ const statusOptions = [
 ];
 const jsonValue = (value: unknown) => JSON.stringify(value || {});
 const recommendedPricingType = (capability?: string) => capability === "image" ? "per_unit" : capability === "video" ? "per_second" : capability === "text" ? "per_token" : "fixed";
+const modelVariantOptions = (model?: PublishedModel) => {
+    if (!model) return [];
+    const quality = model.qualitySpec?.options || [];
+    const modes = model.qualitySpec?.outputModes || [];
+    const items = [...quality, ...modes];
+    return Array.from(new Map(items.map((item) => [item.key, item])).values());
+};
 
 function RouteEditorFields({ channels, models }: { channels: AdminChannel[]; models: PublishedModel[] }) {
     const form = Form.useFormInstance();
@@ -56,6 +63,7 @@ export default function AdminPage() {
     const { message } = App.useApp();
     const [models, setModels] = useState<PublishedModel[]>([]);
     const [channels, setChannels] = useState<AdminChannel[]>([]);
+    const [modelCosts, setModelCosts] = useState<AdminModelCostPricing[]>([]);
     const [routes, setRoutes] = useState<AdminRoute[]>([]);
     const [pricing, setPricing] = useState<PricingVersion[]>([]);
     const [products, setProducts] = useState<RechargeProduct[]>([]);
@@ -72,7 +80,7 @@ export default function AdminPage() {
         setLoading(true);
         try {
             const modelResult = await adminApi.models();
-            const [channelResult, routeResult, pricingResult, productResult, invitationResult, paymentResult, emailResult] = await Promise.all([
+            const [channelResult, routeResult, pricingResult, productResult, invitationResult, paymentResult, emailResult, costResult] = await Promise.all([
                 adminApi.channels(),
                 adminApi.routes(),
                 adminApi.pricing(),
@@ -80,6 +88,7 @@ export default function AdminPage() {
                 adminApi.invitation(),
                 adminApi.payment(),
                 adminApi.email(),
+                adminApi.modelCostPricing(),
             ]);
             setModels(modelResult.items);
             setChannels(channelResult.items);
@@ -89,6 +98,7 @@ export default function AdminPage() {
             setInvitation(invitationResult);
             setPayment(paymentResult);
             setEmail(emailResult);
+            setModelCosts(costResult.items);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "管理数据读取失败");
         } finally {
@@ -113,7 +123,7 @@ export default function AdminPage() {
             if (type === "pricing") {
                 const created = await adminApi.createPricing({
                     publishedModelId: values.publishedModelId,
-                    currency: "CNY",
+                    currency: "POINTS",
                     formula: {
                         type: values.pricingType,
                         unitAmount: values.unitAmount,
@@ -122,6 +132,7 @@ export default function AdminPage() {
                         ...(values.inputTokenAmount ? { inputTokenAmount: values.inputTokenAmount } : {}),
                         ...(values.outputTokenAmount ? { outputTokenAmount: values.outputTokenAmount } : {}),
                         ...(values.cachedTokenAmount ? { cachedTokenAmount: values.cachedTokenAmount } : {}),
+                        ...(Array.isArray(values.variants) && values.variants.length ? { variants: values.variants.filter((item: any) => item?.key).map((item: any) => ({ key: item.key, label: item.label || item.key, unitAmount: Number(item.unitAmount || 0) })) } : {}),
                     },
                 });
                 if (values.enabled) await adminApi.publishPricing(created.id);
@@ -171,10 +182,17 @@ export default function AdminPage() {
         }
     };
 
-    const saveChannel = async (values: Parameters<typeof adminApi.createChannel>[0]) => {
+    const saveChannel = async (values: Parameters<typeof adminApi.createChannel>[0], costs: Array<{ id?: number; publishedModelId: number; upstreamModel: string; billingUnit: string; costPerUnit: number; sellPerUnit: number; status: "active" | "hidden" }>) => {
         try {
-            if (channelEditor) await adminApi.updateChannel(channelEditor.id, values);
-            else await adminApi.createChannel(values);
+            const saved = channelEditor ? await adminApi.updateChannel(channelEditor.id, values) : await adminApi.createChannel(values);
+            for (const item of costs) {
+                const existing = modelCosts.find((cost) => cost.channelId === saved.id && cost.upstreamModel === item.upstreamModel);
+                await adminApi.saveModelCostPricing({ ...item, channelId: saved.id, confirmWarning: true }, item.id || existing?.id);
+            }
+            const submittedModels = new Set(costs.map((item) => item.upstreamModel));
+            for (const existing of modelCosts.filter((item) => item.channelId === saved.id && !submittedModels.has(item.upstreamModel) && item.status === "active")) {
+                await adminApi.saveModelCostPricing({ ...existing, status: "hidden", confirmWarning: true }, existing.id);
+            }
             setChannelEditor(undefined);
             await load();
             message.success("渠道已保存");
@@ -266,6 +284,7 @@ export default function AdminPage() {
                           inputTokenAmount: Number(item?.pricing?.formula?.inputTokenAmount || 0),
                           outputTokenAmount: Number(item?.pricing?.formula?.outputTokenAmount || 0),
                           cachedTokenAmount: Number(item?.pricing?.formula?.cachedTokenAmount || 0),
+                          variants: Array.isArray(item?.pricing?.formula?.variants) ? item.pricing.formula.variants : modelVariantOptions(item?.model).map((variant) => ({ key: variant.key, label: variant.label, unitAmount: 1 })),
                           enabled: item?.pricing ? item.pricing.status === "active" : true,
                       }
                     : type === "product"
@@ -331,6 +350,21 @@ export default function AdminPage() {
                             </div>
                             <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-500">建议：生图按张计费，视频按秒计费，文本按 Token 计费。文本可分别填写输入、输出和缓存 Token 单价。</div>
                             <div className="grid grid-cols-3 gap-3"><Form.Item name="inputTokenAmount" label="输入 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item><Form.Item name="outputTokenAmount" label="输出 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item><Form.Item name="cachedTokenAmount" label="缓存 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item></div>
+                            <div className="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
+                                <div className="mb-2 text-sm font-medium">质量 / 输出方式价格</div>
+                                <div className="mb-3 text-xs text-stone-500">8K 只有在渠道模型能力开启时才会出现在用户侧；原生与超分可以分别定价。</div>
+                                <Form.List name="variants">
+                                    {(fields, { add, remove }) => <>
+                                        {fields.map((field) => <div key={field.key} className="mb-2 grid grid-cols-[1fr_1fr_120px_auto] gap-2">
+                                            <Form.Item {...field} name={[field.name, "key"]} noStyle><Input placeholder="key，如 4k / upscale" /></Form.Item>
+                                            <Form.Item {...field} name={[field.name, "label"]} noStyle><Input placeholder="显示名称" /></Form.Item>
+                                            <Form.Item {...field} name={[field.name, "unitAmount"]} noStyle><InputNumber className="w-full" min={0} precision={0} placeholder="积分" /></Form.Item>
+                                            <Button type="text" danger onClick={() => remove(field.name)}>移除</Button>
+                                        </div>)}
+                                        <Button type="dashed" block onClick={() => add({ unitAmount: 1 })}>增加质量价格</Button>
+                                    </>}
+                                </Form.List>
+                            </div>
                             <Form.Item name="enabled" label="保存后启用" valuePropName="checked">
                                 <Switch checkedChildren="开" unCheckedChildren="关" />
                             </Form.Item>
@@ -733,7 +767,7 @@ export default function AdminPage() {
                     </section>
                 </div>
                 {modal && editor()}
-                <AdminChannelEditorDrawer open={channelEditor !== undefined} channel={channelEditor || null} onSave={saveChannel} onClose={() => setChannelEditor(undefined)} />
+                <AdminChannelEditorDrawer open={channelEditor !== undefined} channel={channelEditor || null} models={models} costs={modelCosts} onSave={saveChannel} onClose={() => setChannelEditor(undefined)} />
             </div>
         </main>
     );

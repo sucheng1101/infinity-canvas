@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
+	"github.com/sucheng1101/infinity-canvas/server/internal/modelquality"
 	"gorm.io/gorm"
 )
 
@@ -30,10 +31,11 @@ type Service struct {
 }
 
 type ChannelModelInput struct {
-	Name       string `json:"name"`
-	Capability string `json:"capability"`
-	Script     string `json:"script"`
-	Status     string `json:"status"`
+	Name        string         `json:"name"`
+	Capability  string         `json:"capability"`
+	Script      string         `json:"script"`
+	QualitySpec map[string]any `json:"qualitySpec"`
+	Status      string         `json:"status"`
 }
 
 type ChannelModelAPIKeyInput struct {
@@ -55,11 +57,12 @@ type ChannelInput struct {
 }
 
 type AdminChannelModel struct {
-	ID         uint   `json:"id"`
-	Name       string `json:"name"`
-	Capability string `json:"capability"`
-	Script     string `json:"script,omitempty"`
-	Status     string `json:"status"`
+	ID          uint           `json:"id"`
+	Name        string         `json:"name"`
+	Capability  string         `json:"capability"`
+	Script      string         `json:"script,omitempty"`
+	QualitySpec map[string]any `json:"qualitySpec,omitempty"`
+	Status      string         `json:"status"`
 }
 
 type AdminChannelModelAPIKey struct {
@@ -447,7 +450,15 @@ func replaceChannelDetails(tx *gorm.DB, channelID uint, keyInputs []ChannelModel
 			return ErrInvalidChannel
 		}
 		modelNames[name] = true
-		models = append(models, model.UpstreamChannelModel{ChannelID: channelID, Name: name, Capability: capability, Script: strings.TrimSpace(input.Script), Status: status, SortOrder: index})
+		qualitySpec := input.QualitySpec
+		if qualitySpec == nil {
+			qualitySpec = specMap(modelquality.Default(capability, name))
+		}
+		qualityPayload, err := json.Marshal(qualitySpec)
+		if err != nil {
+			return ErrInvalidChannel
+		}
+		models = append(models, model.UpstreamChannelModel{ChannelID: channelID, Name: name, Capability: capability, Script: strings.TrimSpace(input.Script), QualitySpecJSON: string(qualityPayload), Status: status, SortOrder: index})
 	}
 
 	type preparedKey struct {
@@ -606,7 +617,14 @@ func (s *Service) toAdminChannel(row model.UpstreamChannel) (AdminChannel, error
 	modelsByKey := map[uint][]string{}
 	adminModels := make([]AdminChannelModel, 0, len(models))
 	for _, item := range models {
-		adminModels = append(adminModels, AdminChannelModel{ID: item.ID, Name: item.Name, Capability: item.Capability, Script: item.Script, Status: item.Status})
+		quality := map[string]any{}
+		if strings.TrimSpace(item.QualitySpecJSON) != "" {
+			_ = json.Unmarshal([]byte(item.QualitySpecJSON), &quality)
+		}
+		if len(quality) == 0 {
+			quality = specMap(modelquality.Default(item.Capability, item.Name))
+		}
+		adminModels = append(adminModels, AdminChannelModel{ID: item.ID, Name: item.Name, Capability: item.Capability, Script: item.Script, QualitySpec: quality, Status: item.Status})
 		if item.ChannelKeyID != nil {
 			modelsByKey[*item.ChannelKeyID] = append(modelsByKey[*item.ChannelKeyID], item.Name)
 		}
@@ -620,6 +638,18 @@ func (s *Service) toAdminChannel(row model.UpstreamChannel) (AdminChannel, error
 		masked = "******"
 	}
 	return AdminChannel{ID: row.ID, Name: row.Name, Provider: row.Provider, BaseURL: row.BaseURL, APIKeySet: len(adminKeys) > 0, APIKeyMasked: masked, ModelAPIKeys: adminKeys, Models: adminModels, Settings: settings, Status: row.Status, SortOrder: row.SortOrder}, nil
+}
+
+func specMap(spec modelquality.Spec) map[string]any {
+	options := make([]map[string]any, 0, len(spec.Options))
+	for _, option := range spec.Options {
+		options = append(options, map[string]any{"key": option.Key, "label": option.Label})
+	}
+	modes := make([]map[string]any, 0, len(spec.OutputModes))
+	for _, option := range spec.OutputModes {
+		modes = append(modes, map[string]any{"key": option.Key, "label": option.Label})
+	}
+	return map[string]any{"scheme": spec.Scheme, "options": options, "supports8K": spec.Supports8K, "supportsUpscale": spec.SupportsUpscale, "outputModes": modes}
 }
 
 func (s *Service) toAdminRoute(row model.ModelRoute) (AdminRoute, error) {
