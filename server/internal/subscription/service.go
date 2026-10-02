@@ -452,6 +452,14 @@ func decodeOperationResult(order model.OperationOrder, target any) error {
 		}
 		return json.Unmarshal([]byte(order.ResultJSON), target)
 	case model.OperationOrderFailed:
+		switch order.ErrorCode {
+		case "SUBSCRIPTION_PLAN_NOT_FOUND":
+			return ErrPlanNotFound
+		case "CHANNEL_UNLOCK_PLAN_NOT_FOUND":
+			return ErrUnlockPlanNotFound
+		case "QUOTA_INSUFFICIENT":
+			return ErrInsufficientQuota
+		}
 		return ErrOrderFailed
 	default:
 		return ErrOrderInProgress
