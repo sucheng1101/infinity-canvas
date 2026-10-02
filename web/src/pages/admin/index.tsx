@@ -9,6 +9,8 @@ import { useAuthStore } from "@/stores/use-auth-store";
 import { AdminChannelEditorDrawer } from "./components/channel-editor-drawer";
 import { ChannelManagement } from "./components/channel-management";
 import { PricingManagement } from "./components/pricing-management";
+import { UsageLogManagement } from "./components/usage-log-management";
+import { UserManagement } from "./components/user-management";
 
 const statusOptions = [
     { value: "active", label: "启用" },
@@ -488,28 +490,12 @@ export default function AdminPage() {
                         {
                             key: "users",
                             label: "用户管理",
-                            children: (
-                                <Card title="用户管理" extra={<Tag color="orange">首板入口</Tag>}>
-                                    <div className="rounded-xl border border-dashed border-stone-300 p-8 text-center dark:border-stone-700">
-                                        <Users className="mx-auto size-8 text-stone-400" />
-                                        <div className="mt-3 font-medium">用户与额度管理工作区</div>
-                                        <p className="mt-2 text-sm text-stone-500">下一步接入用户列表、状态管理、额度调整和单用户使用记录。</p>
-                                    </div>
-                                </Card>
-                            ),
+                            children: <UserManagement loading={loading} />,
                         },
                         {
                             key: "usage",
                             label: "使用日志",
-                            children: (
-                                <Card title="使用日志" extra={<Tag color="orange">首板入口</Tag>}>
-                                    <div className="rounded-xl border border-dashed border-stone-300 p-8 text-center dark:border-stone-700">
-                                        <ScrollText className="mx-auto size-8 text-stone-400" />
-                                        <div className="mt-3 font-medium">模型调用与计费日志</div>
-                                        <p className="mt-2 text-sm text-stone-500">下一步接入时间、用户、模型、渠道、Token、费用、耗时和请求详情筛选。</p>
-                                    </div>
-                                </Card>
-                            ),
+                            children: <UsageLogManagement />,
                         },
                         {
                             key: "models",

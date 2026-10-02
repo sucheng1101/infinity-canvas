@@ -11,6 +11,7 @@ import (
 	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/generation"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
@@ -31,6 +32,13 @@ type Service struct {
 	Client     *http.Client
 }
 
+type ExecuteMeta struct {
+	RequestID       string
+	IP              string
+	RequestType     string
+	ReasoningEffort string
+}
+
 type route struct {
 	model        model.ModelRoute
 	channel      model.UpstreamChannel
@@ -40,7 +48,7 @@ type route struct {
 
 // Execute runs one queued task through the administrator-selected upstream route.
 // The upstream API key is only read inside this service and is never serialized.
-func (s *Service) Execute(ctx context.Context, userID uint, taskID string) (generation.View, error) {
+func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metadata ...ExecuteMeta) (generation.View, error) {
 	if userID == 0 || strings.TrimSpace(taskID) == "" {
 		return generation.View{}, ErrTaskNotFound
 	}
@@ -65,23 +73,37 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string) (gene
 		}
 		return generation.View{}, err
 	}
+	meta := ExecuteMeta{RequestType: "generation"}
+	if len(metadata) > 0 {
+		meta = metadata[0]
+		if strings.TrimSpace(meta.RequestType) == "" {
+			meta.RequestType = "generation"
+		}
+	}
+	usageID := s.beginUsage(task, meta)
+	failWithLog := func(code string, cause error) (generation.View, error) {
+		view, failure := s.fail(task.ID, code, cause)
+		s.finishUsage(usageID, model.UsageLogFailed, task, 0, code, cause, nil, 0)
+		return view, failure
+	}
 
 	selected, err := s.findRoute(task.PublishedModelID)
 	if err != nil {
-		return s.fail(task.ID, "ROUTE_UNAVAILABLE", err)
+		return failWithLog("ROUTE_UNAVAILABLE", err)
 	}
+	s.updateUsageRoute(usageID, selected)
 	body, err := buildRequestBody(task, selected.model)
 	if err != nil {
-		return s.fail(task.ID, "TASK_PAYLOAD_INVALID", err)
+		return failWithLog("TASK_PAYLOAD_INVALID", err)
 	}
 	path, err := endpointPath(task.Capability, selected.model, selected.channel)
 	if err != nil {
-		return s.fail(task.ID, "CAPABILITY_UNSUPPORTED", err)
+		return failWithLog("CAPABILITY_UNSUPPORTED", err)
 	}
 	requestURL := joinURL(selected.channel.BaseURL, path)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, strings.NewReader(body))
 	if err != nil {
-		return s.fail(task.ID, "UPSTREAM_REQUEST_INVALID", err)
+		return failWithLog("UPSTREAM_REQUEST_INVALID", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+selected.key.APIKey)
@@ -92,21 +114,28 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string) (gene
 	}
 	response, err := client.Do(req)
 	if err != nil {
-		return s.fail(task.ID, "UPSTREAM_REQUEST_FAILED", err)
+		return failWithLog("UPSTREAM_REQUEST_FAILED", err)
 	}
 	defer response.Body.Close()
 	data, readErr := io.ReadAll(response.Body)
 	if readErr != nil {
-		return s.fail(task.ID, "UPSTREAM_RESPONSE_FAILED", readErr)
+		return failWithLog("UPSTREAM_RESPONSE_FAILED", readErr)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
-		return s.fail(task.ID, "UPSTREAM_HTTP_ERROR", fmt.Errorf("upstream returned HTTP %d: %s", response.StatusCode, compact(string(data))))
+		return failWithLog("UPSTREAM_HTTP_ERROR", fmt.Errorf("upstream returned HTTP %d: %s", response.StatusCode, compact(string(data))))
 	}
 	output, err := decodeResponse(data, response.Header.Get("Content-Type"))
 	if err != nil {
-		return s.fail(task.ID, "UPSTREAM_RESPONSE_INVALID", err)
+		return failWithLog("UPSTREAM_RESPONSE_INVALID", err)
 	}
-	return s.Generation.Complete(task.ID, output, task.ReservedAmount)
+	inputTokens, outputTokens, cachedTokens, totalTokens := usageTokens(output)
+	view, err := s.Generation.Complete(task.ID, output, task.ReservedAmount)
+	if err != nil {
+		return failWithLog("TASK_SETTLEMENT_FAILED", err)
+	}
+	s.finishUsage(usageID, model.UsageLogSuccess, task, view.SettledAmount, "", nil, output, inputTokens+outputTokens+cachedTokens)
+	_ = s.DB.Model(&model.UsageLog{}).Where("id = ?", usageID).Updates(map[string]any{"input_tokens": inputTokens, "output_tokens": outputTokens, "cached_tokens": cachedTokens, "total_tokens": totalTokens})
+	return view, nil
 }
 
 func (s *Service) fail(taskID, code string, cause error) (generation.View, error) {
@@ -116,6 +145,119 @@ func (s *Service) fail(taskID, code string, cause error) (generation.View, error
 		return generation.View{}, err
 	}
 	return view, cause
+}
+
+func (s *Service) beginUsage(task model.GenerationTask, meta ExecuteMeta) uint {
+	item := model.UsageLog{
+		TaskID: task.ID, RequestID: strings.TrimSpace(meta.RequestID), UserID: task.UserID,
+		PublishedModelID: task.PublishedModelID, Capability: task.Capability,
+		RequestType: meta.RequestType, ReasoningEffort: meta.ReasoningEffort,
+		Status: model.UsageLogRunning, IP: strings.TrimSpace(meta.IP), StartedAt: time.Now().UTC(),
+		RequestSummaryJSON: summarizeTask(task),
+	}
+	var published model.PublishedModel
+	if s.DB.First(&published, task.PublishedModelID).Error == nil {
+		item.PublishedModel = published.DisplayName
+	}
+	if s.DB.Create(&item).Error != nil {
+		return 0
+	}
+	return item.ID
+}
+
+func (s *Service) updateUsageRoute(id uint, selected route) {
+	if id == 0 {
+		return
+	}
+	_ = s.DB.Model(&model.UsageLog{}).Where("id = ?", id).Updates(map[string]any{
+		"channel_id": selected.channel.ID, "channel_name": selected.channel.Name,
+		"provider": selected.channel.Provider, "upstream_model": selected.model.UpstreamModel,
+	})
+}
+
+func (s *Service) finishUsage(id uint, status string, task model.GenerationTask, charged int64, code string, cause error, response map[string]any, totalTokens int64) {
+	if id == 0 {
+		return
+	}
+	var item model.UsageLog
+	if s.DB.First(&item, id).Error != nil {
+		return
+	}
+	now := time.Now().UTC()
+	updates := map[string]any{"status": status, "completed_at": now, "duration_ms": now.Sub(item.StartedAt).Milliseconds(), "charged_quota": charged, "total_tokens": totalTokens}
+	if code != "" {
+		updates["error_code"] = code
+	}
+	if cause != nil {
+		updates["error_message"] = compact(cause.Error())
+	}
+	if response != nil {
+		updates["response_summary_json"] = summarizeResponse(response)
+	}
+	_ = s.DB.Model(&model.UsageLog{}).Where("id = ?", id).Updates(updates)
+}
+
+func summarizeTask(task model.GenerationTask) string {
+	var payload map[string]any
+	_ = json.Unmarshal([]byte(task.PayloadJSON), &payload)
+	var parameters map[string]any
+	_ = json.Unmarshal([]byte(task.ParametersJSON), &parameters)
+	return encodeSummary(map[string]any{"payloadKeys": mapKeys(payload), "parameterKeys": mapKeys(parameters), "payloadBytes": len(task.PayloadJSON)})
+}
+
+func summarizeResponse(response map[string]any) string {
+	keys := mapKeys(response)
+	input, output, cached, total := usageTokens(response)
+	return encodeSummary(map[string]any{"keys": keys, "inputTokens": input, "outputTokens": output, "cachedTokens": cached, "totalTokens": total})
+}
+
+func encodeSummary(value map[string]any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
+}
+
+func mapKeys(value map[string]any) []string {
+	keys := make([]string, 0, len(value))
+	for key := range value {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func usageTokens(response map[string]any) (int64, int64, int64, int64) {
+	usage, _ := response["usage"].(map[string]any)
+	read := func(key string) int64 {
+		value, ok := usage[key]
+		if !ok {
+			return 0
+		}
+		switch typed := value.(type) {
+		case float64:
+			return int64(typed)
+		case int64:
+			return typed
+		case int:
+			return int64(typed)
+		default:
+			return 0
+		}
+	}
+	input, output, total := read("prompt_tokens"), read("completion_tokens"), read("total_tokens")
+	cached := read("cached_tokens")
+	if cached == 0 {
+		if details, ok := usage["prompt_tokens_details"].(map[string]any); ok {
+			if value, ok := details["cached_tokens"].(float64); ok {
+				cached = int64(value)
+			}
+		}
+	}
+	if total == 0 {
+		total = input + output
+	}
+	return input, output, cached, total
 }
 
 func (s *Service) findRoute(publishedModelID uint) (route, error) {

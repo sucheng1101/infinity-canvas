@@ -205,6 +205,10 @@ func (s *Service) lockReservation(tx *gorm.DB, taskID string) (model.QuotaReserv
 }
 
 func (s *Service) Adjust(userID uint, delta int64, source, businessID, idempotencyKey string) error {
+	return s.AdjustWithReason(userID, delta, source, businessID, idempotencyKey, "")
+}
+
+func (s *Service) AdjustWithReason(userID uint, delta int64, source, businessID, idempotencyKey, reason string) error {
 	if delta == 0 {
 		return ErrInvalidAmount
 	}
@@ -231,7 +235,7 @@ func (s *Service) Adjust(userID uint, delta int64, source, businessID, idempoten
 		}
 		return tx.Create(&model.QuotaLedger{
 			UserID: userID, Delta: delta, BalanceAfter: account.Balance, Source: source,
-			BusinessType: "admin_adjustment", BusinessID: businessID, IdempotencyKey: idempotencyKey,
+			BusinessType: "admin_adjustment", BusinessID: businessID, Reason: reason, IdempotencyKey: idempotencyKey,
 		}).Error
 	})
 }

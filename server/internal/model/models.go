@@ -19,6 +19,9 @@ type User struct {
 	ID              uint       `gorm:"primaryKey" json:"id"`
 	Username        string     `gorm:"size:64;uniqueIndex;not null" json:"username"`
 	Email           string     `gorm:"size:255;uniqueIndex;not null" json:"email"`
+	DisplayName     string     `gorm:"size:128;index" json:"displayName"`
+	Remark          string     `gorm:"size:512" json:"remark"`
+	GroupName       string     `gorm:"size:64;index" json:"groupName"`
 	InviteCode      string     `gorm:"size:32;uniqueIndex;not null" json:"-"`
 	PasswordHash    string     `gorm:"size:255;not null" json:"-"`
 	Status          string     `gorm:"size:32;index;not null" json:"status"`
@@ -46,6 +49,7 @@ type QuotaLedger struct {
 	Source              string    `gorm:"size:32;index;not null" json:"source"`
 	BusinessType        string    `gorm:"size:64;index;not null" json:"businessType"`
 	BusinessID          string    `gorm:"size:128;index;not null" json:"businessId"`
+	Reason              string    `gorm:"size:255" json:"reason,omitempty"`
 	IdempotencyKey      string    `gorm:"size:191;uniqueIndex;not null" json:"-"`
 	PricingSnapshotJSON string    `gorm:"type:text" json:"-"`
 	CreatedAt           time.Time `json:"createdAt"`
@@ -281,6 +285,12 @@ const (
 	GenerationTaskCancelled = "cancelled"
 )
 
+const (
+	UsageLogRunning = "running"
+	UsageLogSuccess = "succeeded"
+	UsageLogFailed  = "failed"
+)
+
 type GenerationTask struct {
 	ID               string     `gorm:"size:36;primaryKey" json:"id"`
 	UserID           uint       `gorm:"index;not null" json:"userId"`
@@ -300,6 +310,40 @@ type GenerationTask struct {
 	CompletedAt      *time.Time `json:"completedAt,omitempty"`
 	CreatedAt        time.Time  `json:"createdAt"`
 	UpdatedAt        time.Time  `json:"updatedAt"`
+}
+
+// UsageLog stores a redacted, queryable record for each relay execution.
+// Request/response summaries never contain credentials or binary payloads.
+type UsageLog struct {
+	ID                  uint       `gorm:"primaryKey" json:"id"`
+	TaskID              string     `gorm:"size:36;index;not null" json:"taskId"`
+	RequestID           string     `gorm:"size:128;index" json:"requestId"`
+	UserID              uint       `gorm:"index;not null" json:"userId"`
+	PublishedModelID    uint       `gorm:"index" json:"publishedModelId"`
+	PublishedModel      string     `gorm:"size:128;index" json:"publishedModel"`
+	Capability          string     `gorm:"size:32;index" json:"capability"`
+	ChannelID           uint       `gorm:"index" json:"channelId"`
+	ChannelName         string     `gorm:"size:128;index" json:"channelName"`
+	Provider            string     `gorm:"size:64;index" json:"provider"`
+	UpstreamModel       string     `gorm:"size:128;index" json:"upstreamModel"`
+	RequestType         string     `gorm:"size:32;index" json:"requestType"`
+	ReasoningEffort     string     `gorm:"size:32" json:"reasoningEffort,omitempty"`
+	Status              string     `gorm:"size:32;index;not null" json:"status"`
+	DurationMs          int64      `json:"durationMs"`
+	InputTokens         int64      `json:"inputTokens"`
+	OutputTokens        int64      `json:"outputTokens"`
+	CachedTokens        int64      `json:"cachedTokens"`
+	TotalTokens         int64      `json:"totalTokens"`
+	ChargedQuota        int64      `json:"chargedQuota"`
+	IP                  string     `gorm:"size:64;index" json:"ip,omitempty"`
+	RetryCount          int        `json:"retryCount"`
+	ErrorCode           string     `gorm:"size:64;index" json:"errorCode,omitempty"`
+	ErrorMessage        string     `gorm:"size:1000" json:"errorMessage,omitempty"`
+	RequestSummaryJSON  string     `gorm:"type:text" json:"-"`
+	ResponseSummaryJSON string     `gorm:"type:text" json:"-"`
+	StartedAt           time.Time  `gorm:"index;not null" json:"startedAt"`
+	CompletedAt         *time.Time `gorm:"index" json:"completedAt,omitempty"`
+	CreatedAt           time.Time  `gorm:"index" json:"createdAt"`
 }
 
 type Session struct {

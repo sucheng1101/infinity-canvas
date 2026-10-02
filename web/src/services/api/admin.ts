@@ -95,6 +95,63 @@ export type EmailSettings = {
     blockedDomains: string[];
 };
 
+export type AdminUser = {
+    id: number;
+    username: string;
+    email: string;
+    displayName: string;
+    remark: string;
+    groupName: string;
+    status: "active" | "pending" | "blocked";
+    role: "user" | "admin";
+    emailVerifiedAt?: string;
+    lastLoginAt?: string;
+    createdAt: string;
+    updatedAt: string;
+    quota: { balance: number; reserved: number; available: number };
+};
+
+export type AdminUsageLog = {
+    id: number;
+    taskId: string;
+    requestId: string;
+    userId: number;
+    username?: string;
+    publishedModelId: number;
+    publishedModel: string;
+    capability: string;
+    channelId: number;
+    channelName: string;
+    provider: string;
+    upstreamModel: string;
+    requestType: string;
+    reasoningEffort?: string;
+    status: "running" | "succeeded" | "failed";
+    durationMs: number;
+    inputTokens: number;
+    outputTokens: number;
+    cachedTokens: number;
+    totalTokens: number;
+    chargedQuota: number;
+    ip?: string;
+    retryCount: number;
+    errorCode?: string;
+    errorMessage?: string;
+    startedAt: string;
+    completedAt?: string;
+    requestSummary?: Record<string, unknown>;
+    responseSummary?: Record<string, unknown>;
+};
+
+export type AdminUserDetail = { user: AdminUser; ledger: Array<Record<string, unknown>>; usage: AdminUsageLog[] };
+export type AdminUsageResult = {
+    items: AdminUsageLog[];
+    total: number;
+    page: number;
+    pageSize: number;
+    stats: { total: number; succeeded: number; failed: number; running: number; chargedQuota: number; totalTokens: number; averageDurationMs: number };
+};
+
 type Envelope<T> = { data: T; requestId?: string; error?: { message?: string } };
 const apiBase = (import.meta.env.VITE_HOSTED_API_BASE || "/api/v1").replace(/\/$/, "");
 
@@ -140,4 +197,14 @@ export const adminApi = {
     email: () => request<EmailSettings>("/admin/email-settings"),
     saveEmail: (body: EmailSettings) => request<EmailSettings>("/admin/email-settings", json(body, "PUT")),
     testEmail: (email: string) => request<{ sent: boolean }>("/admin/email-settings/test", json({ email })),
+    users: (params: Record<string, string | number | undefined> = {}) => request<{ items: AdminUser[]; total: number; page: number; pageSize: number }>(`/admin/users?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
+    user: (id: number) => request<AdminUserDetail>(`/admin/users/${id}`),
+    createUser: (body: Record<string, unknown>) => request<AdminUser>("/admin/users", json(body)),
+    updateUser: (id: number, body: Record<string, unknown>) => request<AdminUser>(`/admin/users/${id}`, json(body, "PATCH")),
+    updateUserStatus: (id: number, status: AdminUser["status"]) => request<AdminUser>(`/admin/users/${id}/status`, json({ status })),
+    resetUserPassword: (id: number, newPassword?: string) => request<{ temporaryPassword: string }>(`/admin/users/${id}/password`, json({ newPassword })),
+    adjustUserQuota: (id: number, body: { delta: number; reason: string; source?: string }) => request<{ ok: boolean }>(`/admin/users/${id}/quota`, json({ ...body, idempotencyKey: crypto.randomUUID() })),
+    userUsage: (id: number, page = 1, pageSize = 20) => request<AdminUsageResult>(`/admin/users/${id}/usage?page=${page}&pageSize=${pageSize}`),
+    usageLogs: (params: Record<string, string | number | undefined> = {}) => request<AdminUsageResult>(`/admin/usage-logs?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
+    usageLog: (id: number) => request<AdminUsageLog>(`/admin/usage-logs/${id}`),
 };

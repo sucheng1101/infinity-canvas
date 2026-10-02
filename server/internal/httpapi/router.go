@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
+	adminservice "github.com/sucheng1101/infinity-canvas/server/internal/admin"
 	"github.com/sucheng1101/infinity-canvas/server/internal/auth"
 	"github.com/sucheng1101/infinity-canvas/server/internal/channelcatalog"
 	"github.com/sucheng1101/infinity-canvas/server/internal/config"
@@ -42,6 +43,7 @@ type Router struct {
 	Relay          *relay.Service
 	ModelCatalog   *modelcatalog.Service
 	ChannelCatalog *channelcatalog.Service
+	Admin          *adminservice.Service
 	Redis          *redis.Client
 	Mailer         mailer.Mailer
 }
@@ -56,7 +58,8 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	relayService := &relay.Service{DB: db, Generation: generationService, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	modelCatalogService := &modelcatalog.Service{DB: db}
 	channelCatalogService := &channelcatalog.Service{DB: db, Client: &http.Client{Timeout: cfg.RelayTimeout}}
-	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Redis: redisClient, Mailer: outbound}
+	adminService := &adminservice.Service{DB: db, Quota: quotaService}
+	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Redis: redisClient, Mailer: outbound}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(requestID())
@@ -91,6 +94,16 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.GET("/invitation/rewards", app.requireAuth(), app.invitationRewards)
 	v1.GET("/invitation/referrals", app.requireAuth(), app.invitationReferrals)
 	v1.GET("/admin/health", app.requireAdmin(), func(c *gin.Context) { successJSON(c, http.StatusOK, gin.H{"status": "ok"}) })
+	v1.GET("/admin/users", app.requireAdmin(), app.adminUsers)
+	v1.GET("/admin/users/:id", app.requireAdmin(), app.adminUser)
+	v1.POST("/admin/users", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateUser)
+	v1.PATCH("/admin/users/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateUser)
+	v1.POST("/admin/users/:id/status", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUserStatus)
+	v1.POST("/admin/users/:id/password", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUserPassword)
+	v1.POST("/admin/users/:id/quota", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUserQuota)
+	v1.GET("/admin/users/:id/usage", app.requireAdmin(), app.adminUserUsage)
+	v1.GET("/admin/usage-logs", app.requireAdmin(), app.adminUsageLogs)
+	v1.GET("/admin/usage-logs/:id", app.requireAdmin(), app.adminUsageLog)
 	v1.GET("/admin/invitation-settings", app.requireAdmin(), app.adminInvitationSettings)
 	v1.PUT("/admin/invitation-settings", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.updateAdminInvitationSettings)
 	v1.POST("/admin/quota-adjustments", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminQuotaAdjustment)
@@ -498,7 +511,7 @@ func (a *Router) getGenerationTask(c *gin.Context) {
 
 func (a *Router) executeGenerationTask(c *gin.Context) {
 	user, _ := currentUser(c)
-	task, err := a.Relay.Execute(c.Request.Context(), user.ID, c.Param("id"))
+	task, err := a.Relay.Execute(c.Request.Context(), user.ID, c.Param("id"), relay.ExecuteMeta{RequestID: c.GetString("requestId"), IP: c.ClientIP(), RequestType: "generation"})
 	if errors.Is(err, relay.ErrTaskNotFound) {
 		errorJSON(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
 		return
@@ -522,6 +535,250 @@ func (a *Router) executeGenerationTask(c *gin.Context) {
 		return
 	}
 	successJSON(c, http.StatusOK, task)
+}
+
+func (a *Router) adminUsers(c *gin.Context) {
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
+	result, err := a.Admin.ListUsers(adminservice.UserFilter{Query: c.Query("q"), Status: c.Query("status"), Role: c.Query("role"), GroupName: c.Query("groupName"), Page: page, PageSize: pageSize})
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "USERS_READ_FAILED", "用户列表读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, result)
+}
+
+func (a *Router) adminUser(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户编号无效")
+		return
+	}
+	user, err := a.Admin.GetUser(id)
+	if errors.Is(err, adminservice.ErrUserNotFound) {
+		errorJSON(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "USER_READ_FAILED", "用户读取失败")
+		return
+	}
+	ledger, _, ledgerErr := a.Admin.UserLedger(id, 20, 0)
+	if ledgerErr != nil {
+		errorJSON(c, http.StatusInternalServerError, "USER_LEDGER_READ_FAILED", "额度流水读取失败")
+		return
+	}
+	usage, usageErr := a.Admin.UserUsage(id, 1, 10)
+	if usageErr != nil {
+		errorJSON(c, http.StatusInternalServerError, "USER_USAGE_READ_FAILED", "用户使用记录读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"user": user, "ledger": ledger, "usage": usage.Items})
+}
+
+func (a *Router) adminCreateUser(c *gin.Context) {
+	var input adminservice.UserInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户参数无效")
+		return
+	}
+	created, err := a.Admin.CreateUser(input)
+	if errors.Is(err, adminservice.ErrInvalidUser) {
+		errorJSON(c, http.StatusBadRequest, "USER_INVALID", "用户信息或密码无效")
+		return
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		errorJSON(c, http.StatusConflict, "ACCOUNT_EXISTS", "用户名或邮箱已存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "USER_CREATE_FAILED", "用户创建失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operatorID(c), "user.create", "user", created.ID)
+	successJSON(c, http.StatusCreated, created)
+}
+
+func (a *Router) adminUpdateUser(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户编号无效")
+		return
+	}
+	var input adminservice.UpdateUserInput
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户参数无效")
+		return
+	}
+	updated, err := a.Admin.UpdateUser(id, input)
+	if errors.Is(err, adminservice.ErrUserNotFound) {
+		errorJSON(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
+		return
+	}
+	if errors.Is(err, adminservice.ErrInvalidStatus) || errors.Is(err, adminservice.ErrInvalidRole) {
+		errorJSON(c, http.StatusBadRequest, "USER_INVALID", "用户状态或角色无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "USER_UPDATE_FAILED", "用户更新失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operatorID(c), "user.update", "user", id)
+	successJSON(c, http.StatusOK, updated)
+}
+
+func (a *Router) adminUserStatus(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户编号无效")
+		return
+	}
+	var input struct {
+		Status string `json:"status"`
+	}
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户状态无效")
+		return
+	}
+	updated, err := a.Admin.SetStatus(id, input.Status)
+	if errors.Is(err, adminservice.ErrUserNotFound) {
+		errorJSON(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
+		return
+	}
+	if errors.Is(err, adminservice.ErrInvalidStatus) {
+		errorJSON(c, http.StatusBadRequest, "USER_STATUS_INVALID", "用户状态无效")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "USER_STATUS_UPDATE_FAILED", "用户状态更新失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operatorID(c), "user.status", "user", id)
+	successJSON(c, http.StatusOK, updated)
+}
+
+func (a *Router) adminUserPassword(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户编号无效")
+		return
+	}
+	var input struct {
+		NewPassword string `json:"newPassword"`
+	}
+	if c.ShouldBindJSON(&input) != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "密码参数无效")
+		return
+	}
+	temporary, err := a.Admin.ResetPassword(id, input.NewPassword)
+	if errors.Is(err, adminservice.ErrUserNotFound) {
+		errorJSON(c, http.StatusNotFound, "USER_NOT_FOUND", "用户不存在")
+		return
+	}
+	if errors.Is(err, adminservice.ErrInvalidPassword) {
+		errorJSON(c, http.StatusBadRequest, "PASSWORD_INVALID", "密码长度应为 8 到 72 位")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "PASSWORD_RESET_FAILED", "密码重置失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operatorID(c), "user.password_reset", "user", id)
+	successJSON(c, http.StatusOK, gin.H{"temporaryPassword": temporary})
+}
+
+func (a *Router) adminUserQuota(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户编号无效")
+		return
+	}
+	var input struct {
+		Delta          int64  `json:"delta"`
+		Source         string `json:"source"`
+		Reason         string `json:"reason"`
+		IdempotencyKey string `json:"idempotencyKey"`
+	}
+	if c.ShouldBindJSON(&input) != nil || input.Delta == 0 {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "额度调整参数无效")
+		return
+	}
+	if strings.TrimSpace(input.IdempotencyKey) == "" {
+		input.IdempotencyKey = uuid.NewString()
+	}
+	if strings.TrimSpace(input.Source) == "" {
+		input.Source = "admin"
+	}
+	if err := a.Admin.AdjustQuota(id, input.Delta, input.Source, input.Reason, input.IdempotencyKey); err != nil {
+		if errors.Is(err, quota.ErrAccountNotFound) {
+			errorJSON(c, http.StatusNotFound, "QUOTA_ACCOUNT_NOT_FOUND", "额度账户不存在")
+			return
+		}
+		if errors.Is(err, quota.ErrInsufficient) {
+			errorJSON(c, http.StatusConflict, "QUOTA_INSUFFICIENT", "额度余额不足")
+			return
+		}
+		errorJSON(c, http.StatusBadRequest, "QUOTA_ADJUSTMENT_FAILED", "额度调整失败")
+		return
+	}
+	_ = model.RecordAudit(a.DB, operatorID(c), "quota.adjust", "user", id)
+	successJSON(c, http.StatusOK, gin.H{"ok": true})
+}
+
+func (a *Router) adminUserUsage(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "用户编号无效")
+		return
+	}
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
+	result, err := a.Admin.UserUsage(id, page, pageSize)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "USAGE_READ_FAILED", "使用记录读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, result)
+}
+
+func (a *Router) adminUsageLogs(c *gin.Context) {
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
+	from, _ := time.Parse(time.RFC3339, c.Query("from"))
+	to, _ := time.Parse(time.RFC3339, c.Query("to"))
+	userID, _ := strconv.ParseUint(c.Query("userId"), 10, 64)
+	result, err := a.Admin.ListUsageLogs(adminservice.UsageFilter{Query: c.Query("q"), User: c.Query("user"), UserID: uint(userID), Model: c.Query("model"), Channel: c.Query("channel"), Status: c.Query("status"), RequestID: c.Query("requestId"), From: from, To: to, Page: page, PageSize: pageSize})
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "USAGE_LOGS_READ_FAILED", "使用日志读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, result)
+}
+
+func (a *Router) adminUsageLog(c *gin.Context) {
+	id, err := parseAdminID(c.Param("id"))
+	if err != nil {
+		errorJSON(c, http.StatusBadRequest, "INVALID_REQUEST", "日志编号无效")
+		return
+	}
+	item, err := a.Admin.GetUsageLog(id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		errorJSON(c, http.StatusNotFound, "USAGE_LOG_NOT_FOUND", "使用日志不存在")
+		return
+	}
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "USAGE_LOG_READ_FAILED", "使用日志读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, item)
+}
+
+func parseAdminID(value string) (uint, error) {
+	id, err := strconv.ParseUint(value, 10, 64)
+	if err != nil || id == 0 {
+		return 0, errors.New("invalid id")
+	}
+	return uint(id), nil
 }
 
 func (a *Router) cancelGenerationTask(c *gin.Context) {
@@ -1062,7 +1319,7 @@ func (a *Router) adminQuotaAdjustment(c *gin.Context) {
 		req.Source = "admin"
 	}
 	businessID := fmt.Sprintf("%d:%d", operator.ID, time.Now().UnixNano())
-	if err := a.Quota.Adjust(req.UserID, req.Delta, req.Source, businessID, strings.TrimSpace(req.IdempotencyKey)); err != nil {
+	if err := a.Quota.AdjustWithReason(req.UserID, req.Delta, req.Source, businessID, strings.TrimSpace(req.IdempotencyKey), req.Reason); err != nil {
 		if errors.Is(err, quota.ErrAccountNotFound) {
 			errorJSON(c, http.StatusNotFound, "QUOTA_ACCOUNT_NOT_FOUND", "目标用户不存在或尚未开通额度账户")
 			return
@@ -1358,7 +1615,7 @@ func (a *Router) setSessionCookie(c *gin.Context, token string) {
 }
 
 func publicUser(user model.User) gin.H {
-	return gin.H{"id": user.ID, "username": user.Username, "email": user.Email, "status": user.Status, "role": user.Role, "emailVerifiedAt": user.EmailVerifiedAt}
+	return gin.H{"id": user.ID, "username": user.Username, "email": user.Email, "displayName": user.DisplayName, "remark": user.Remark, "groupName": user.GroupName, "status": user.Status, "role": user.Role, "emailVerifiedAt": user.EmailVerifiedAt}
 }
 
 func errorJSON(c *gin.Context, status int, code, message string) {

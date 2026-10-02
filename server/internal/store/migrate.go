@@ -85,6 +85,12 @@ func migrate(db *gorm.DB) error {
 				return tx.AutoMigrate(&model.PricingVersion{}, &model.Quote{}, &model.QuotaReservation{}, &model.GenerationTask{})
 			},
 		},
+		{
+			version: "20261002_m7_admin_users_usage_logs",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.User{}, &model.QuotaLedger{}, &model.UsageLog{})
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64
