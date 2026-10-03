@@ -1,4 +1,4 @@
-import { App, Button, Checkbox, Input, InputNumber, Modal, Select, Space, Table, Tag } from "antd";
+import { App, Button, Checkbox, Drawer, Input, InputNumber, Modal, Select, Space, Table, Tag } from "antd";
 import { KeyRound, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import { useEffect, useState } from "react";
@@ -31,7 +31,7 @@ type DraftChannel = {
 
 type ScriptTarget = { name: string; capability: ModelCapability; value: string };
 type QualitySpec = NonNullable<AdminChannelModel["qualitySpec"]>;
-type ChannelModelCost = { id?: number; publishedModelId: number; billingUnit: string; costPerUnit: number; sellPerUnit: number; formula?: { type: string; unitAmount: number; variants?: Array<{ key: string; label: string; unitAmount: number; sellPerUnit?: number }> }; status: "active" | "hidden" };
+type ChannelModelCost = { id?: number; publishedModelId: number; billingUnit: string; costPerUnit: number; sellPerUnit: number; publicPrice?: number; formula?: { type: string; unitAmount: number; variants?: Array<{ key: string; label: string; unitAmount: number; sellPerUnit?: number }> }; status: "active" | "hidden" };
 
 const capabilityOptions = [
     { label: "生图", value: "image" },
@@ -40,14 +40,16 @@ const capabilityOptions = [
     { label: "音频", value: "audio" },
 ];
 
-const qualityOptions = (capability: ModelCapability, scheme: string, supports8K = false) => {
+const sellingUnitLabel = (capability: ModelCapability) => capability === "image" ? "按张售价" : capability === "video" ? "按秒售价" : capability === "text" ? "按 Token 售价" : "按次售价";
+
+const qualityOptions = (capability: ModelCapability, scheme: string) => {
     if (scheme === "none") return [];
     const options = scheme === "tier"
         ? [{ key: "auto", label: "自动" }, { key: "low", label: "低质量" }, { key: "medium", label: "中质量" }, { key: "high", label: "高质量" }]
         : capability === "video"
             ? [{ key: "480p", label: "480p" }, { key: "720p", label: "720p" }, { key: "1080p", label: "1080p" }, { key: "2k", label: "2K" }, { key: "4k", label: "4K" }]
             : [{ key: "1k", label: "1K" }, { key: "2k", label: "2K" }, { key: "4k", label: "4K" }];
-    return supports8K ? [...options, { key: "8k", label: "8K" }] : options;
+    return options;
 };
 
 const autoQualitySpec = (capability: ModelCapability, modelName: string): QualitySpec => {
@@ -55,7 +57,7 @@ const autoQualitySpec = (capability: ModelCapability, modelName: string): Qualit
     const resolution = ["gpt-image", "dall-e", "dalle", "flux", "midjourney", "ideogram", "imagen", "seedream", "qwen-image", "recraft", "kolors", "jimeng", "stable-diffusion", "sdxl", "highres", "4k", "2k"].some((item) => name.includes(item));
     const supportsUpscale = ["upscale", "super-resolution", "super_resolution", "realesrgan", "esrgan", "topaz", "enhance"].some((item) => name.includes(item));
     const scheme = capability === "video" ? "resolution" : capability === "image" ? (resolution ? "resolution" : "tier") : "none";
-    const options = qualityOptions(capability, scheme, false);
+    const options = qualityOptions(capability, scheme);
     return { scheme, options, supports8K: false, supportsUpscale, outputModes: supportsUpscale ? [{ key: "native", label: "原生" }, { key: "upscale", label: "超分" }] : [{ key: "native", label: "原生" }] };
 };
 
@@ -93,6 +95,7 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
     const [costOutputMode, setCostOutputMode] = useState("native");
     const [costSameQuality, setCostSameQuality] = useState(true);
     const [costVariantPrices, setCostVariantPrices] = useState<Record<string, { cost: number }>>({});
+    const [modelPriceDraft, setModelPriceDraft] = useState(0);
     const [configuredCosts, setConfiguredCosts] = useState<Record<string, ChannelModelCost>>({});
 
     useEffect(() => {
@@ -106,13 +109,14 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
         setModelQualitySpec({});
         const initialCosts: Record<string, ChannelModelCost> = {};
         (channel ? costs.filter((item) => item.channelId === channel.id) : []).forEach((item) => {
-            initialCosts[item.upstreamModel] = { id: item.id, publishedModelId: item.publishedModelId, billingUnit: item.billingUnit, costPerUnit: item.costPerUnit, sellPerUnit: item.sellPerUnit, formula: item.formula as ChannelModelCost["formula"], status: item.status === "hidden" ? "hidden" : "active" };
+            initialCosts[item.upstreamModel] = { id: item.id, publishedModelId: item.publishedModelId, billingUnit: item.billingUnit, costPerUnit: item.costPerUnit, sellPerUnit: item.sellPerUnit, publicPrice: item.sellPerUnit, formula: item.formula as ChannelModelCost["formula"], status: item.status === "hidden" ? "hidden" : "active" };
         });
         setConfiguredCosts(initialCosts);
         setModelCost(null);
         setCostOutputMode("native");
         setCostSameQuality(true);
         setCostVariantPrices({});
+        setModelPriceDraft(0);
     }, [channel, costs, open]);
 
     const patch = (value: Partial<DraftChannel>) => setDraft((current) => ({ ...current, ...value }));
@@ -140,6 +144,7 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
         const published = findPublishedModel(item.name);
         const cost = configuredCosts[item.name] || { publishedModelId: published?.id || 0, billingUnit: defaultBillingUnit(item.capability), costPerUnit: 0, sellPerUnit: Number(published?.priceSummary?.unitAmount || 0), status: "active" as const };
         setModelCost(cost);
+        setModelPriceDraft(Number(published?.priceSummary?.unitAmount || cost.sellPerUnit || 0));
         const variants = cost.formula?.variants || [];
         const variantPrices: Record<string, { cost: number }> = {};
         variants.forEach((variant) => { variantPrices[variant.key] = { cost: Number(variant.unitAmount || 0) }; });
@@ -163,10 +168,10 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
         const variant = key ? variants.find((item) => item.key === key) : undefined;
         return Number(variant?.unitAmount ?? published?.priceSummary?.unitAmount ?? 0);
     };
-    const buildCostFormula = (fallbackCost: number, publishedModelId: number) => ({
+    const buildCostFormula = (fallbackCost: number, publishedModelId: number, fallbackSell: number) => ({
         type: "per_unit",
         unitAmount: fallbackCost,
-        variants: Object.entries(costVariantPrices).map(([key, value]) => ({ key, label: key.split(":").map((part) => qualityVariants.find((item) => item.key === part)?.label || (part === "upscale" ? "超分" : part === "native" ? "原生" : part)).join(" / "), unitAmount: value.cost, sellPerUnit: publishedPriceForKey(publishedModelId, key) })),
+        variants: Object.entries(costVariantPrices).map(([key, value]) => ({ key, label: key.split(":").map((part) => qualityVariants.find((item) => item.key === part)?.label || (part === "upscale" ? "超分" : part === "native" ? "原生" : part)).join(" / "), unitAmount: value.cost, sellPerUnit: publishedPriceForKey(publishedModelId, key) || fallbackSell })),
     });
 
     const readKeyModels = async (item: DraftKey) => {
@@ -254,6 +259,11 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
             return;
         }
         const costsToSave = Object.entries(configuredCosts).map(([upstreamModel, item]) => ({ ...item, upstreamModel })).filter((item) => item.publishedModelId > 0);
+        const missingPublicPrice = costsToSave.find((item) => Number(item.publicPrice || item.sellPerUnit || 0) <= 0);
+        if (missingPublicPrice) {
+            message.error("请先为公开模型设置售价，再填写渠道成本");
+            return;
+        }
         setSaving(true);
         try {
             await onSave({
@@ -273,14 +283,13 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
 
     return (
         <>
-            <Modal
+            <Drawer
                 open={open}
-                centered
-                width={980}
+                placement="right"
+                width={820}
                 title={channel ? "编辑渠道" : "新增渠道"}
-                onCancel={onClose}
-                footer={<div className="flex justify-end gap-2"><Button onClick={onClose}>取消</Button><Button type="primary" loading={saving} onClick={() => void save()}>保存</Button></div>}
-                destroyOnClose
+                onClose={onClose}
+                extra={<Space><Button onClick={onClose}>取消</Button><Button type="primary" loading={saving} onClick={() => void save()}>保存</Button></Space>}
             >
                 <div className="grid gap-4 md:grid-cols-2">
                     <label className="block">
@@ -387,25 +396,27 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
                         <InputNumber className="w-full" value={draft.sortOrder} onChange={(sortOrder) => patch({ sortOrder: sortOrder || 0 })} />
                     </label>
                 </div>
-            </Modal>
+            </Drawer>
 
-            <Modal
+            <Drawer
                 open={Boolean(modelEditor)}
+                placement="left"
+                width={560}
+                mask={false}
                 title="编辑渠道模型"
-                onCancel={() => setModelEditor(null)}
-                onOk={() => {
+                onClose={() => setModelEditor(null)}
+                footer={<div className="flex justify-end gap-2"><Button onClick={() => setModelEditor(null)}>取消</Button><Button type="primary" onClick={() => {
                     if (modelEditor) {
                         setCapability(modelEditor.name, modelCapability);
                         setQualitySpec(modelEditor.name, modelQualitySpec);
                         if (modelCost && modelCost.publishedModelId > 0) {
                             const fallback = priceForKey(costOutputMode, modelCost.costPerUnit);
-                            const sellPerUnit = publishedPriceForKey(modelCost.publishedModelId, costOutputMode);
-                            setConfiguredCosts((current) => ({ ...current, [modelEditor.name]: { ...modelCost, costPerUnit: fallback.cost, sellPerUnit, formula: buildCostFormula(fallback.cost, modelCost.publishedModelId) } }));
+                            const sellPerUnit = modelPriceDraft || publishedPriceForKey(modelCost.publishedModelId, costOutputMode);
+                            setConfiguredCosts((current) => ({ ...current, [modelEditor.name]: { ...modelCost, publicPrice: modelPriceDraft || sellPerUnit, costPerUnit: fallback.cost, sellPerUnit, formula: buildCostFormula(fallback.cost, modelCost.publishedModelId, sellPerUnit) } }));
                         }
                     }
                     setModelEditor(null);
-                }}
-                okText="保存"
+                }}>保存</Button></div>}
             >
                 <div className="space-y-4">
                     <label className="block">
@@ -418,17 +429,17 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
                     </label>
                     <label className="block">
                         <span className="mb-1 block text-sm font-medium">官方质量标准</span>
-                        <Select className="w-full" value={modelQualitySpec.scheme || "tier"} onChange={(scheme) => setModelQualitySpec((current) => ({ ...current, scheme, options: qualityOptions(modelCapability, scheme, Boolean(current.supports8K)) }))} options={[{ value: "tier", label: "低 / 中 / 高" }, { value: "resolution", label: "1K / 2K / 4K / 8K" }, { value: "none", label: "不区分质量" }]} />
+                        <Select className="w-full" value={modelQualitySpec.scheme || "tier"} onChange={(scheme) => setModelQualitySpec((current) => ({ ...current, scheme, options: qualityOptions(modelCapability, scheme) }))} options={[{ value: "tier", label: "低 / 中 / 高" }, { value: "resolution", label: "1K / 2K / 4K" }, { value: "none", label: "不区分质量" }]} />
                     </label>
                     <div className="flex flex-wrap gap-4 rounded-lg border border-stone-200 px-3 py-2 text-sm dark:border-stone-800">
-                        <Checkbox disabled={!modelQualitySpec.supportsUpscale} checked={Boolean(modelQualitySpec.supports8K)} onChange={(event) => setModelQualitySpec((current) => ({ ...current, supports8K: event.target.checked, options: qualityOptions(modelCapability, current.scheme || "tier", event.target.checked) }))}>开放 8K（超分）</Checkbox>
-                        <Checkbox checked={Boolean(modelQualitySpec.supportsUpscale)} onChange={(event) => setModelQualitySpec((current) => ({ ...current, supportsUpscale: event.target.checked, supports8K: event.target.checked ? current.supports8K : false, outputModes: event.target.checked ? [{ key: "native", label: "原生" }, { key: "upscale", label: "超分" }] : [{ key: "native", label: "原生" }], options: qualityOptions(modelCapability, current.scheme || "tier", event.target.checked ? Boolean(current.supports8K) : false) }))}>开放超分</Checkbox>
+                        <Checkbox disabled={!modelQualitySpec.supportsUpscale} checked={Boolean(modelQualitySpec.supports8K)} onChange={(event) => setModelQualitySpec((current) => ({ ...current, supports8K: event.target.checked }))}>渠道开放 8K 超分</Checkbox>
+                        <Checkbox checked={Boolean(modelQualitySpec.supportsUpscale)} onChange={(event) => setModelQualitySpec((current) => ({ ...current, supportsUpscale: event.target.checked, supports8K: event.target.checked ? current.supports8K : false, outputModes: event.target.checked ? [{ key: "native", label: "原生" }, { key: "upscale", label: "超分" }] : [{ key: "native", label: "原生" }] }))}>渠道开放超分</Checkbox>
                     </div>
                     <div className="rounded-lg border border-stone-200 p-3 dark:border-stone-800">
                         <div className="mb-2 text-sm font-medium">渠道模型成本</div>
-                        <div className="mb-3 text-xs text-stone-500">售价统一读取“定价与充值”的按次价格；这里一次性维护该渠道的成本、质量和原生/超分差异。</div>
+                        <div className="mb-3 text-xs text-stone-500">售价统一读取“定价与充值”的公开售价；这里一次性维护该渠道的成本、质量和原生/超分差异。</div>
                         <div className="space-y-3">
-                            <label className="block"><span className="mb-1 block text-sm">公开模型</span><Select className="w-full" value={modelCost?.publishedModelId || undefined} options={models.filter((item) => item.capability === modelCapability).map((item) => ({ value: item.id, label: item.displayName }))} onChange={(publishedModelId) => { const selected = models.find((item) => item.id === publishedModelId); setModelCost((current) => ({ ...(current || { billingUnit: defaultBillingUnit(modelCapability), costPerUnit: 0, sellPerUnit: 0, status: "active" }), publishedModelId, sellPerUnit: Number(selected?.priceSummary?.unitAmount || 0) })); }} placeholder="选择公开模型" /></label>
+                            <label className="block"><span className="mb-1 block text-sm">公开模型</span><Select className="w-full" value={modelCost?.publishedModelId || undefined} options={models.filter((item) => item.capability === modelCapability).map((item) => ({ value: item.id, label: `${item.displayName}${item.priceSummary ? "" : `（可在此首次设置${sellingUnitLabel(modelCapability)}）`}` }))} onChange={(publishedModelId) => { const selected = models.find((item) => item.id === publishedModelId); setModelPriceDraft(Number(selected?.priceSummary?.unitAmount || 0)); setModelCost((current) => ({ ...(current || { billingUnit: defaultBillingUnit(modelCapability), costPerUnit: 0, sellPerUnit: 0, status: "active" }), publishedModelId, sellPerUnit: Number(selected?.priceSummary?.unitAmount || 0), publicPrice: Number(selected?.priceSummary?.unitAmount || 0) })); }} placeholder="选择公开模型" /></label>
                             <label className="block"><span className="mb-1 block text-sm">计费单位</span><Select className="w-full" value={modelCost?.billingUnit || defaultBillingUnit(modelCapability)} options={[{ value: "image", label: "按张" }, { value: "second", label: "按秒" }, { value: "token", label: "按 Token" }, { value: "request", label: "按次" }]} onChange={(billingUnit) => setModelCost((current) => ({ ...(current || { publishedModelId: 0, costPerUnit: 0, sellPerUnit: 0, status: "active" }), billingUnit }))} /></label>
                             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-stone-50 p-2 dark:bg-stone-900">
                                 <span className="text-sm">输出方式：{activeOutputLabel}</span>
@@ -442,7 +453,7 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <label className="block"><span className="mb-1 block text-sm">渠道成本（积分 / {activeOutputLabel}）</span><InputNumber className="w-full" min={0} value={priceForKey(activeCostKeys[0], modelCost?.costPerUnit || 0).cost} onChange={(value) => { const cost = Number(value || 0); updateActiveCostPrices({ cost }); setModelCost((current) => current ? { ...current, costPerUnit: cost } : current); }} /></label>
-                                <div className="rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-500 dark:bg-stone-900"><div>按次售价</div><div className="mt-1 text-sm font-medium text-stone-800 dark:text-stone-100">{publishedPriceForKey(modelCost?.publishedModelId || 0, costOutputMode).toLocaleString()} 积分</div><div className="mt-1">售价来自“定价与充值”，此处只维护渠道成本。</div></div>
+                                <div className="rounded-lg bg-stone-50 px-3 py-2 text-xs text-stone-500 dark:bg-stone-900"><div>{sellingUnitLabel(modelCapability)}</div>{modelCost?.publishedModelId && models.find((item) => item.id === modelCost.publishedModelId)?.priceSummary ? <div className="mt-1 text-sm font-medium text-stone-800 dark:text-stone-100">{publishedPriceForKey(modelCost.publishedModelId, costOutputMode).toLocaleString()} 积分</div> : <InputNumber className="mt-1 w-full" min={1} precision={0} value={modelPriceDraft || undefined} onChange={(value) => setModelPriceDraft(Number(value || 0))} placeholder={`首次设置${sellingUnitLabel(modelCapability)}`} />}<div className="mt-1">售价统一计入定价配置，渠道此处只维护成本。</div></div>
                             </div>
                             {!costSameQuality && qualityVariants.length ? <div className="space-y-2 rounded-lg border border-dashed border-stone-200 p-3 dark:border-stone-800"><div className="text-xs text-stone-500">关闭同价后，可按质量分别填写。当前编辑：{activeOutputLabel}</div>{qualityVariants.map((quality) => { const key = quality.key + ":" + costOutputMode; const value = priceForKey(key, modelCost?.costPerUnit || 0); return <div key={key} className="grid grid-cols-[100px_1fr_auto] items-center gap-2"><span className="text-sm">{quality.label}</span><InputNumber min={0} className="w-full" value={value.cost} onChange={(next) => setCostVariantPrices((current) => ({ ...current, [key]: { cost: Number(next || 0) } }))} placeholder="渠道成本" /><span className="text-xs text-stone-500">售价 {publishedPriceForKey(modelCost?.publishedModelId || 0, key).toLocaleString()} 积分</span></div>; })}</div> : null}
                             <Checkbox checked={modelCost?.status === "active"} onChange={(event) => setModelCost((current) => current ? { ...current, status: event.target.checked ? "active" : "hidden" } : current)}>启用该渠道模型价格</Checkbox>
@@ -451,7 +462,7 @@ export function AdminChannelEditorDrawer({ open, channel, models, costs, onSave,
                         {modelEditor?.script ? "编辑调用脚本" : "配置调用脚本"}
                     </Button>
                 </div>
-            </Modal>
+            </Drawer>
 
             <Modal
                 open={Boolean(targetKey)}

@@ -21,3 +21,15 @@ func TestGuessCapability(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeKeeps8KOutOfOfficialQualityOptions(t *testing.T) {
+	spec := Normalize(Spec{Scheme: "resolution", Options: []Option{{Key: "1k", Label: "1K"}, {Key: "8k", Label: "8K"}}, Supports8K: true}, "image", "gpt-image-1")
+	if spec.Supports8K != true || !spec.SupportsUpscale {
+		t.Fatalf("8K should imply channel-level upscale support: %#v", spec)
+	}
+	for _, option := range spec.Options {
+		if option.Key == "8k" {
+			t.Fatalf("8K must not be part of official quality options: %#v", spec.Options)
+		}
+	}
+}

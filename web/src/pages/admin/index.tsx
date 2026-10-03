@@ -243,7 +243,7 @@ export default function AdminPage() {
         }
     };
 
-    const saveChannel = async (values: Parameters<typeof adminApi.createChannel>[0], costs: Array<{ id?: number; publishedModelId: number; upstreamModel: string; billingUnit: string; costPerUnit: number; sellPerUnit: number; formula?: { variants?: Array<{ key?: string; unitAmount?: number; sellPerUnit?: number }> }; status: "active" | "hidden" }>) => {
+    const saveChannel = async (values: Parameters<typeof adminApi.createChannel>[0], costs: Array<{ id?: number; publishedModelId: number; upstreamModel: string; billingUnit: string; costPerUnit: number; sellPerUnit: number; publicPrice?: number; formula?: { variants?: Array<{ key?: string; unitAmount?: number; sellPerUnit?: number }> }; status: "active" | "hidden" }>) => {
         try {
             const lossMaking = costs.filter((item) => item.sellPerUnit < item.costPerUnit || item.formula?.variants?.some((variant) => Number(variant.sellPerUnit || 0) > 0 && Number(variant.sellPerUnit || 0) < Number(variant.unitAmount || 0)));
             let confirmWarning = false;
@@ -253,6 +253,16 @@ export default function AdminPage() {
                 confirmWarning = true;
             }
             const saved = channelEditor ? await adminApi.updateChannel(channelEditor.id, values) : await adminApi.createChannel(values);
+            const pricingReady = new Set(pricing.filter((item) => item.status === "active").map((item) => item.publishedModelId));
+            for (const item of costs) {
+                const selectedModel = models.find((model) => model.id === item.publishedModelId);
+                const publicPrice = Number(item.publicPrice || item.sellPerUnit || 0);
+                if (!pricingReady.has(item.publishedModelId) && selectedModel && publicPrice > 0) {
+                    const created = await adminApi.createPricing({ publishedModelId: item.publishedModelId, currency: "POINTS", formula: { type: recommendedPricingType(selectedModel.capability), unitAmount: publicPrice } });
+                    await adminApi.publishPricing(created.id);
+                    pricingReady.add(item.publishedModelId);
+                }
+            }
             for (const item of costs) {
                 const existing = modelCosts.find((cost) => cost.channelId === saved.id && cost.upstreamModel === item.upstreamModel);
                 await adminApi.saveModelCostPricing({ ...item, channelId: saved.id, confirmWarning }, item.id || existing?.id);

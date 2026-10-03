@@ -74,10 +74,13 @@ func Normalize(input Spec, capability, modelName string) Spec {
 		base.Scheme = input.Scheme
 	}
 	if len(input.Options) > 0 {
-		base.Options = input.Options
+		if filtered := without8K(input.Options); len(filtered) > 0 {
+			base.Options = filtered
+		}
 	}
 	if input.Supports8K {
 		base.Supports8K = true
+		base.SupportsUpscale = true
 	}
 	if input.SupportsUpscale {
 		base.SupportsUpscale = true
@@ -97,19 +100,18 @@ func Normalize(input Spec, capability, modelName string) Spec {
 			base.OutputModes = append(base.OutputModes, Option{Key: "upscale", Label: "超分"})
 		}
 	}
-	if base.Supports8K {
-		found := false
-		for _, option := range base.Options {
-			if option.Key == "8k" {
-				found = true
-				break
-			}
-		}
-		if !found {
-			base.Options = append(base.Options, Option{Key: "8k", Label: "8K"})
-		}
-	}
 	return base
+}
+
+func without8K(options []Option) []Option {
+	filtered := make([]Option, 0, len(options))
+	for _, option := range options {
+		if strings.EqualFold(strings.TrimSpace(option.Key), "8k") {
+			continue
+		}
+		filtered = append(filtered, option)
+	}
+	return filtered
 }
 
 func Merge(specs ...Spec) Spec {
@@ -128,6 +130,9 @@ func Merge(specs ...Spec) Spec {
 		result.Supports8K = result.Supports8K || spec.Supports8K
 		result.SupportsUpscale = result.SupportsUpscale || spec.SupportsUpscale
 		for _, option := range spec.Options {
+			if strings.EqualFold(strings.TrimSpace(option.Key), "8k") {
+				continue
+			}
 			if _, exists := options[option.Key]; !exists {
 				optionOrder = append(optionOrder, option.Key)
 			}
@@ -143,17 +148,6 @@ func Merge(specs ...Spec) Spec {
 	result.Options = result.Options[:0]
 	for _, key := range optionOrder {
 		result.Options = append(result.Options, options[key])
-	}
-	if result.Supports8K {
-		found := false
-		for _, option := range result.Options {
-			if option.Key == "8k" {
-				found = true
-			}
-		}
-		if !found {
-			result.Options = append(result.Options, Option{Key: "8k", Label: "8K"})
-		}
 	}
 	if len(modeOrder) == 0 {
 		result.OutputModes = []Option{{Key: "native", Label: "原生"}}

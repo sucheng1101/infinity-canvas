@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -37,11 +37,17 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const quality = config.quality || "auto";
     const qualityItems = qualitySpec?.options?.length ? qualitySpec.options : qualityOptions.map((item) => ({ value: item.value, label: t(`settingsPanels.common.${item.labelKey}`) }));
     const outputModes = qualitySpec?.outputModes?.length ? qualitySpec.outputModes : qualitySpec?.supportsUpscale ? [{ key: "native", label: "原生" }, { key: "upscale", label: "超分" }] : [];
+    const allow8K = !qualitySpec || (Boolean(qualitySpec.supports8K) && (config.outputMode || "native") === "upscale");
+    const scaleItems = mediaScaleOptions.filter((value) => value !== "8k" || allow8K);
     const count = Math.max(1, Math.min(maxCount, Math.floor(Math.abs(Number(config.count)) || 1)));
     const activeSize = config.size || "auto";
     const transparentBackground = config.background === "transparent";
     const selectedScale = inferMediaScale(activeSize);
     const selectedRatio = inferMediaRatio(activeSize);
+    useEffect(() => {
+        if (!qualitySpec || allow8K || selectedScale !== "8k") return;
+        onConfigChange("size", computeMediaSize("4k", selectedRatio === "auto" ? "1:1" : selectedRatio));
+    }, [allow8K, onConfigChange, qualitySpec, selectedRatio, selectedScale]);
     const dimensions = readMediaDimensions(activeSize, selectedScale, selectedRatio);
     const shortSide = Math.min(dimensions.width, dimensions.height) || 1024;
     const applySize = (scale: string, ratio: string) => onConfigChange("size", computeMediaSize(scale, ratio));
@@ -106,7 +112,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.resolution")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
-                        {mediaScaleOptions.map((value) => (
+                        {scaleItems.map((value) => (
                             <OptionPill key={value} selected={selectedScale === value} theme={theme} onClick={() => selectScale(value)}>
                                 {value === "auto" ? t("settingsPanels.common.auto") : value}
                             </OptionPill>
