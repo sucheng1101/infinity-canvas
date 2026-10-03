@@ -317,6 +317,30 @@ type UsageListResult struct {
 	Stats    UsageStats     `json:"stats"`
 }
 
+type UserUsageLogView struct {
+	ID           uint       `json:"id"`
+	TaskID       string     `json:"taskId"`
+	Project      string     `json:"project"`
+	Capability   string     `json:"capability"`
+	BillingUnit  string     `json:"billingUnit"`
+	BilledUnits  float64    `json:"billedUnits"`
+	Status       string     `json:"status"`
+	DurationMs   int64      `json:"durationMs"`
+	TotalTokens  int64      `json:"totalTokens"`
+	ChargedQuota int64      `json:"chargedQuota"`
+	ErrorMessage string     `json:"errorMessage,omitempty"`
+	StartedAt    time.Time  `json:"startedAt"`
+	CompletedAt  *time.Time `json:"completedAt,omitempty"`
+}
+
+type UserUsageListResult struct {
+	Items    []UserUsageLogView `json:"items"`
+	Total    int64              `json:"total"`
+	Page     int                `json:"page"`
+	PageSize int                `json:"pageSize"`
+	Stats    UsageStats         `json:"stats"`
+}
+
 type UsageStats struct {
 	Total             int64   `json:"total"`
 	Succeeded         int64   `json:"succeeded"`
@@ -656,6 +680,34 @@ func (s *Service) GetUsageLog(id uint) (UsageLogView, error) {
 
 func (s *Service) UserUsage(userID uint, page, pageSize int) (UsageListResult, error) {
 	return s.ListUsageLogs(UsageFilter{UserID: userID, Page: page, PageSize: pageSize})
+}
+
+func (s *Service) ListUserUsageLogs(filter UsageFilter) (UserUsageListResult, error) {
+	page, pageSize := normalizePage(filter.Page, filter.PageSize)
+	query := s.DB.Model(&model.UsageLog{}).Where("user_id = ?", filter.UserID)
+	query = applyUsageFilters(query, filter)
+	var total int64
+	if err := query.Count(&total).Error; err != nil {
+		return UserUsageListResult{}, err
+	}
+	var logs []model.UsageLog
+	if err := query.Order("started_at DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&logs).Error; err != nil {
+		return UserUsageListResult{}, err
+	}
+	items := make([]UserUsageLogView, 0, len(logs))
+	for _, item := range logs {
+		project := item.PublishedModel
+		if strings.TrimSpace(project) == "" {
+			project = item.Capability
+		}
+		items = append(items, UserUsageLogView{
+			ID: item.ID, TaskID: item.TaskID, Project: project, Capability: item.Capability,
+			BillingUnit: item.BillingUnit, BilledUnits: item.BilledUnits, Status: item.Status,
+			DurationMs: item.DurationMs, TotalTokens: item.TotalTokens, ChargedQuota: item.ChargedQuota,
+			ErrorMessage: item.ErrorMessage, StartedAt: item.StartedAt, CompletedAt: item.CompletedAt,
+		})
+	}
+	return UserUsageListResult{Items: items, Total: total, Page: page, PageSize: pageSize, Stats: s.usageStats(query)}, nil
 }
 
 func (s *Service) usageViews(logs []model.UsageLog) []UsageLogView {

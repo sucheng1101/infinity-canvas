@@ -102,6 +102,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.DELETE("/account/channels/:id", app.requireAuth(), app.userChannelDelete)
 	v1.POST("/account/channels/:id/test", app.requireAuth(), app.userChannelTest)
 	v1.GET("/account/ledger", app.requireAuth(), app.accountLedger)
+	v1.GET("/account/usage-logs", app.requireAuth(), app.accountUsageLogs)
 	v1.GET("/recharge/products", app.requireAuth(), app.rechargeProducts)
 	v1.GET("/subscriptions/plans", app.requireAuth(), app.subscriptionPlans)
 	v1.GET("/account/subscription", app.requireAuth(), app.accountSubscription)
@@ -1612,6 +1613,22 @@ func (a *Router) accountLedger(c *gin.Context) {
 		nextCursor = fmt.Sprintf("%d", offset+len(items))
 	}
 	successJSON(c, http.StatusOK, gin.H{"items": items, "nextCursor": nextCursor})
+}
+
+func (a *Router) accountUsageLogs(c *gin.Context) {
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
+	from, _ := time.Parse(time.RFC3339, c.Query("from"))
+	to, _ := time.Parse(time.RFC3339, c.Query("to"))
+	user, _ := currentUser(c)
+	result, err := a.Admin.ListUserUsageLogs(adminservice.UsageFilter{
+		UserID: user.ID, Query: c.Query("q"), From: from, To: to, Page: page, PageSize: pageSize,
+	})
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "USAGE_LOGS_READ_FAILED", "使用日志读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, result)
 }
 
 func (a *Router) rechargeProducts(c *gin.Context) {

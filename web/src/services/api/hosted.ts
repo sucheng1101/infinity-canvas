@@ -1,5 +1,7 @@
 export type QuotaSummary = { balance: number; reserved: number; available: number };
 export type QuotaLedger = { id: number; delta: number; balanceAfter: number; source: string; businessType: string; createdAt: string };
+export type UserUsageLog = { id: number; taskId: string; project: string; capability: string; billingUnit: string; billedUnits: number; status: "running" | "succeeded" | "failed"; durationMs: number; totalTokens: number; chargedQuota: number; errorMessage?: string; startedAt: string; completedAt?: string };
+export type UserUsageResult = { items: UserUsageLog[]; total: number; page: number; pageSize: number; stats: { total: number; succeeded: number; failed: number; running: number; chargedQuota: number; totalTokens: number; averageDurationMs: number } };
 export type RechargeProduct = {
     id: number;
     name: string;
@@ -73,6 +75,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const hostedApi = {
     quota: () => request<QuotaSummary>("/account/quota"),
     ledger: () => request<{ items: QuotaLedger[]; nextCursor: string }>("/account/ledger?limit=20"),
+    usageLogs: (params: Record<string, string | number | undefined> = {}) => request<UserUsageResult>(`/account/usage-logs?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
     products: () => request<{ items: RechargeProduct[] }>("/recharge/products"),
     subscriptionPlans: () => request<{ items: SubscriptionPlan[] }>("/subscriptions/plans"),
     subscription: () => request<UserSubscription>("/account/subscription"),

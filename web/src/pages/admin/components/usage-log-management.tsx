@@ -55,6 +55,18 @@ export function UsageLogManagement() {
     }, [page, filters.user, filters.model, filters.channel, filters.status, filters.from, filters.to]);
 
     const statusTag = (status: AdminUsageLog["status"]) => <Tag color={status === "succeeded" ? "success" : status === "failed" ? "error" : "processing"}>{status === "succeeded" ? "成功" : status === "failed" ? "失败" : "进行中"}</Tag>;
+    const qualityTag = (item: AdminUsageLog) => {
+        const requested = item.requestedQuality?.trim();
+        const actual = item.actualQuality?.trim();
+        if (!requested && !actual) return <span className="text-stone-400">-</span>;
+        const matched = Boolean(requested && actual && requested.toLowerCase() === actual.toLowerCase());
+        return (
+            <Space size={4} wrap>
+                <span>请求:{requested || "-"}</span>
+                <Tag color={matched ? "success" : "warning"}>{actual ? `实际:${actual}` : "实际缺失"}</Tag>
+            </Space>
+        );
+    };
     const setDateRange = (values: null | [Dayjs | null, Dayjs | null]) => {
         const next: [Dayjs, Dayjs] = values && values[0] && values[1] ? [values[0], values[1]] : todayRange();
         setRange(next);
@@ -86,12 +98,13 @@ export function UsageLogManagement() {
                 pagination={{ current: page, pageSize: 20, total: result.total, showSizeChanger: false, onChange: (next) => void load(next) }}
                 columns={[
                     { title: "时间", dataIndex: "startedAt", render: (value) => new Date(value).toLocaleString() },
-                    { title: "用户", render: (_, item) => <div><div>{item.username || item.userId}</div><div className="text-xs text-stone-500">{item.ip || "未记录 IP"}</div></div> },
-                    { title: "模型", render: (_, item) => <div><div className="font-medium">{item.publishedModel || "未命名模型"}</div><div className="text-xs text-stone-500">{item.upstreamModel || "-"}</div></div> },
-                    { title: "质量", render: (_, item) => <div><div>请求：{item.requestedQuality || "-"}</div><div className={item.actualQuality && item.actualQuality !== item.requestedQuality ? "text-orange-600" : "text-stone-500"}>实际：{item.actualQuality || "-"}</div></div> },
+                    { title: "用户", render: (_, item) => item.username || item.userId },
+                    { title: "IP", dataIndex: "ip", render: (value) => value || "-" },
+                    { title: "模型", render: (_, item) => <span className="font-medium">{item.publishedModel || "未命名模型"}</span> },
+                    { title: "质量", render: (_, item) => qualityTag(item) },
                     { title: "渠道", render: (_, item) => item.channelName || "-" },
                     { title: "状态", dataIndex: "status", render: statusTag },
-                    { title: "计费", render: (_, item) => `${item.billedUnits || 0} ${item.billingUnit || "request"}` },
+                    { title: "计费", render: (_, item) => <div><div className="font-medium text-orange-600">扣除:{Number(item.chargedQuota || 0).toLocaleString()} 积分</div><div className="text-xs text-stone-500">{item.billedUnits || 0} {item.billingUnit || "request"}</div></div> },
                     { title: "成本", render: (_, item) => `${item.costQuota || 0} 积分` },
                     { title: "利润", render: (_, item) => <span className={item.profitQuota < 0 ? "text-red-500" : "text-emerald-600"}>{item.profitQuota || 0} 积分</span> },
                     { title: "耗时", render: (_, item) => `${item.durationMs} ms` },
@@ -99,7 +112,7 @@ export function UsageLogManagement() {
                 ]}
             />
             <Drawer open={Boolean(selected)} width={680} title="使用日志详情" onClose={() => setSelected(null)}>
-                {selected && <><Descriptions bordered size="small" column={2} items={[{ label: "Request ID", children: selected.requestId || "-" }, { label: "Task ID", children: selected.taskId }, { label: "用户", children: selected.username || selected.userId }, { label: "IP", children: selected.ip || "-" }, { label: "模型", children: selected.publishedModel || selected.upstreamModel }, { label: "渠道", children: selected.channelName || "-" }, { label: "状态", children: statusTag(selected.status) }, { label: "请求图片质量", children: selected.requestedQuality || "-" }, { label: "实际图片质量", children: selected.actualQuality || "-" }, { label: "计费单位", children: `${selected.billedUnits || 0} ${selected.billingUnit || "request"}` }, { label: "输入 Token", children: selected.inputTokens }, { label: "输出 Token", children: selected.outputTokens }, { label: "缓存 Token", children: selected.cachedTokens }, { label: "扣费积分", children: selected.chargedQuota }, { label: "渠道成本", children: selected.costQuota }, { label: "利润", children: <span className={selected.profitQuota < 0 ? "text-red-500" : "text-emerald-600"}>{selected.profitQuota}</span> }, { label: "错误", children: selected.errorMessage || "-" }]} /><div className="mt-5 grid gap-4 md:grid-cols-2"><Card size="small" title="请求摘要"><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selected.requestSummary || {}, null, 2)}</pre></Card><Card size="small" title="响应摘要"><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selected.responseSummary || {}, null, 2)}</pre></Card></div></>}
+                {selected && <><Descriptions bordered size="small" column={2} items={[{ label: "请求图片质量", children: selected.requestedQuality || "-" }, { label: "实际图片质量", children: qualityTag(selected) }, { label: "计费单位", children: `${selected.billedUnits || 0} ${selected.billingUnit || "request"}` }, { label: "输入 Token", children: selected.inputTokens }, { label: "输出 Token", children: selected.outputTokens }, { label: "缓存 Token", children: selected.cachedTokens }, { label: "扣费积分", children: selected.chargedQuota }, { label: "渠道成本", children: selected.costQuota }, { label: "利润", children: <span className={selected.profitQuota < 0 ? "text-red-500" : "text-emerald-600"}>{selected.profitQuota}</span> }, { label: "错误", children: selected.errorMessage || "-" }]} /><div className="mt-5 grid gap-4 md:grid-cols-2"><Card size="small" title="请求摘要"><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selected.requestSummary || {}, null, 2)}</pre></Card><Card size="small" title="响应摘要"><pre className="max-h-60 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(selected.responseSummary || {}, null, 2)}</pre></Card></div></>}
             </Drawer>
         </Card>
     );

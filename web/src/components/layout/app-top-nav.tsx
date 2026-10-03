@@ -1,4 +1,4 @@
-import { Bot, Menu, Settings2 } from "lucide-react";
+import { Bot, Coins, Menu, Settings2 } from "lucide-react";
 import { Button, Tooltip } from "antd";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { isHostedMode } from "@/lib/app-mode";
+import { hostedApi } from "@/services/api/hosted";
 import { useAuthStore } from "@/stores/use-auth-store";
 
 export function AppTopNav() {
@@ -20,6 +21,7 @@ export function AppTopNav() {
     const navigate = useNavigate();
     const user = useAuthStore((state) => state.user);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [availableQuota, setAvailableQuota] = useState<number | null>(null);
     const autoConnectRef = useRef(false);
     const agentToken = useAgentStore((state) => state.token);
     const agentEnabled = useAgentStore((state) => state.enabled);
@@ -36,6 +38,25 @@ export function AppTopNav() {
         autoConnectRef.current = true;
         connectAgent({ silent: true });
     }, [agentConnected, agentEnabled, agentToken, connectAgent]);
+
+    useEffect(() => {
+        if (!isHostedMode || !user) {
+            setAvailableQuota(null);
+            return;
+        }
+        let active = true;
+        const loadQuota = () => {
+            void hostedApi.quota().then((summary) => {
+                if (active) setAvailableQuota(summary.available);
+            }).catch(() => undefined);
+        };
+        loadQuota();
+        const timer = window.setInterval(loadQuota, 30000);
+        return () => {
+            active = false;
+            window.clearInterval(timer);
+        };
+    }, [user]);
 
     return (
         <>
@@ -88,6 +109,17 @@ export function AppTopNav() {
                         </div>
 
                         <div className="my-auto flex h-9 min-w-0 items-center justify-end gap-2 justify-self-end whitespace-nowrap">
+                            {isHostedMode && user ? (
+                                <Button
+                                    type="text"
+                                    className="!h-8 !px-2"
+                                    icon={<Coins className="size-4 text-orange-500" />}
+                                    onClick={() => navigate("/assets/wallet")}
+                                    title="Quota balance"
+                                >
+                                    <span className="text-xs font-medium text-stone-700 dark:text-stone-200">{availableQuota === null ? "--" : availableQuota.toLocaleString()} 积分</span>
+                                </Button>
+                            ) : null}
                             {user?.role === "admin" ? (
                                 <Button
                                     type="text"

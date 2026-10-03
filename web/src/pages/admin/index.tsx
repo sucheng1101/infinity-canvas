@@ -499,12 +499,8 @@ export default function AdminPage() {
     return (
         <main className="h-full overflow-y-auto bg-[#f7f7f5] px-4 py-4 text-stone-950 dark:bg-[#11110f] dark:text-stone-100 sm:px-6">
             <div className="w-full">
-                <div className="mb-4 flex items-center justify-between border-b border-stone-200 pb-4 dark:border-stone-800">
-                    <div>
-                        <h1 className="text-xl font-semibold tracking-[-.03em]">运营控制台</h1>
-                        <p className="mt-1 text-xs text-stone-500">模型、渠道、计费和账户管理</p>
-                    </div>
-                    <Button icon={<RefreshCw className="size-4" />} loading={loading} onClick={() => void load()}>
+                <div className="mb-3 flex justify-end">
+                    <Button size="small" icon={<RefreshCw className="size-4" />} loading={loading} onClick={() => void load()}>
                         刷新
                     </Button>
                 </div>

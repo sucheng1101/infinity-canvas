@@ -5,6 +5,10 @@ import { AnalyticsTracker } from "@/components/layout/analytics-tracker";
 import UserLayout from "@/layouts/user-layout";
 import { isHostedMode } from "@/lib/app-mode";
 import AssetsPage from "@/pages/assets";
+import AssetCenterLayout from "@/pages/assets/center-layout";
+import AssetDashboardPage from "@/pages/assets/dashboard";
+import UserUsagePage from "@/pages/assets/user-usage";
+import AssetSettingsPage from "@/pages/assets/settings";
 import BillingPage from "@/pages/billing";
 import CanvasPage from "@/pages/canvas";
 import CanvasProjectPage from "@/pages/canvas/project";
@@ -52,7 +56,17 @@ export const router = createBrowserRouter([
                     { path: "/workbench", element: <WorkbenchPage /> },
                     { path: "/projects", element: <ProjectsPage /> },
                     { path: "/projects/:id", element: <EcommerceCanvasProjectPage /> },
-                    { path: "/assets", element: <AssetsPage /> },
+                    {
+                        path: "/assets",
+                        element: <AssetCenterLayout />,
+                        children: [
+                            { index: true, element: <AssetsPage /> },
+                            { path: "dashboard", element: <AssetDashboardPage /> },
+                            { path: "usage", element: <UserUsagePage /> },
+                            { path: "wallet", element: <BillingPage /> },
+                            { path: "settings", element: <AssetSettingsPage /> },
+                        ],
+                    },
                     { path: "/model-plaza", element: <ModelPlazaPage /> },
                     { path: "/billing", element: <BillingPage /> },
                     { path: "/channels", element: <ChannelsPage /> },
