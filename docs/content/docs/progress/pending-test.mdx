@@ -4,7 +4,11 @@ description: Implemented changes that still need manual verification
 ---
 
 # Pending Tests
+## 使用日志数据库迁移
 
+- 重启本地账户服务后，确认 `usage_logs` 自动补齐请求质量与实际质量字段。
+- 从用户侧完成一次托管生成，在管理后台当天的“使用日志”中确认出现对应记录，状态、模型、IP、请求质量和实际质量均可查看。
+- 当当天没有日志时，使用日志页面的平均耗时应显示 `0 ms`，服务日志不再出现 `AVG(duration_ms)` 的 NULL 扫描错误。
 ## 渠道配置流程与 8K 超分规则
 
 - 管理员创建渠道后添加模型专用 Key，点击获取模型；同步出的模型应自动填入能力和官方质量标准，管理员可以手动覆盖后保存。

@@ -686,7 +686,7 @@ func (s *Service) usageStats(query *gorm.DB) UsageStats {
 	query.Session(&gorm.Session{}).Select("COALESCE(SUM(charged_quota), 0)").Scan(&stats.ChargedQuota)
 	query.Session(&gorm.Session{}).Select("COALESCE(SUM(total_tokens), 0)").Scan(&stats.TotalTokens)
 	var average float64
-	query.Session(&gorm.Session{}).Select("AVG(duration_ms)").Scan(&average)
+	query.Session(&gorm.Session{}).Select("COALESCE(AVG(duration_ms), 0)").Scan(&average)
 	stats.AverageDurationMs = average
 	return stats
 }
