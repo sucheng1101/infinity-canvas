@@ -20,13 +20,79 @@ const statusOptions = [
 ];
 const jsonValue = (value: unknown) => JSON.stringify(value || {});
 const recommendedPricingType = (capability?: string) => capability === "image" ? "per_unit" : capability === "video" ? "per_second" : capability === "text" ? "per_token" : "fixed";
-const modelVariantOptions = (model?: PublishedModel) => {
-    if (!model) return [];
-    const quality = model.qualitySpec?.options || [];
-    const modes = model.qualitySpec?.outputModes || [];
-    const items = [...quality, ...modes];
-    return Array.from(new Map(items.map((item) => [item.key, item])).values());
-};
+const modelOutputModes = (model?: PublishedModel) => model?.qualitySpec?.outputModes?.length ? model.qualitySpec.outputModes : [{ key: "native", label: "原生" }];
+const modelQualityOptions = (model?: PublishedModel) => model?.qualitySpec?.options || [];
+
+function pricingEditorInitial(model?: PublishedModel, pricing?: PricingVersion) {
+    const formula = pricing?.formula || {};
+    const variants = Array.isArray(formula.variants) ? formula.variants as Array<{ key?: string; label?: string; unitAmount?: number }> : [];
+    const modePrices: Record<string, { all?: number; [key: string]: number | undefined }> = {};
+    modelOutputModes(model).forEach((mode) => { modePrices[mode.key] = { all: Number(formula.unitAmount || 1) }; });
+    let hasQualityVariants = false;
+    variants.forEach((variant) => {
+        const key = String(variant.key || "");
+        const amount = Number(variant.unitAmount || 0);
+        const parts = key.split(":");
+        const mode = parts.length > 1 ? parts[1] : parts[0];
+        const quality = parts.length > 1 ? parts[0] : "all";
+        if (!modePrices[mode]) modePrices[mode] = {};
+        modePrices[mode][quality] = amount;
+        if (parts.length > 1) hasQualityVariants = true;
+    });
+    return {
+        publishedModelId: model?.id,
+        pricingType: String(formula.type || recommendedPricingType(model?.capability)),
+        baseAmount: Number(formula.baseAmount || 0),
+        minimumAmount: Number(formula.minimumAmount || 0),
+        inputTokenAmount: Number(formula.inputTokenAmount || 0),
+        outputTokenAmount: Number(formula.outputTokenAmount || 0),
+        cachedTokenAmount: Number(formula.cachedTokenAmount || 0),
+        modePrices,
+        sameQualityPrice: !hasQualityVariants,
+        enabled: pricing ? pricing.status === "active" : true,
+    };
+}
+
+function buildPricingFormula(values: Record<string, any>, model?: PublishedModel) {
+    const modePrices = values.modePrices || {};
+    const qualities = modelQualityOptions(model);
+    const modes = modelOutputModes(model);
+    const variants: Array<{ key: string; label: string; unitAmount: number }> = [];
+    modes.forEach((mode) => {
+        const prices = modePrices[mode.key] || {};
+        if (values.sameQualityPrice !== false || !qualities.length) {
+            variants.push({ key: mode.key, label: mode.label, unitAmount: Number(prices.all || 0) });
+        } else {
+            qualities.forEach((quality) => variants.push({ key: `${quality.key}:${mode.key}`, label: `${quality.label} / ${mode.label}`, unitAmount: Number(prices[quality.key] || prices.all || 0) }));
+        }
+    });
+    const first = variants.find((item) => item.key === "native") || variants[0];
+    return {
+        type: values.pricingType,
+        unitAmount: Number(first?.unitAmount || 0),
+        ...(values.baseAmount ? { baseAmount: Number(values.baseAmount) } : {}),
+        ...(values.minimumAmount ? { minimumAmount: Number(values.minimumAmount) } : {}),
+        ...(values.inputTokenAmount ? { inputTokenAmount: Number(values.inputTokenAmount) } : {}),
+        ...(values.outputTokenAmount ? { outputTokenAmount: Number(values.outputTokenAmount) } : {}),
+        ...(values.cachedTokenAmount ? { cachedTokenAmount: Number(values.cachedTokenAmount) } : {}),
+        ...(variants.length ? { variants } : {}),
+    };
+}
+
+function PricingVariantFields({ models }: { models: PublishedModel[] }) {
+    const form = Form.useFormInstance();
+    const publishedModelId = Form.useWatch("publishedModelId", form);
+    const sameQualityPrice = Form.useWatch("sameQualityPrice", form) !== false;
+    const model = models.find((item) => item.id === publishedModelId);
+    const modes = modelOutputModes(model);
+    const qualities = modelQualityOptions(model);
+    return <Form.Item noStyle shouldUpdate={(previous, current) => previous.publishedModelId !== current.publishedModelId || previous.sameQualityPrice !== current.sameQualityPrice}>{() => <div className="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
+        <div className="mb-2 text-sm font-medium">原生 / 超分价格</div>
+        <div className="mb-3 text-xs text-stone-500">默认所有质量共用同一价格；关闭后可分别设置低中高或 1K / 2K / 4K / 8K。8K 只会在渠道开放超分时出现。</div>
+        <Form.Item name="sameQualityPrice" valuePropName="checked" initialValue={true}><Switch checkedChildren="同价格" unCheckedChildren="分别定价" /></Form.Item>
+        <div className="space-y-3">{modes.map((mode) => <div key={mode.key} className="rounded-lg bg-stone-50 p-3 dark:bg-stone-900"><div className="mb-2 font-medium">{mode.label}</div><Form.Item name={["modePrices", mode.key, "all"]} label={sameQualityPrice || !qualities.length ? "统一单价（积分）" : undefined} rules={[{ required: true, message: "请填写价格" }]}><InputNumber className="w-full" min={0} precision={0} /></Form.Item>{!sameQualityPrice && qualities.length ? <div className="grid gap-2 sm:grid-cols-2">{qualities.map((quality) => <Form.Item key={quality.key} name={["modePrices", mode.key, quality.key]} label={quality.label} rules={[{ required: true, message: "请填写价格" }]}><InputNumber className="w-full" min={0} precision={0} /></Form.Item>)}</div> : null}</div>)}</div>
+    </div>}</Form.Item>;
+}
 
 function RouteEditorFields({ channels, models }: { channels: AdminChannel[]; models: PublishedModel[] }) {
     const form = Form.useFormInstance();
@@ -121,19 +187,11 @@ export default function AdminPage() {
             if (type === "model") modal?.item ? await adminApi.updateModel(modal.item.id, values) : await adminApi.createModel(values);
             if (type === "route") modal?.item ? await adminApi.updateRoute(modal.item.id, values) : await adminApi.createRoute(values);
             if (type === "pricing") {
+                const selectedModel = models.find((item) => item.id === Number(values.publishedModelId));
                 const created = await adminApi.createPricing({
                     publishedModelId: values.publishedModelId,
                     currency: "POINTS",
-                    formula: {
-                        type: values.pricingType,
-                        unitAmount: values.unitAmount,
-                        ...(values.baseAmount ? { baseAmount: values.baseAmount } : {}),
-                        ...(values.minimumAmount ? { minimumAmount: values.minimumAmount } : {}),
-                        ...(values.inputTokenAmount ? { inputTokenAmount: values.inputTokenAmount } : {}),
-                        ...(values.outputTokenAmount ? { outputTokenAmount: values.outputTokenAmount } : {}),
-                        ...(values.cachedTokenAmount ? { cachedTokenAmount: values.cachedTokenAmount } : {}),
-                        ...(Array.isArray(values.variants) && values.variants.length ? { variants: values.variants.filter((item: any) => item?.key).map((item: any) => ({ key: item.key, label: item.label || item.key, unitAmount: Number(item.unitAmount || 0) })) } : {}),
-                    },
+                    formula: buildPricingFormula(values, selectedModel),
                 });
                 if (values.enabled) await adminApi.publishPricing(created.id);
             }
@@ -276,16 +334,7 @@ export default function AdminPage() {
                   ? { ...item, settings: jsonValue(item?.settings) }
                   : type === "pricing"
                     ? {
-                          publishedModelId: item?.model?.id,
-                          pricingType: item?.pricing?.formula?.type || recommendedPricingType(item?.model?.capability),
-                          unitAmount: Number(item?.pricing?.formula?.unitAmount || 1),
-                          baseAmount: Number(item?.pricing?.formula?.baseAmount || 0),
-                          minimumAmount: Number(item?.pricing?.formula?.minimumAmount || 0),
-                          inputTokenAmount: Number(item?.pricing?.formula?.inputTokenAmount || 0),
-                          outputTokenAmount: Number(item?.pricing?.formula?.outputTokenAmount || 0),
-                          cachedTokenAmount: Number(item?.pricing?.formula?.cachedTokenAmount || 0),
-                          variants: Array.isArray(item?.pricing?.formula?.variants) ? item.pricing.formula.variants : modelVariantOptions(item?.model).map((variant) => ({ key: variant.key, label: variant.label, unitAmount: 1 })),
-                          enabled: item?.pricing ? item.pricing.status === "active" : true,
+                          ...pricingEditorInitial(item?.model, item?.pricing),
                       }
                     : type === "product"
                       ? { ...item, payAmountYuan: item ? item.payAmountFen / 100 : undefined, enabled: item ? item.status === "active" : true, customChannelEnabled: item?.customChannelEnabled || false, customChannelLimit: item?.customChannelLimit || 0, customChannelDays: item?.customChannelDays || 0 }
@@ -332,45 +381,23 @@ export default function AdminPage() {
                     {type === "pricing" && (
                         <>
                             <Form.Item name="publishedModelId" label="选择模型" rules={[{ required: true, message: "请选择模型" }]}>
-                                <Select showSearch optionFilterProp="label" options={models.map((value) => ({ value: value.id, label: `${value.displayName} · ${value.capability}` }))} />
+                                <Select showSearch optionFilterProp="label" options={models.map((value) => ({ value: value.id, label: value.displayName + " · " + value.capability }))} />
                             </Form.Item>
                             <Form.Item name="pricingType" label="计费方式" rules={[{ required: true }]}>
                                 <Select options={[{ value: "fixed", label: "固定价格（每次请求）" }, { value: "per_unit", label: "按生成数量" }, { value: "per_second", label: "按秒" }, { value: "per_token", label: "按 Token" }]} />
                             </Form.Item>
-                            <Form.Item name="unitAmount" label="单价（积分）" rules={[{ required: true, message: "请填写单价" }]}>
-                                <InputNumber className="w-full" min={1} precision={0} />
-                            </Form.Item>
                             <div className="grid grid-cols-2 gap-4">
-                                <Form.Item name="baseAmount" label="基础积分">
-                                    <InputNumber className="w-full" min={0} precision={0} />
-                                </Form.Item>
-                                <Form.Item name="minimumAmount" label="最低消费积分">
-                                    <InputNumber className="w-full" min={0} precision={0} />
-                                </Form.Item>
+                                <Form.Item name="baseAmount" label="基础积分"><InputNumber className="w-full" min={0} precision={0} /></Form.Item>
+                                <Form.Item name="minimumAmount" label="最低消费积分"><InputNumber className="w-full" min={0} precision={0} /></Form.Item>
                             </div>
-                            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-500">建议：生图按张计费，视频按秒计费，文本按 Token 计费。文本可分别填写输入、输出和缓存 Token 单价。</div>
+                            <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-500">生图按张计费，视频按秒计费，文本按 Token 计费。积分固定采用 1 元 = 100 积分。</div>
                             <div className="grid grid-cols-3 gap-3"><Form.Item name="inputTokenAmount" label="输入 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item><Form.Item name="outputTokenAmount" label="输出 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item><Form.Item name="cachedTokenAmount" label="缓存 Token"><InputNumber className="w-full" min={0} precision={0} /></Form.Item></div>
-                            <div className="rounded-xl border border-stone-200 p-3 dark:border-stone-800">
-                                <div className="mb-2 text-sm font-medium">质量 / 输出方式价格</div>
-                                <div className="mb-3 text-xs text-stone-500">8K 只有在渠道模型能力开启时才会出现在用户侧；原生与超分可以分别定价。</div>
-                                <Form.List name="variants">
-                                    {(fields, { add, remove }) => <>
-                                        {fields.map((field) => <div key={field.key} className="mb-2 grid grid-cols-[1fr_1fr_120px_auto] gap-2">
-                                            <Form.Item {...field} name={[field.name, "key"]} noStyle><Input placeholder="key，如 4k / upscale" /></Form.Item>
-                                            <Form.Item {...field} name={[field.name, "label"]} noStyle><Input placeholder="显示名称" /></Form.Item>
-                                            <Form.Item {...field} name={[field.name, "unitAmount"]} noStyle><InputNumber className="w-full" min={0} precision={0} placeholder="积分" /></Form.Item>
-                                            <Button type="text" danger onClick={() => remove(field.name)}>移除</Button>
-                                        </div>)}
-                                        <Button type="dashed" block onClick={() => add({ unitAmount: 1 })}>增加质量价格</Button>
-                                    </>}
-                                </Form.List>
-                            </div>
+                            <PricingVariantFields models={models} />
                             <Form.Item name="enabled" label="保存后启用" valuePropName="checked">
                                 <Switch checkedChildren="开" unCheckedChildren="关" />
                             </Form.Item>
                         </>
-                    )}
-                    {type === "product" && (
+                    )}                    {type === "product" && (
                         <>
                             <Form.Item name="name" label="套餐名称" rules={[{ required: true }]}>
                                 <Input />

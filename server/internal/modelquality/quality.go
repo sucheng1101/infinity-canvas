@@ -23,17 +23,49 @@ func Default(capability, modelName string) Spec {
 	spec := Spec{Scheme: "none", OutputModes: []Option{{Key: "native", Label: "原生"}}}
 	switch capability {
 	case "image":
-		spec.Scheme = "tier"
-		spec.Options = []Option{{Key: "auto", Label: "自动"}, {Key: "low", Label: "低质量"}, {Key: "medium", Label: "中质量"}, {Key: "high", Label: "高质量"}}
-		if strings.Contains(name, "dall") || strings.Contains(name, "gpt-image") || strings.Contains(name, "flux") || strings.Contains(name, "midjourney") {
+		if containsAny(name, "gpt-image", "dall-e", "dalle", "flux", "midjourney", "ideogram", "imagen", "seedream", "qwen-image", "recraft", "kolors", "jimeng", "stable-diffusion", "sdxl", "highres", "4k", "2k") {
 			spec.Scheme = "resolution"
 			spec.Options = []Option{{Key: "1k", Label: "1K"}, {Key: "2k", Label: "2K"}, {Key: "4k", Label: "4K"}}
+		} else {
+			spec.Scheme = "tier"
+			spec.Options = []Option{{Key: "auto", Label: "自动"}, {Key: "low", Label: "低质量"}, {Key: "medium", Label: "中质量"}, {Key: "high", Label: "高质量"}}
 		}
 	case "video":
 		spec.Scheme = "resolution"
-		spec.Options = []Option{{Key: "720p", Label: "720p"}, {Key: "1080p", Label: "1080p"}, {Key: "2k", Label: "2K"}, {Key: "4k", Label: "4K"}}
+		spec.Options = []Option{{Key: "480p", Label: "480p"}, {Key: "720p", Label: "720p"}, {Key: "1080p", Label: "1080p"}, {Key: "2k", Label: "2K"}, {Key: "4k", Label: "4K"}}
+		if containsAny(name, "upscale", "super-resolution", "super_resolution", "enhance") {
+			spec.SupportsUpscale = true
+		}
+	}
+	if containsAny(name, "upscale", "super-resolution", "super_resolution", "realesrgan", "esrgan", "topaz") {
+		spec.SupportsUpscale = true
 	}
 	return spec
+}
+
+func containsAny(value string, candidates ...string) bool {
+	for _, candidate := range candidates {
+		if strings.Contains(value, candidate) {
+			return true
+		}
+	}
+	return false
+}
+
+// GuessCapability supplies a deterministic default for freshly synchronized
+// model names. Administrators can still override it before saving a channel.
+func GuessCapability(modelName string) string {
+	name := strings.ToLower(strings.TrimSpace(modelName))
+	if containsAny(name, "video", "sora", "veo", "kling", "runway", "pika", "luma", "wan", "hailuo", "pixverse") {
+		return "video"
+	}
+	if containsAny(name, "audio", "tts", "speech", "voice", "music", "sound", "whisper", "eleven") {
+		return "audio"
+	}
+	if containsAny(name, "image", "dall-e", "dalle", "gpt-image", "imagen", "flux", "midjourney", "ideogram", "seedream", "recraft", "qwen-image", "sdxl", "stable-diffusion", "kolors", "jimeng", "doubao") {
+		return "image"
+	}
+	return "text"
 }
 
 func Normalize(input Spec, capability, modelName string) Spec {

@@ -270,6 +270,7 @@ type ModelCostPricing struct {
 	BillingUnit      string    `gorm:"size:32;not null" json:"billingUnit"`
 	CostPerUnit      int64     `gorm:"not null" json:"costPerUnit"`
 	SellPerUnit      int64     `gorm:"not null" json:"sellPerUnit"`
+	FormulaJSON      string    `gorm:"type:text" json:"-"`
 	ProfitMargin     float64   `gorm:"not null;default:0" json:"profitMargin"`
 	Status           string    `gorm:"uniqueIndex:ux_model_cost_pricing;size:32;index;not null" json:"status"`
 	CreatedAt        time.Time `json:"createdAt"`

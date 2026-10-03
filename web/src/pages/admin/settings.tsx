@@ -23,13 +23,13 @@ export default function AdminSettingsPage() {
     const [checking, setChecking] = useState(false);
     const loaded = useRef(new Set<Panel>());
 
-    const loadPanel = async (panel: Panel, force = false) => {
+    const loadPanel = async (panel: Panel, force = false, background = false) => {
         if (!force && loaded.current.has(panel)) return;
         if (panel === "system") {
             loaded.current.add(panel);
             return;
         }
-        setLoading(true);
+        if (!background) setLoading(true);
         try {
             if (panel === "email") setEmail({ ...emptyEmail, ...(await adminApi.email()) });
             if (panel === "payment") setPayment({ ...emptyPayment, ...(await adminApi.payment()), key: undefined });
@@ -39,15 +39,21 @@ export default function AdminSettingsPage() {
             if (panel === "security") setSecurity(await adminApi.securityAccess());
             loaded.current.add(panel);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "系统设置读取失败");
+            if (!background) message.error(error instanceof Error ? error.message : "系统设置读取失败");
         } finally {
-            setLoading(false);
+            if (!background) setLoading(false);
         }
     };
 
     useEffect(() => {
         if (user?.role === "admin") void loadPanel(activePanel);
     }, [user?.role, activePanel]);
+
+    useEffect(() => {
+        if (user?.role !== "admin") return;
+        const timer = window.setTimeout(() => void loadPanel("version", false, true), 0);
+        return () => window.clearTimeout(timer);
+    }, [user?.role]);
 
     if (user?.role !== "admin") return <Navigate to="/app" replace />;
 

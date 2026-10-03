@@ -35,7 +35,7 @@ export function PricingManagement({ models, pricing, products, loading, onEditPr
                     columns={[
                         { title: "模型", render: (_, row) => <div><div className="font-medium">{row.model.displayName}</div><Tag className="mt-1">{capabilityLabels[row.model.capability] || row.model.capability}</Tag></div> },
                         { title: "计费方式", render: (_, row) => row.active || row.latest ? pricingTypeLabels[String((row.active || row.latest)?.formula.type)] || String((row.active || row.latest)?.formula.type || "-") : <span className="text-stone-400">未设置</span> },
-                        { title: "单价（积分）", render: (_, row) => row.active || row.latest ? Number((row.active || row.latest)?.formula.unitAmount || 0).toLocaleString() : "-" },
+                        { title: "单价（积分）", render: (_, row) => { const formula = (row.active || row.latest)?.formula; const variants = Array.isArray(formula?.variants) ? formula.variants as Array<{ key?: string; unitAmount?: number }> : []; return formula ? <div><div>{Number(formula.unitAmount || 0).toLocaleString()}</div>{variants.length ? <div className="mt-1 flex flex-wrap gap-1">{variants.slice(0, 4).map((variant) => <Tag key={variant.key}>{variant.key}: {Number(variant.unitAmount || 0).toLocaleString()}</Tag>)}{variants.length > 4 ? <Tag>+{variants.length - 4}</Tag> : null}</div> : null}</div> : "-"; } },
                         { title: "版本", render: (_, row) => row.active || row.latest ? `v${(row.active || row.latest)?.version}` : "-" },
                         { title: "状态", render: (_, row) => row.active ? <Tag color="success">已启用</Tag> : row.latest?.status === "draft" ? <Tag color="warning">草稿</Tag> : <Tag>未定价</Tag> },
                         {

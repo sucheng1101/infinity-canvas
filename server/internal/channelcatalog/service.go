@@ -436,6 +436,9 @@ func replaceChannelDetails(tx *gorm.DB, channelID uint, keyInputs []ChannelModel
 	for index, input := range modelInputs {
 		name := strings.TrimSpace(input.Name)
 		capability := strings.ToLower(strings.TrimSpace(input.Capability))
+		if capability == "" {
+			capability = modelquality.GuessCapability(name)
+		}
 		if name == "" || len(name) > 128 || modelNames[name] || !validCapability(capability) {
 			return ErrInvalidChannel
 		}
@@ -450,11 +453,15 @@ func replaceChannelDetails(tx *gorm.DB, channelID uint, keyInputs []ChannelModel
 			return ErrInvalidChannel
 		}
 		modelNames[name] = true
-		qualitySpec := input.QualitySpec
-		if qualitySpec == nil {
-			qualitySpec = specMap(modelquality.Default(capability, name))
+		quality := modelquality.Spec{}
+		if input.QualitySpec != nil {
+			qualityPayload, decodeErr := json.Marshal(input.QualitySpec)
+			if decodeErr != nil || json.Unmarshal(qualityPayload, &quality) != nil {
+				return ErrInvalidChannel
+			}
 		}
-		qualityPayload, err := json.Marshal(qualitySpec)
+		quality = modelquality.Normalize(quality, capability, name)
+		qualityPayload, err := json.Marshal(specMap(quality))
 		if err != nil {
 			return ErrInvalidChannel
 		}
@@ -621,9 +628,11 @@ func (s *Service) toAdminChannel(row model.UpstreamChannel) (AdminChannel, error
 		if strings.TrimSpace(item.QualitySpecJSON) != "" {
 			_ = json.Unmarshal([]byte(item.QualitySpecJSON), &quality)
 		}
-		if len(quality) == 0 {
-			quality = specMap(modelquality.Default(item.Capability, item.Name))
+		qualityDecoded := modelquality.Spec{}
+		if payload, decodeErr := json.Marshal(quality); decodeErr == nil {
+			_ = json.Unmarshal(payload, &qualityDecoded)
 		}
+		quality = specMap(modelquality.Normalize(qualityDecoded, item.Capability, item.Name))
 		adminModels = append(adminModels, AdminChannelModel{ID: item.ID, Name: item.Name, Capability: item.Capability, Script: item.Script, QualitySpec: quality, Status: item.Status})
 		if item.ChannelKeyID != nil {
 			modelsByKey[*item.ChannelKeyID] = append(modelsByKey[*item.ChannelKeyID], item.Name)
