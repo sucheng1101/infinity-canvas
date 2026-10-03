@@ -19,7 +19,7 @@ var (
 	ErrTaskNotFound        = errors.New("generation task not found")
 	ErrInvalidTask         = errors.New("invalid generation task")
 	ErrTaskPayloadTooLarge = errors.New("generation task payload is too large")
-	ErrInvalidTransition = errors.New("invalid generation task transition")
+	ErrInvalidTransition   = errors.New("invalid generation task transition")
 )
 
 type Service struct {

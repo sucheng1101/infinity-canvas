@@ -223,12 +223,12 @@ async function compactReferenceImage(dataUrl: string) {
     });
     if (!image.naturalWidth || !image.naturalHeight) return dataUrl;
     const scale = Math.min(1, 2048 / Math.max(image.naturalWidth, image.naturalHeight));
-    if (scale === 1) return dataUrl;
     const canvas = document.createElement("canvas");
     canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
     canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
     const context = canvas.getContext("2d");
     if (!context) return dataUrl;
     context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.82);
+    const compacted = canvas.toDataURL("image/jpeg", 0.82);
+    return getDataUrlByteSize(compacted) < getDataUrlByteSize(dataUrl) ? compacted : dataUrl;
 }

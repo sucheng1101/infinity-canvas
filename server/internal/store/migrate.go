@@ -145,11 +145,11 @@ func migrate(db *gorm.DB) error {
 						continue
 					}
 					startedAt := task.CreatedAt
-				if task.StartedAt != nil {
+					if task.StartedAt != nil {
 						startedAt = *task.StartedAt
 					}
 					status := model.UsageLogRunning
-				if task.Status == model.GenerationTaskSucceeded {
+					if task.Status == model.GenerationTaskSucceeded {
 						status = model.UsageLogSuccess
 					} else if task.Status == model.GenerationTaskFailed || task.Status == model.GenerationTaskCancelled {
 						status = model.UsageLogFailed
