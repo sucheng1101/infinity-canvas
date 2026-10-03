@@ -545,6 +545,10 @@ func (a *Router) createGenerationTask(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "TASK_INVALID", "任务参数无效")
 		return
 	}
+	if errors.Is(err, generation.ErrTaskPayloadTooLarge) {
+		errorJSON(c, http.StatusRequestEntityTooLarge, "TASK_PAYLOAD_TOO_LARGE", "参考图片过大，请压缩图片后重试")
+		return
+	}
 	if err != nil {
 		errorJSON(c, http.StatusBadRequest, "TASK_CREATE_FAILED", "生成任务创建失败")
 		return

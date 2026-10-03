@@ -1,6 +1,8 @@
 package store
 
 import (
+	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
@@ -127,6 +129,53 @@ func migrate(db *gorm.DB) error {
 				return tx.AutoMigrate(&model.UsageLog{})
 			},
 		},
+		{
+			version: "20261003_m14_backfill_usage_logs",
+			apply: func(tx *gorm.DB) error {
+				var tasks []model.GenerationTask
+				if err := tx.Find(&tasks).Error; err != nil {
+					return err
+				}
+				for _, task := range tasks {
+					var count int64
+					if err := tx.Model(&model.UsageLog{}).Where("task_id = ?", task.ID).Count(&count).Error; err != nil {
+						return err
+					}
+					if count > 0 {
+						continue
+					}
+					startedAt := task.CreatedAt
+				if task.StartedAt != nil {
+						startedAt = *task.StartedAt
+					}
+					status := model.UsageLogRunning
+				if task.Status == model.GenerationTaskSucceeded {
+						status = model.UsageLogSuccess
+					} else if task.Status == model.GenerationTaskFailed || task.Status == model.GenerationTaskCancelled {
+						status = model.UsageLogFailed
+					}
+					item := model.UsageLog{
+						TaskID: task.ID, UserID: task.UserID, PublishedModelID: task.PublishedModelID,
+						Capability: task.Capability, RequestedQuality: migrationRequestedQuality(task),
+						BillingUnit: migrationBillingUnit(task.Capability), BilledUnits: migrationBilledUnits(task),
+						Status: status, ChargedQuota: task.SettledAmount, StartedAt: startedAt,
+						ErrorCode: task.ErrorCode, ErrorMessage: task.ErrorMessage,
+						RequestSummaryJSON: migrationTaskSummary(task),
+					}
+					if task.CompletedAt != nil {
+						item.CompletedAt = task.CompletedAt
+					}
+					if task.Status == model.GenerationTaskSucceeded {
+						item.RevenueTotal = task.SettledAmount
+						item.ProfitTotal = task.SettledAmount
+					}
+					if err := tx.Create(&item).Error; err != nil {
+						return err
+					}
+				}
+				return nil
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64
@@ -146,4 +195,70 @@ func migrate(db *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+func migrationRequestedQuality(task model.GenerationTask) string {
+	if strings.ToLower(strings.TrimSpace(task.Capability)) != "image" {
+		return ""
+	}
+	for _, raw := range []string{task.ParametersJSON, task.PayloadJSON} {
+		var value map[string]any
+		if json.Unmarshal([]byte(raw), &value) != nil {
+			continue
+		}
+		if quality, ok := value["quality"].(string); ok && strings.TrimSpace(quality) != "" {
+			return strings.TrimSpace(quality)
+		}
+	}
+	return ""
+}
+
+func migrationBillingUnit(capability string) string {
+	switch strings.ToLower(strings.TrimSpace(capability)) {
+	case "image":
+		return "image"
+	case "video":
+		return "second"
+	case "text":
+		return "token"
+	default:
+		return "request"
+	}
+}
+
+func migrationBilledUnits(task model.GenerationTask) float64 {
+	var parameters map[string]any
+	_ = json.Unmarshal([]byte(task.ParametersJSON), &parameters)
+	switch strings.ToLower(strings.TrimSpace(task.Capability)) {
+	case "image":
+		if value, ok := parameters["count"].(float64); ok && value > 0 {
+			return value
+		}
+		return 1
+	case "video":
+		if value, ok := parameters["durationSeconds"].(float64); ok && value > 0 {
+			return value
+		}
+	case "text":
+		if value, ok := parameters["totalTokens"].(float64); ok && value > 0 {
+			return value
+		}
+	}
+	return 1
+}
+
+func migrationTaskSummary(task model.GenerationTask) string {
+	var payload, parameters map[string]any
+	_ = json.Unmarshal([]byte(task.PayloadJSON), &payload)
+	_ = json.Unmarshal([]byte(task.ParametersJSON), &parameters)
+	payloadKeys := make([]string, 0, len(payload))
+	for key := range payload {
+		payloadKeys = append(payloadKeys, key)
+	}
+	parameterKeys := make([]string, 0, len(parameters))
+	for key := range parameters {
+		parameterKeys = append(parameterKeys, key)
+	}
+	encoded, _ := json.Marshal(map[string]any{"payloadKeys": payloadKeys, "parameterKeys": parameterKeys, "payloadBytes": len(task.PayloadJSON)})
+	return string(encoded)
 }

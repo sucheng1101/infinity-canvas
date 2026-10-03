@@ -14,6 +14,13 @@ const emptyResult: AdminUsageResult = {
 };
 
 const todayRange = (): [Dayjs, Dayjs] => [dayjs().startOf("day"), dayjs().endOf("day")];
+const datePresets = [
+    { label: "今天", value: todayRange },
+    { label: "近 7 天", value: () => [dayjs().subtract(6, "day").startOf("day"), dayjs().endOf("day")] as [Dayjs, Dayjs] },
+    { label: "本周", value: () => [dayjs().startOf("week"), dayjs().endOf("day")] as [Dayjs, Dayjs] },
+    { label: "近 30 天", value: () => [dayjs().subtract(29, "day").startOf("day"), dayjs().endOf("day")] as [Dayjs, Dayjs] },
+    { label: "本月", value: () => [dayjs().startOf("month"), dayjs().endOf("day")] as [Dayjs, Dayjs] },
+];
 
 export function UsageLogManagement() {
     const { message } = App.useApp();
@@ -51,7 +58,7 @@ export function UsageLogManagement() {
     const setDateRange = (values: null | [Dayjs | null, Dayjs | null]) => {
         const next: [Dayjs, Dayjs] = values && values[0] && values[1] ? [values[0], values[1]] : todayRange();
         setRange(next);
-        setFilters((current) => ({ ...current, from: next[0].startOf("day").toISOString(), to: next[1].add(1, "day").startOf("day").toISOString() }));
+        setFilters((current) => ({ ...current, from: next[0].toISOString(), to: next[1].add(1, "millisecond").toISOString() }));
     };
 
     return (
@@ -69,7 +76,7 @@ export function UsageLogManagement() {
                 <Input className="w-40" allowClear placeholder="模型" value={filters.model} onChange={(event) => setFilters((value) => ({ ...value, model: event.target.value }))} />
                 <Input className="w-40" allowClear placeholder="渠道" value={filters.channel} onChange={(event) => setFilters((value) => ({ ...value, channel: event.target.value }))} />
                 <Select allowClear className="w-32" placeholder="状态" value={filters.status || undefined} onChange={(value) => setFilters((state) => ({ ...state, status: value || "" }))} options={[{ value: "succeeded", label: "成功" }, { value: "failed", label: "失败" }, { value: "running", label: "进行中" }]} />
-                <DatePicker.RangePicker value={range} onChange={setDateRange} allowClear placeholder={["开始日期", "结束日期"]} />
+                <DatePicker.RangePicker value={range} onChange={setDateRange} allowClear showTime={{ format: "HH:mm:ss" }} format="YYYY-MM-DD HH:mm:ss" presets={datePresets.map((item) => ({ label: item.label, value: item.value() }))} placeholder={["开始时间", "结束时间"]} />
             </Space>
             <Table
                 rowKey="id"

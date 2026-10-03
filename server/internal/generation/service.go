@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	ErrTaskNotFound      = errors.New("generation task not found")
-	ErrInvalidTask       = errors.New("invalid generation task")
+	ErrTaskNotFound        = errors.New("generation task not found")
+	ErrInvalidTask         = errors.New("invalid generation task")
+	ErrTaskPayloadTooLarge = errors.New("generation task payload is too large")
 	ErrInvalidTransition = errors.New("invalid generation task transition")
 )
 
@@ -73,8 +74,15 @@ func (s *Service) Create(userID uint, input CreateInput) (View, error) {
 		return View{}, ErrInvalidTask
 	}
 	payload, err := json.Marshal(input.Payload)
-	if err != nil || len(payload) > 256*1024 {
+	if err != nil {
 		return View{}, ErrInvalidTask
+	}
+	maxPayloadBytes := 256 * 1024
+	if strings.EqualFold(strings.TrimSpace(input.Capability), "image") {
+		maxPayloadBytes = 8 * 1024 * 1024
+	}
+	if len(payload) > maxPayloadBytes {
+		return View{}, ErrTaskPayloadTooLarge
 	}
 	var task model.GenerationTask
 	err = s.DB.Transaction(func(tx *gorm.DB) error {

@@ -4,6 +4,7 @@ import { hostedApi, type PublishedModel } from "./hosted";
 import type { AiConfig } from "@/stores/use-config-store";
 import type { ReferenceImage } from "@/types/image";
 import { imageToDataUrl } from "@/services/image-storage";
+import { getDataUrlByteSize } from "@/lib/image-utils";
 
 type HostedOutput = Record<string, unknown>;
 type HostedRequest = {
@@ -41,7 +42,7 @@ export async function executeHostedGeneration(input: HostedRequest): Promise<Hos
 export async function hostedImages(config: AiConfig, prompt: string, references: ReferenceImage[] = [], signal?: AbortSignal) {
     const quality = config.quality?.trim();
     const size = config.size?.trim();
-    const images = await Promise.all(references.map((reference) => imageToDataUrl(reference)));
+    const images = await Promise.all(references.map(async (reference) => compactReferenceImage(await imageToDataUrl(reference))));
     const output = await executeHostedGeneration({
         capability: "image",
         preferredModel: config.model || config.imageModel,
@@ -84,7 +85,7 @@ export async function hostedAudio(config: AiConfig, prompt: string, signal?: Abo
 }
 
 export async function hostedVideo(config: AiConfig, prompt: string, references: ReferenceImage[] = [], signal?: AbortSignal) {
-    const images = await Promise.all(references.map((reference) => imageToDataUrl(reference)));
+    const images = await Promise.all(references.map(async (reference) => compactReferenceImage(await imageToDataUrl(reference))));
     const output = await executeHostedGeneration({
         capability: "video",
         preferredModel: config.model || config.videoModel,
@@ -107,7 +108,7 @@ export async function hostedVideo(config: AiConfig, prompt: string, references: 
 export async function createHostedVideoTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], signal?: AbortSignal) {
     const resolved = await resolvePublishedModel("video", config.model || config.videoModel, signal);
     const model = resolved.model;
-    const images = await Promise.all(references.map((reference) => imageToDataUrl(reference)));
+    const images = await Promise.all(references.map(async (reference) => compactReferenceImage(await imageToDataUrl(reference))));
     const parameters = { durationSeconds: Number(config.videoSeconds) || 6, resolution: config.vquality, outputMode: config.outputMode || "native" };
     const quote = await hostedApi.quote(model.id, "video", parameters, 1, signal);
     const task = await hostedApi.createGenerationTask({
@@ -210,4 +211,24 @@ function readUrl(output: HostedOutput) {
 function base64ToBlob(value: string, mimeType: string) {
     const bytes = Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
     return new Blob([bytes], { type: mimeType });
+}
+
+async function compactReferenceImage(dataUrl: string) {
+    if (!dataUrl || !dataUrl.startsWith("data:image/") || getDataUrlByteSize(dataUrl) <= 1_500_000) return dataUrl;
+    const image = new Image();
+    image.src = dataUrl;
+    await new Promise<void>((resolve) => {
+        image.onload = () => resolve();
+        image.onerror = () => resolve();
+    });
+    if (!image.naturalWidth || !image.naturalHeight) return dataUrl;
+    const scale = Math.min(1, 2048 / Math.max(image.naturalWidth, image.naturalHeight));
+    if (scale === 1) return dataUrl;
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return dataUrl;
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.82);
 }
