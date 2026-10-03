@@ -20,3 +20,12 @@ func TestDecodeOperationResult(t *testing.T) {
 		t.Fatalf("processing order error = %v", err)
 	}
 }
+
+func TestEffectiveCustomChannelLimitDefaultsToOne(t *testing.T) {
+	if got := effectiveCustomChannelLimit(model.SubscriptionPlan{}); got != 1 {
+		t.Fatalf("default custom channel limit = %d, want 1", got)
+	}
+	if got := effectiveCustomChannelLimit(model.SubscriptionPlan{CustomChannelLimit: 3}); got != 3 {
+		t.Fatalf("configured custom channel limit = %d, want 3", got)
+	}
+}

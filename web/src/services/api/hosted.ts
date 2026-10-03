@@ -1,5 +1,5 @@
 export type QuotaSummary = { balance: number; reserved: number; available: number };
-export type QuotaLedger = { id: number; delta: number; balanceAfter: number; source: string; businessType: string; createdAt: string };
+export type QuotaLedger = { id: number; delta: number; balanceAfter: number; source: string; businessType: string; reason?: string; createdAt: string };
 export type UserUsageLog = { id: number; taskId: string; project: string; capability: string; billingUnit: string; billedUnits: number; status: "running" | "succeeded" | "failed"; durationMs: number; totalTokens: number; chargedQuota: number; errorMessage?: string; startedAt: string; completedAt?: string };
 export type UserUsageResult = { items: UserUsageLog[]; total: number; page: number; pageSize: number; stats: { total: number; succeeded: number; failed: number; running: number; chargedQuota: number; totalTokens: number; averageDurationMs: number } };
 export type RechargeProduct = {

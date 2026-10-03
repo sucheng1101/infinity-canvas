@@ -95,6 +95,32 @@ func (s *Service) Entitlement(userID uint) (EntitlementView, error) {
 			expires = row.ExpiresAt
 		}
 	}
+	// Older subscriptions may have been purchased before the entitlement row
+	// was created. Treat the active subscription itself as the source of the
+	// default custom-channel allowance, while avoiding double counting newer
+	// purchases that already have a matching entitlement row.
+	var subscription model.UserSubscription
+	if err := s.DB.Where("user_id = ? AND status = ? AND expires_at > ?", userID, model.SubscriptionActive, now).Order("expires_at DESC").First(&subscription).Error; err == nil {
+		var plan model.SubscriptionPlan
+		if err := s.DB.First(&plan, subscription.PlanID).Error; err == nil {
+			channelLimit := plan.CustomChannelLimit
+			if channelLimit <= 0 {
+				channelLimit = 1
+			}
+			var matching int64
+			if err := s.DB.Model(&model.UserChannelEntitlement{}).Where("user_id = ? AND source = ? AND status = ? AND expires_at = ?", userID, "subscription", model.UserChannelActive, subscription.ExpiresAt).Count(&matching).Error; err != nil {
+				return EntitlementView{}, err
+			}
+			if matching == 0 {
+				limit += channelLimit
+				if expires == nil || subscription.ExpiresAt.After(*expires) {
+					expires = &subscription.ExpiresAt
+				}
+			}
+		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return EntitlementView{}, err
+	}
 	var used int64
 	if err := s.DB.Model(&model.UserChannel{}).Where("user_id = ? AND status = ?", userID, model.UserChannelActive).Count(&used).Error; err != nil {
 		return EntitlementView{}, err
@@ -237,14 +263,8 @@ func (s *Service) Resolve(userID, id uint, modelName, capability string) (Route,
 }
 
 func (s *Service) hasActiveEntitlement(userID uint) bool {
-	if userID == 0 {
-		return false
-	}
-	var count int64
-	now := time.Now().UTC()
-	return s.DB.Model(&model.UserChannelEntitlement{}).
-		Where("user_id = ? AND status = ? AND (expires_at IS NULL OR expires_at > ?)", userID, model.UserChannelActive, now).
-		Count(&count).Error == nil && count > 0
+	entitlement, err := s.Entitlement(userID)
+	return err == nil && entitlement.Enabled
 }
 
 type preparedInput struct {

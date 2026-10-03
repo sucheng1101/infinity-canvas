@@ -37,10 +37,10 @@ type PlanInput struct {
 	Cycle        string       `json:"cycle"`
 	PriceQuota   int64        `json:"priceQuota"`
 	DurationDays int          `json:"durationDays"`
-	CustomChannelLimit int    `json:"customChannelLimit"`
-	Status       string       `json:"status"`
-	SortOrder    int          `json:"sortOrder"`
-	Quotas       []QuotaInput `json:"quotas"`
+	CustomChannelLimit int          `json:"customChannelLimit"`
+	Status             string       `json:"status"`
+	SortOrder          int          `json:"sortOrder"`
+	Quotas             []QuotaInput `json:"quotas"`
 }
 
 type QuotaView struct {
@@ -241,9 +241,9 @@ func (s *Service) Purchase(userID, planID uint, idempotencyKey string) (Subscrip
 		if err := tx.Create(&row).Error; err != nil {
 			return err
 		}
-		if plan.CustomChannelEnabled && plan.CustomChannelLimit > 0 {
+		if channelLimit := effectiveCustomChannelLimit(plan); channelLimit > 0 {
 			expiresAt := row.ExpiresAt
-			if err := tx.Create(&model.UserChannelEntitlement{UserID: userID, SourceOrderID: &order.ID, Source: "subscription", ChannelLimit: plan.CustomChannelLimit, ExpiresAt: &expiresAt, Status: model.UserChannelActive}).Error; err != nil {
+			if err := tx.Create(&model.UserChannelEntitlement{UserID: userID, SourceOrderID: &order.ID, Source: "subscription", ChannelLimit: channelLimit, ExpiresAt: &expiresAt, Status: model.UserChannelActive}).Error; err != nil {
 				return err
 			}
 		}
@@ -270,6 +270,15 @@ func (s *Service) Purchase(userID, planID uint, idempotencyKey string) (Subscrip
 		return SubscriptionView{}, businessErr
 	}
 	return result, nil
+}
+
+func effectiveCustomChannelLimit(plan model.SubscriptionPlan) int {
+	if plan.CustomChannelLimit > 0 {
+		return plan.CustomChannelLimit
+	}
+	// Every active subscription includes at least one custom channel. This
+	// also repairs plans created before the entitlement flag became implicit.
+	return 1
 }
 
 func (s *Service) ConsumeTx(tx *gorm.DB, userID, modelID uint, capability string, units int64) (bool, uint, error) {

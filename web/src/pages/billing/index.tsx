@@ -6,6 +6,16 @@ import { hostedApi, type InvitationSelf, type QuotaLedger, type QuotaSummary, ty
 
 const formatQuota = (value: number) => new Intl.NumberFormat("zh-CN").format(value);
 const formatMoney = (fen: number) => `¥${(fen / 100).toFixed(2)}`;
+const ledgerLabel = (item: QuotaLedger) => {
+    if (item.reason?.trim()) return item.reason;
+    if (item.businessType === "generation_settlement") return "生成扣费";
+    if (item.businessType === "subscription_purchase") return "订阅购买";
+    if (item.businessType === "custom_channel_unlock") return "自定义渠道解锁";
+    if (item.source === "recharge") return "充值到账";
+    if (item.source === "invitation") return "邀请奖励";
+    if (item.source === "admin") return "管理员调整";
+    return "积分变动";
+};
 
 function submitCheckout(url: string, params: Record<string, string>) {
     const form = document.createElement("form");
@@ -183,7 +193,7 @@ export default function BillingPage() {
                                 <List
                                     dataSource={ledger}
                                     locale={{ emptyText: "暂无积分流水" }}
-                                    renderItem={(item) => <List.Item><div><div className="text-sm font-medium">{item.source === "recharge" ? "充值到账" : item.source === "invitation" ? "邀请奖励" : "积分调整"}</div><div className="mt-1 text-xs text-stone-400">{new Date(item.createdAt).toLocaleString("zh-CN")}</div></div><div className={item.delta >= 0 ? "font-semibold text-emerald-600" : "font-semibold text-red-500"}>{item.delta >= 0 ? "+" : ""}{formatQuota(item.delta)}</div></List.Item>}
+                                    renderItem={(item) => <List.Item><div><div className="text-sm font-medium">{ledgerLabel(item)}</div><div className="mt-1 text-xs text-stone-400">{new Date(item.createdAt).toLocaleString("zh-CN")} · {item.businessType}</div></div><div className={item.delta >= 0 ? "font-semibold text-emerald-600" : "font-semibold text-red-500"}>{item.delta >= 0 ? "+" : ""}{formatQuota(item.delta)}</div></List.Item>}
                                 />
                             </Card>
                         </section>
