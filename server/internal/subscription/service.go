@@ -37,6 +37,7 @@ type PlanInput struct {
 	Cycle        string       `json:"cycle"`
 	PriceQuota   int64        `json:"priceQuota"`
 	DurationDays int          `json:"durationDays"`
+	CustomChannelLimit int    `json:"customChannelLimit"`
 	Status       string       `json:"status"`
 	SortOrder    int          `json:"sortOrder"`
 	Quotas       []QuotaInput `json:"quotas"`
@@ -96,6 +97,10 @@ func (s *Service) UpsertPlan(input PlanInput, id uint) (PlanView, error) {
 	if name == "" || input.PriceQuota < 0 || input.DurationDays <= 0 || !validCycle(input.Cycle) {
 		return PlanView{}, ErrInvalidPlan
 	}
+	customChannelLimit := input.CustomChannelLimit
+	if customChannelLimit <= 0 {
+		customChannelLimit = 1
+	}
 	status := input.Status
 	if status == "" {
 		status = model.SubscriptionPlanActive
@@ -114,7 +119,7 @@ func (s *Service) UpsertPlan(input PlanInput, id uint) (PlanView, error) {
 			if err := tx.First(&plan, id).Error; err != nil {
 				return ErrPlanNotFound
 			}
-			plan.Name, plan.Cycle, plan.PriceQuota, plan.DurationDays, plan.Status, plan.SortOrder = name, input.Cycle, input.PriceQuota, input.DurationDays, status, input.SortOrder
+			plan.Name, plan.Cycle, plan.PriceQuota, plan.DurationDays, plan.CustomChannelEnabled, plan.CustomChannelLimit, plan.Status, plan.SortOrder = name, input.Cycle, input.PriceQuota, input.DurationDays, true, customChannelLimit, status, input.SortOrder
 			if err := tx.Save(&plan).Error; err != nil {
 				return err
 			}
@@ -122,7 +127,7 @@ func (s *Service) UpsertPlan(input PlanInput, id uint) (PlanView, error) {
 				return err
 			}
 		} else {
-			plan = model.SubscriptionPlan{Name: name, Cycle: input.Cycle, PriceQuota: input.PriceQuota, DurationDays: input.DurationDays, Status: status, SortOrder: input.SortOrder}
+			plan = model.SubscriptionPlan{Name: name, Cycle: input.Cycle, PriceQuota: input.PriceQuota, DurationDays: input.DurationDays, CustomChannelEnabled: true, CustomChannelLimit: customChannelLimit, Status: status, SortOrder: input.SortOrder}
 			if err := tx.Create(&plan).Error; err != nil {
 				return err
 			}
@@ -235,6 +240,12 @@ func (s *Service) Purchase(userID, planID uint, idempotencyKey string) (Subscrip
 		row := model.UserSubscription{UserID: userID, PlanID: plan.ID, Status: model.SubscriptionActive, StartsAt: start, ExpiresAt: start.AddDate(0, 0, plan.DurationDays)}
 		if err := tx.Create(&row).Error; err != nil {
 			return err
+		}
+		if plan.CustomChannelEnabled && plan.CustomChannelLimit > 0 {
+			expiresAt := row.ExpiresAt
+			if err := tx.Create(&model.UserChannelEntitlement{UserID: userID, SourceOrderID: &order.ID, Source: "subscription", ChannelLimit: plan.CustomChannelLimit, ExpiresAt: &expiresAt, Status: model.UserChannelActive}).Error; err != nil {
+				return err
+			}
 		}
 		view, err := s.subscriptionViewTx(tx, row, plan)
 		if err != nil {

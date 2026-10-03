@@ -2,13 +2,14 @@ import { App, Button, Card, Space, Switch, Table, Tag, Tooltip } from "antd";
 import { Pencil, Plus, RadioTower, Route } from "lucide-react";
 import { useState } from "react";
 
-import { adminApi, type AdminChannel, type AdminRoute, type ChannelTestResult } from "@/services/api/admin";
+import { adminApi, type AdminChannel, type AdminModelCostPricing, type AdminRoute, type ChannelTestResult } from "@/services/api/admin";
 
 const capabilityLabels: Record<string, string> = { image: "生图", video: "视频", text: "文本", audio: "音频" };
 
 type Props = {
     channels: AdminChannel[];
     routes: AdminRoute[];
+    modelCosts: AdminModelCostPricing[];
     loading: boolean;
     onAddChannel: () => void;
     onEditChannel: (channel: AdminChannel) => void;
@@ -19,7 +20,7 @@ type Props = {
     onDeleteRoute: (route: AdminRoute) => Promise<void>;
 };
 
-export function ChannelManagement({ channels, routes, loading, onAddChannel, onEditChannel, onToggleChannel, onAddRoute, onEditRoute, onToggleRoute, onDeleteRoute }: Props) {
+export function ChannelManagement({ channels, routes, modelCosts, loading, onAddChannel, onEditChannel, onToggleChannel, onAddRoute, onEditRoute, onToggleRoute, onDeleteRoute }: Props) {
     const { message } = App.useApp();
     const [testing, setTesting] = useState<number>();
     const [results, setResults] = useState<Record<number, ChannelTestResult>>({});
@@ -70,6 +71,7 @@ export function ChannelManagement({ channels, routes, loading, onAddChannel, onE
                                     { title: "优先级", dataIndex: "priority", width: 90 },
                                     { title: "权重", dataIndex: "weight", width: 90 },
                                     { title: "同级比例", dataIndex: "weightPercent", width: 100, render: (value: number) => `${value.toFixed(1)}%` },
+                                    { title: "渠道成本", width: 120, render: (_, route) => { const cost = modelCosts.find((item) => item.channelId === route.channelId && item.publishedModelId === route.publishedModelId && item.upstreamModel === route.upstreamModel && item.status === "active"); return cost ? `${Number(cost.costPerUnit || 0).toLocaleString()} 积分 / ${cost.billingUnit}` : <span className="text-stone-400">未设置</span>; } },
                                     { title: "可用性", width: 110, render: (_, route) => <Tag color={route.available ? "green" : "orange"}>{route.available ? "可调度" : "未就绪"}</Tag> },
                                     {
                                         title: "启用",

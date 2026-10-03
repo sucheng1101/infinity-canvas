@@ -170,7 +170,7 @@ export type AdminUsageLog = {
 
 export type AdminUserDetail = { user: AdminUser; ledger: Array<Record<string, unknown>>; usage: AdminUsageLog[] };
 export type AdminSubscriptionQuota = { publishedModelId: number; imageCount: number; videoSeconds: number; textTokens: number; modelName?: string };
-export type AdminSubscriptionPlan = { id: number; name: string; cycle: string; priceQuota: number; durationDays: number; status: string; sortOrder: number; quotas: AdminSubscriptionQuota[] };
+export type AdminSubscriptionPlan = { id: number; name: string; cycle: string; priceQuota: number; durationDays: number; customChannelEnabled: boolean; customChannelLimit: number; status: string; sortOrder: number; quotas: AdminSubscriptionQuota[] };
 export type AdminChannelUnlockPlan = { id: number; name: string; priceQuota: number; durationDays: number; channelLimit: number; status: string };
 export type AdminModelCostPricing = { id: number; publishedModelId: number; channelId: number; upstreamModel: string; billingUnit: string; costPerUnit: number; sellPerUnit: number; formula?: { type?: string; unitAmount?: number; variants?: Array<{ key: string; label?: string; unitAmount?: number; sellPerUnit?: number; costPerUnit?: number }> }; profitMargin: number; status: string };
 export type AdminUsageResult = {

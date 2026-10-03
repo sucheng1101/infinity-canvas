@@ -3,7 +3,7 @@ import { Activity, Boxes, CircleDollarSign, LayoutDashboard, Mail, RefreshCw, Ro
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
-import { adminApi, type AdminChannel, type AdminModelCostPricing, type AdminRoute, type EmailSettings, type InvitationSettings, type PaymentSettings, type PricingVersion } from "@/services/api/admin";
+import { adminApi, type AdminChannel, type AdminModelCostPricing, type AdminRoute, type AdminSubscriptionPlan, type EmailSettings, type InvitationSettings, type PaymentSettings, type PricingVersion } from "@/services/api/admin";
 import type { PublishedModel, RechargeProduct } from "@/services/api/hosted";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { AdminChannelEditorDrawer } from "./components/channel-editor-drawer";
@@ -126,10 +126,11 @@ function RouteEditorFields({ channels, models }: { channels: AdminChannel[]; mod
 export default function AdminPage() {
     const user = useAuthStore((state) => state.user);
     const navigate = useNavigate();
-    const { message } = App.useApp();
+    const { message, modal: modalApi } = App.useApp();
     const [models, setModels] = useState<PublishedModel[]>([]);
     const [channels, setChannels] = useState<AdminChannel[]>([]);
     const [modelCosts, setModelCosts] = useState<AdminModelCostPricing[]>([]);
+    const [subscriptionPlans, setSubscriptionPlans] = useState<AdminSubscriptionPlan[]>([]);
     const [routes, setRoutes] = useState<AdminRoute[]>([]);
     const [pricing, setPricing] = useState<PricingVersion[]>([]);
     const [products, setProducts] = useState<RechargeProduct[]>([]);
@@ -146,7 +147,7 @@ export default function AdminPage() {
         setLoading(true);
         try {
             const modelResult = await adminApi.models();
-            const [channelResult, routeResult, pricingResult, productResult, invitationResult, paymentResult, emailResult, costResult] = await Promise.all([
+            const [channelResult, routeResult, pricingResult, productResult, invitationResult, paymentResult, emailResult, costResult, subscriptionResult] = await Promise.all([
                 adminApi.channels(),
                 adminApi.routes(),
                 adminApi.pricing(),
@@ -155,6 +156,7 @@ export default function AdminPage() {
                 adminApi.payment(),
                 adminApi.email(),
                 adminApi.modelCostPricing(),
+                adminApi.subscriptionPlans(),
             ]);
             setModels(modelResult.items);
             setChannels(channelResult.items);
@@ -165,6 +167,7 @@ export default function AdminPage() {
             setPayment(paymentResult);
             setEmail(emailResult);
             setModelCosts(costResult.items);
+            setSubscriptionPlans(subscriptionResult.items);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "管理数据读取失败");
         } finally {
@@ -240,12 +243,19 @@ export default function AdminPage() {
         }
     };
 
-    const saveChannel = async (values: Parameters<typeof adminApi.createChannel>[0], costs: Array<{ id?: number; publishedModelId: number; upstreamModel: string; billingUnit: string; costPerUnit: number; sellPerUnit: number; status: "active" | "hidden" }>) => {
+    const saveChannel = async (values: Parameters<typeof adminApi.createChannel>[0], costs: Array<{ id?: number; publishedModelId: number; upstreamModel: string; billingUnit: string; costPerUnit: number; sellPerUnit: number; formula?: { variants?: Array<{ key?: string; unitAmount?: number; sellPerUnit?: number }> }; status: "active" | "hidden" }>) => {
         try {
+            const lossMaking = costs.filter((item) => item.sellPerUnit < item.costPerUnit || item.formula?.variants?.some((variant) => Number(variant.sellPerUnit || 0) > 0 && Number(variant.sellPerUnit || 0) < Number(variant.unitAmount || 0)));
+            let confirmWarning = false;
+            if (lossMaking.length) {
+                const confirmed = await new Promise<boolean>((resolve) => modalApi.confirm({ title: "渠道成本高于按次售价", content: `有 ${lossMaking.length} 个渠道模型的成本高于当前按次售价，保存后会产生负利润。仍要保存吗？`, okText: "确认保存", cancelText: "返回修改", onOk: () => resolve(true), onCancel: () => resolve(false) }));
+                if (!confirmed) return;
+                confirmWarning = true;
+            }
             const saved = channelEditor ? await adminApi.updateChannel(channelEditor.id, values) : await adminApi.createChannel(values);
             for (const item of costs) {
                 const existing = modelCosts.find((cost) => cost.channelId === saved.id && cost.upstreamModel === item.upstreamModel);
-                await adminApi.saveModelCostPricing({ ...item, channelId: saved.id, confirmWarning: true }, item.id || existing?.id);
+                await adminApi.saveModelCostPricing({ ...item, channelId: saved.id, confirmWarning }, item.id || existing?.id);
             }
             const submittedModels = new Set(costs.map((item) => item.upstreamModel));
             for (const existing of modelCosts.filter((item) => item.channelId === saved.id && !submittedModels.has(item.upstreamModel) && item.status === "active")) {
@@ -512,7 +522,7 @@ export default function AdminPage() {
                                         { key: "models", label: "模型目录", icon: Boxes },
                                         { key: "channels", label: "渠道管理", icon: Route },
                                         { key: "pricing", label: "定价与充值", icon: CircleDollarSign },
-                                        { key: "subscriptions", label: "订阅与成本", icon: CircleDollarSign },
+                                        { key: "subscriptions", label: "订阅管理", icon: CircleDollarSign },
                                     ].map(({ key, label, icon: Icon }) => (
                                         <Button key={key} type={activeSection === key ? "primary" : "text"} block className="!justify-start" icon={<Icon className="size-4" />} onClick={() => setActiveSection(key)}>
                                             {label}
@@ -600,10 +610,31 @@ export default function AdminPage() {
                                                 },
                                             },
                                             {
-                                                title: "定价",
+                                                title: "按次售价",
                                                 render: (_, model) => {
                                                     const active = pricing.find((item) => item.publishedModelId === model.id && item.status === "active");
-                                                    return active ? <Tag color="success">{Number(active.formula.unitAmount || 0)} 积分</Tag> : <Tag color="warning">未启用</Tag>;
+                                                    if (!active) return <Tag color="warning">未启用</Tag>;
+                                                    const variants = Array.isArray(active.formula.variants) ? active.formula.variants as Array<{ key?: string; unitAmount?: number }> : [];
+                                                    return <div><Tag color="success">{Number(active.formula.unitAmount || 0).toLocaleString()} 积分</Tag>{variants.length ? <div className="mt-1 flex max-w-56 flex-wrap gap-1">{variants.slice(0, 3).map((variant) => <Tag key={variant.key}>{variant.key}: {Number(variant.unitAmount || 0).toLocaleString()}</Tag>)}{variants.length > 3 ? <Tag>+{variants.length - 3}</Tag> : null}</div> : null}</div>;
+                                                },
+                                            },
+                                            {
+                                                title: "渠道成本 / 利润率",
+                                                render: (_, model) => {
+                                                    const costs = modelCosts.filter((item) => item.publishedModelId === model.id && item.status === "active");
+                                                    const active = pricing.find((item) => item.publishedModelId === model.id && item.status === "active");
+                                                    if (!costs.length || !active) return <span className="text-stone-400">待配置</span>;
+                                                    const minCost = Math.min(...costs.map((item) => Number(item.costPerUnit || 0)));
+                                                    const sell = Number(active.formula.unitAmount || 0);
+                                                    const margin = sell > 0 ? ((sell - minCost) / sell) * 100 : 0;
+                                                    return <div><div>{minCost.toLocaleString()} 积分</div><div className={margin < 0 ? "text-red-500" : "text-emerald-600"}>{margin.toFixed(1)}%</div></div>;
+                                                },
+                                            },
+                                            {
+                                                title: "订阅权益",
+                                                render: (_, model) => {
+                                                    const entries = subscriptionPlans.filter((plan) => plan.status === "active" && plan.quotas.some((quota) => quota.publishedModelId === model.id));
+                                                    return entries.length ? <Space size={[4, 4]} wrap>{entries.slice(0, 3).map((plan) => { const quota = plan.quotas.find((item) => item.publishedModelId === model.id); const allowance = model.capability === "image" ? `图${quota?.imageCount || 0}` : model.capability === "video" ? `秒${quota?.videoSeconds || 0}` : model.capability === "text" ? `Token${quota?.textTokens || 0}` : "按次"; return <Tag key={plan.id} color="blue">{plan.name} · {plan.priceQuota.toLocaleString()} 积分 · {allowance}</Tag>; })}{entries.length > 3 ? <Tag>+{entries.length - 3}</Tag> : null}</Space> : <span className="text-stone-400">未加入订阅</span>;
                                                 },
                                             },
                                             {
@@ -636,7 +667,7 @@ export default function AdminPage() {
                         {
                             key: "channels",
                             label: "渠道管理",
-                            children: <ChannelManagement channels={channels} routes={routes} loading={loading} onAddChannel={() => setChannelEditor(null)} onEditChannel={setChannelEditor} onToggleChannel={toggleChannel} onAddRoute={() => setModal({ type: "route" })} onEditRoute={(route) => setModal({ type: "route", item: route })} onToggleRoute={toggleRoute} onDeleteRoute={(route) => hide("route", route.id)} />,
+                            children: <ChannelManagement channels={channels} routes={routes} modelCosts={modelCosts} loading={loading} onAddChannel={() => setChannelEditor(null)} onEditChannel={setChannelEditor} onToggleChannel={toggleChannel} onAddRoute={() => setModal({ type: "route" })} onEditRoute={(route) => setModal({ type: "route", item: route })} onToggleRoute={toggleRoute} onDeleteRoute={(route) => hide("route", route.id)} />,
                         },
                         {
                             key: "pricing",
@@ -645,8 +676,8 @@ export default function AdminPage() {
                         },
                         {
                             key: "subscriptions",
-                            label: "订阅与成本",
-                            children: <SubscriptionManagement models={models} channels={channels} />,
+                            label: "订阅管理",
+                            children: <SubscriptionManagement models={models} />,
                         },
                         {
                             key: "account-payment",

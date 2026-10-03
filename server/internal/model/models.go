@@ -212,6 +212,8 @@ type SubscriptionPlan struct {
 	Cycle        string    `gorm:"size:32;index;not null" json:"cycle"`
 	PriceQuota   int64     `gorm:"not null" json:"priceQuota"`
 	DurationDays int       `gorm:"not null" json:"durationDays"`
+	CustomChannelEnabled bool `gorm:"not null;default:true" json:"customChannelEnabled"`
+	CustomChannelLimit int `gorm:"not null;default:1" json:"customChannelLimit"`
 	Status       string    `gorm:"size:32;index;not null" json:"status"`
 	SortOrder    int       `gorm:"not null;default:0" json:"sortOrder"`
 	CreatedAt    time.Time `json:"createdAt"`
