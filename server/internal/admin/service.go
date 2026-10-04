@@ -449,13 +449,27 @@ type AuditListResult struct {
 }
 
 type FinanceSummary struct {
-	RechargeOrders int64 `json:"rechargeOrders"`
-	RechargeFen    int64 `json:"rechargeFen"`
-	UsageCount     int64 `json:"usageCount"`
-	RevenueQuota   int64 `json:"revenueQuota"`
-	CostQuota      int64 `json:"costQuota"`
-	ProfitQuota    int64 `json:"profitQuota"`
-	FailedCount    int64 `json:"failedCount"`
+	RechargeOrders   int64               `json:"rechargeOrders"`
+	RechargeFen      int64               `json:"rechargeFen"`
+	UsageCount       int64               `json:"usageCount"`
+	RevenueQuota     int64               `json:"revenueQuota"`
+	CostQuota        int64               `json:"costQuota"`
+	ProfitQuota      int64               `json:"profitQuota"`
+	FailedCount      int64               `json:"failedCount"`
+	TodayRechargeFen int64               `json:"todayRechargeFen"`
+	TodayRevenue     int64               `json:"todayRevenueQuota"`
+	TodayCost        int64               `json:"todayCostQuota"`
+	TodayProfit      int64               `json:"todayProfitQuota"`
+	Daily            []FinanceDailyPoint `json:"daily"`
+}
+
+type FinanceDailyPoint struct {
+	Date         string `json:"date"`
+	RechargeFen  int64  `json:"rechargeFen"`
+	UsageCount   int64  `json:"usageCount"`
+	RevenueQuota int64  `json:"revenueQuota"`
+	CostQuota    int64  `json:"costQuota"`
+	ProfitQuota  int64  `json:"profitQuota"`
 }
 
 func (s *Service) ListOrders(filter OrderFilter) (OrderListResult, error) {
@@ -651,6 +665,64 @@ func (s *Service) FinanceSummary(from, to time.Time) (FinanceSummary, error) {
 	}
 	if err := query.Where("status = ?", model.UsageLogFailed).Count(&summary.FailedCount).Error; err != nil {
 		return summary, err
+	}
+
+	// Keep the overview chart database-agnostic by aggregating the already
+	// persisted ledger rows in Go instead of relying on vendor-specific DATE()
+	// functions. The requested range is normally a few days, so this stays
+	// small while preserving exact revenue/cost/profit snapshots.
+	fromUTC, toUTC := from.UTC(), to.UTC()
+	daily := make(map[string]*FinanceDailyPoint)
+	firstDay := time.Date(fromUTC.Year(), fromUTC.Month(), fromUTC.Day(), 0, 0, 0, 0, time.UTC)
+	lastDay := time.Date(toUTC.Year(), toUTC.Month(), toUTC.Day(), 0, 0, 0, 0, time.UTC)
+	if toUTC.Equal(lastDay) {
+		lastDay = lastDay.AddDate(0, 0, -1)
+	}
+	for day := firstDay; !day.After(lastDay); day = day.AddDate(0, 0, 1) {
+		key := day.Format("2006-01-02")
+		daily[key] = &FinanceDailyPoint{Date: key}
+	}
+	var usageRows []model.UsageLog
+	if err := s.DB.Where("created_at >= ? AND created_at < ?", from, to).Find(&usageRows).Error; err != nil {
+		return summary, err
+	}
+	for _, row := range usageRows {
+		key := row.CreatedAt.UTC().Format("2006-01-02")
+		point := daily[key]
+		if point == nil {
+			point = &FinanceDailyPoint{Date: key}
+			daily[key] = point
+		}
+		point.UsageCount++
+		point.RevenueQuota += row.RevenueTotal
+		point.CostQuota += row.CostTotal
+		point.ProfitQuota += row.ProfitTotal
+	}
+	var rechargeRows []model.TopupOrder
+	if err := s.DB.Where("status = ? AND created_at >= ? AND created_at < ?", model.TopupOrderQuotaCredited, from, to).Find(&rechargeRows).Error; err != nil {
+		return summary, err
+	}
+	for _, row := range rechargeRows {
+		key := row.CreatedAt.UTC().Format("2006-01-02")
+		point := daily[key]
+		if point == nil {
+			point = &FinanceDailyPoint{Date: key}
+			daily[key] = point
+		}
+		point.RechargeFen += row.PayAmountFen
+	}
+	for day := firstDay; !day.After(lastDay); day = day.AddDate(0, 0, 1) {
+		key := day.Format("2006-01-02")
+		if point := daily[key]; point != nil {
+			summary.Daily = append(summary.Daily, *point)
+		}
+	}
+	today := daily[time.Now().UTC().Format("2006-01-02")]
+	if today != nil {
+		summary.TodayRechargeFen = today.RechargeFen
+		summary.TodayRevenue = today.RevenueQuota
+		summary.TodayCost = today.CostQuota
+		summary.TodayProfit = today.ProfitQuota
 	}
 	return summary, nil
 }

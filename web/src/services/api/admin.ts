@@ -221,7 +221,8 @@ export type AdminGeneration = {
     createdAt: string;
 };
 export type AdminAuditLog = { id: number; operatorId?: number; operatorName?: string; action: string; resourceType: string; resourceId: string; requestId?: string; createdAt: string };
-export type AdminFinanceSummary = { rechargeOrders: number; rechargeFen: number; usageCount: number; revenueQuota: number; costQuota: number; profitQuota: number; failedCount: number };
+export type AdminFinanceDailyPoint = { date: string; rechargeFen: number; usageCount: number; revenueQuota: number; costQuota: number; profitQuota: number };
+export type AdminFinanceSummary = { rechargeOrders: number; rechargeFen: number; usageCount: number; revenueQuota: number; costQuota: number; profitQuota: number; failedCount: number; todayRechargeFen: number; todayRevenueQuota: number; todayCostQuota: number; todayProfitQuota: number; daily: AdminFinanceDailyPoint[] };
 
 type Envelope<T> = { data: T; requestId?: string; error?: { message?: string } };
 const apiBase = (import.meta.env.VITE_HOSTED_API_BASE || "/api/v1").replace(/\/$/, "");

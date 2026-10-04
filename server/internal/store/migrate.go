@@ -176,6 +176,16 @@ func migrate(db *gorm.DB) error {
 				return nil
 			},
 		},
+		{
+			version: "20261004_m15_subscription_entitlement_fields",
+			apply: func(tx *gorm.DB) error {
+				// The subscription tables may have been created by m9 before the
+				// custom-channel entitlement columns were introduced. Re-run
+				// AutoMigrate under a new version so existing installations can
+				// update plans instead of failing on an unknown column.
+				return tx.AutoMigrate(&model.SubscriptionPlan{}, &model.SubscriptionPlanQuota{})
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64

@@ -29,9 +29,47 @@ export function SubscriptionManagement({ models }: Props) {
 
     useEffect(() => { void load(); }, []);
 
+    const planPayload = (values: Record<string, unknown>) => {
+        const source = Array.isArray(values.quotas) ? values.quotas as Array<Record<string, unknown>> : [];
+        const quotas: Array<Record<string, unknown>> = [];
+        const indexes = new Map<number, number>();
+        for (const item of source) {
+            const publishedModelId = Number(item.publishedModelId || 0);
+            if (!publishedModelId) continue;
+            const normalized = {
+                publishedModelId,
+                imageCount: Math.max(0, Number(item.imageCount || 0)),
+                videoSeconds: Math.max(0, Number(item.videoSeconds || 0)),
+                textTokens: Math.max(0, Number(item.textTokens || 0)),
+            };
+            const existing = indexes.get(publishedModelId);
+            if (existing === undefined) {
+                indexes.set(publishedModelId, quotas.length);
+                quotas.push(normalized);
+            } else {
+                quotas[existing] = normalized;
+            }
+        }
+        return {
+            name: String(values.name || "").trim(),
+            cycle: String(values.cycle || "monthly"),
+            durationDays: Math.max(1, Number(values.durationDays || 0)),
+            priceQuota: Math.max(0, Number(values.priceQuota || 0)),
+            customChannelLimit: Math.max(1, Number(values.customChannelLimit || 1)),
+            sortOrder: Number(values.sortOrder || 0),
+            status: values.enabled === false ? "hidden" : "active",
+            quotas,
+        };
+    };
+
     const save = async (values: Record<string, unknown>) => {
         try {
-            await adminApi.saveSubscriptionPlan({ ...values, quotas: values.quotas || [], customChannelLimit: Number(values.customChannelLimit || 1), status: values.enabled ? "active" : "hidden" }, editor?.id);
+            const payload = planPayload(values);
+            if (!payload.name || !payload.cycle || payload.durationDays <= 0) {
+                message.error("请完整填写套餐名称、周期和有效天数");
+                return;
+            }
+            await adminApi.saveSubscriptionPlan(payload, editor?.id);
             setEditor(null);
             setCreating(false);
             await load();
@@ -51,7 +89,7 @@ export function SubscriptionManagement({ models }: Props) {
                 { title: "订阅售价", width: 130, render: (_: unknown, item: AdminSubscriptionPlan) => <Tag color="blue">{item.priceQuota.toLocaleString()} 积分</Tag> },
                 { title: "模型额度", render: (_: unknown, item: AdminSubscriptionPlan) => <Space size={[4, 4]} wrap>{item.quotas.map((quota) => <Tag key={quota.publishedModelId}>{models.find((model) => model.id === quota.publishedModelId)?.displayName || quota.modelName || quota.publishedModelId} · 图{quota.imageCount} / 秒{quota.videoSeconds} / Token{quota.textTokens}</Tag>)}</Space> },
                 { title: "自定义渠道", width: 150, render: (_: unknown, item: AdminSubscriptionPlan) => item.customChannelEnabled ? <Tag color="green">自动解锁 {item.customChannelLimit} 个</Tag> : <Tag>未开启</Tag> },
-                { title: "启用", width: 90, render: (_: unknown, item: AdminSubscriptionPlan) => <Switch checked={item.status === "active"} checkedChildren="开" unCheckedChildren="关" onChange={(enabled) => void adminApi.saveSubscriptionPlan({ ...item, customChannelLimit: item.customChannelLimit || 1, status: enabled ? "active" : "hidden" }, item.id).then(load)} /> },
+                { title: "启用", width: 90, render: (_: unknown, item: AdminSubscriptionPlan) => <Switch checked={item.status === "active"} checkedChildren="开" unCheckedChildren="关" onChange={(enabled) => { void adminApi.saveSubscriptionPlan(planPayload({ ...item, enabled }), item.id).then(load).catch((error) => message.error(error instanceof Error ? error.message : "订阅状态更新失败")); }} /> },
                 { title: "操作", width: 100, render: (_: unknown, item: AdminSubscriptionPlan) => <Button type="link" icon={<Pencil className="size-3.5" />} onClick={() => { setEditor(item); setCreating(false); }}>编辑</Button> },
             ]} />
             <div className="mt-3 text-xs text-stone-500">订阅售价独立于按次售价；购买订阅后会自动获得对应额度，并自动解锁自定义渠道。</div>

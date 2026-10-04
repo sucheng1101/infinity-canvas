@@ -1122,6 +1122,14 @@ func (a *Router) adminUpdateSubscriptionPlan(c *gin.Context) {
 		errorJSON(c, http.StatusNotFound, "SUBSCRIPTION_PLAN_NOT_FOUND", "订阅套餐不存在")
 		return
 	}
+	if errors.Is(err, subscription.ErrInvalidPlan) {
+		errorJSON(c, http.StatusBadRequest, "SUBSCRIPTION_PLAN_INVALID", "订阅套餐参数无效，请检查周期、有效天数和模型额度")
+		return
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		errorJSON(c, http.StatusBadRequest, "SUBSCRIPTION_PLAN_DUPLICATE_QUOTA", "订阅套餐中存在重复模型额度，请保留每个模型一条额度")
+		return
+	}
 	if err != nil {
 		errorJSON(c, http.StatusBadRequest, "SUBSCRIPTION_PLAN_UPDATE_FAILED", "订阅套餐更新失败")
 		return

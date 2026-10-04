@@ -33,10 +33,10 @@ type QuotaInput struct {
 }
 
 type PlanInput struct {
-	Name         string       `json:"name"`
-	Cycle        string       `json:"cycle"`
-	PriceQuota   int64        `json:"priceQuota"`
-	DurationDays int          `json:"durationDays"`
+	Name               string       `json:"name"`
+	Cycle              string       `json:"cycle"`
+	PriceQuota         int64        `json:"priceQuota"`
+	DurationDays       int          `json:"durationDays"`
 	CustomChannelLimit int          `json:"customChannelLimit"`
 	Status             string       `json:"status"`
 	SortOrder          int          `json:"sortOrder"`
@@ -108,10 +108,25 @@ func (s *Service) UpsertPlan(input PlanInput, id uint) (PlanView, error) {
 	if status != model.SubscriptionPlanActive && status != model.SubscriptionPlanHidden {
 		return PlanView{}, ErrInvalidPlan
 	}
+	// Form.List can leave an empty row behind and users may accidentally select
+	// the same model twice. Normalize those entries before replacing the
+	// composite unique-indexed quota rows so an otherwise valid save does not
+	// fail with a database constraint error.
+	quotas := make([]QuotaInput, 0, len(input.Quotas))
+	quotaIndexes := make(map[uint]int, len(input.Quotas))
 	for _, quota := range input.Quotas {
 		if quota.PublishedModelID == 0 || quota.ImageCount < 0 || quota.VideoSeconds < 0 || quota.TextTokens < 0 {
+			if quota.PublishedModelID == 0 && quota.ImageCount == 0 && quota.VideoSeconds == 0 && quota.TextTokens == 0 {
+				continue
+			}
 			return PlanView{}, ErrInvalidPlan
 		}
+		if index, exists := quotaIndexes[quota.PublishedModelID]; exists {
+			quotas[index] = quota
+			continue
+		}
+		quotaIndexes[quota.PublishedModelID] = len(quotas)
+		quotas = append(quotas, quota)
 	}
 	var plan model.SubscriptionPlan
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
@@ -132,7 +147,7 @@ func (s *Service) UpsertPlan(input PlanInput, id uint) (PlanView, error) {
 				return err
 			}
 		}
-		for _, quota := range input.Quotas {
+		for _, quota := range quotas {
 			if err := tx.Create(&model.SubscriptionPlanQuota{PlanID: plan.ID, PublishedModelID: quota.PublishedModelID, ImageCount: quota.ImageCount, VideoSeconds: quota.VideoSeconds, TextTokens: quota.TextTokens}).Error; err != nil {
 				return err
 			}
@@ -495,6 +510,8 @@ func (s *Service) finishFailedOrder(tx *gorm.DB, order *model.OperationOrder, co
 }
 
 func (s *Service) subscriptionViewTx(tx *gorm.DB, row model.UserSubscription, plan model.SubscriptionPlan) (SubscriptionView, error) {
+	plan.CustomChannelEnabled = true
+	plan.CustomChannelLimit = effectiveCustomChannelLimit(plan)
 	var quotas []model.SubscriptionPlanQuota
 	if err := tx.Where("plan_id = ?", plan.ID).Find(&quotas).Error; err != nil {
 		return SubscriptionView{}, err
@@ -527,6 +544,10 @@ func (s *Service) subscriptionViewTx(tx *gorm.DB, row model.UserSubscription, pl
 }
 
 func (s *Service) planView(plan model.SubscriptionPlan, withUsage bool) (PlanView, error) {
+	// Custom channels are an entitlement of every subscription. Keep the API
+	// response consistent for plans created before that rule was introduced.
+	plan.CustomChannelEnabled = true
+	plan.CustomChannelLimit = effectiveCustomChannelLimit(plan)
 	var rows []model.SubscriptionPlanQuota
 	if err := s.DB.Where("plan_id = ?", plan.ID).Find(&rows).Error; err != nil {
 		return PlanView{}, err

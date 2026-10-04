@@ -1,9 +1,10 @@
 import { App, Button, Card, Form, Input, InputNumber, Modal, Select, Space, Switch, Table, Tabs, Tag } from "antd";
 import { Activity, Boxes, CircleDollarSign, LayoutDashboard, Mail, RefreshCw, Route, Save, Settings2, SlidersHorizontal, Users, ScrollText, WalletCards } from "lucide-react";
+import dayjs from "dayjs";
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
-import { adminApi, type AdminChannel, type AdminModelCostPricing, type AdminRoute, type AdminSubscriptionPlan, type EmailSettings, type InvitationSettings, type PaymentSettings, type PricingVersion } from "@/services/api/admin";
+import { adminApi, type AdminChannel, type AdminFinanceSummary, type AdminModelCostPricing, type AdminRoute, type AdminSubscriptionPlan, type EmailSettings, type InvitationSettings, type PaymentSettings, type PricingVersion } from "@/services/api/admin";
 import type { PublishedModel, RechargeProduct } from "@/services/api/hosted";
 import { useAuthStore } from "@/stores/use-auth-store";
 import { AdminChannelEditorDrawer } from "./components/channel-editor-drawer";
@@ -79,6 +80,21 @@ function buildPricingFormula(values: Record<string, any>, model?: PublishedModel
     };
 }
 
+function FinanceTrend({ daily }: { daily: AdminFinanceSummary["daily"] }) {
+    const max = Math.max(1, ...daily.flatMap((item) => [item.revenueQuota, item.costQuota, Math.abs(item.profitQuota)]));
+    if (!daily.length) return <div className="flex h-44 items-center justify-center text-sm text-stone-400">暂无营收数据</div>;
+    return <div className="flex h-44 items-end gap-2 overflow-x-auto px-2 pt-4">
+        {daily.map((item) => <div key={item.date} className="flex min-w-16 flex-1 flex-col items-center gap-2">
+            <div className="flex h-32 w-full items-end justify-center gap-1">
+                <div className="w-3 rounded-t bg-emerald-500/80" style={{ height: `${Math.max(4, item.revenueQuota / max * 100)}%` }} title={`收入 ${item.revenueQuota.toLocaleString()} 积分`} />
+                <div className="w-3 rounded-t bg-amber-500/80" style={{ height: `${Math.max(4, item.costQuota / max * 100)}%` }} title={`成本 ${item.costQuota.toLocaleString()} 积分`} />
+                <div className={`w-3 rounded-t ${item.profitQuota >= 0 ? "bg-sky-500/80" : "bg-red-500/80"}`} style={{ height: `${Math.max(4, Math.abs(item.profitQuota) / max * 100)}%` }} title={`利润 ${item.profitQuota.toLocaleString()} 积分`} />
+            </div>
+            <span className="text-[11px] text-stone-500">{item.date.slice(5)}</span>
+        </div>)}
+    </div>;
+}
+
 function PricingVariantFields({ models }: { models: PublishedModel[] }) {
     const form = Form.useFormInstance();
     const publishedModelId = Form.useWatch("publishedModelId", form);
@@ -138,6 +154,7 @@ export default function AdminPage() {
     const [payment, setPayment] = useState<PaymentSettings>();
     const [email, setEmail] = useState<EmailSettings>();
     const [testEmail, setTestEmail] = useState("");
+    const [finance, setFinance] = useState<AdminFinanceSummary>();
     const [loading, setLoading] = useState(false);
     const [modal, setModal] = useState<{ type: string; item?: any }>();
     const [channelEditor, setChannelEditor] = useState<AdminChannel | null>();
@@ -147,7 +164,7 @@ export default function AdminPage() {
         setLoading(true);
         try {
             const modelResult = await adminApi.models();
-            const [channelResult, routeResult, pricingResult, productResult, invitationResult, paymentResult, emailResult, costResult, subscriptionResult] = await Promise.all([
+            const [channelResult, routeResult, pricingResult, productResult, invitationResult, paymentResult, emailResult, costResult, subscriptionResult, financeResult] = await Promise.all([
                 adminApi.channels(),
                 adminApi.routes(),
                 adminApi.pricing(),
@@ -157,6 +174,7 @@ export default function AdminPage() {
                 adminApi.email(),
                 adminApi.modelCostPricing(),
                 adminApi.subscriptionPlans(),
+                adminApi.financeSummary({ from: dayjs().subtract(6, "day").startOf("day").toISOString(), to: dayjs().add(1, "day").startOf("day").toISOString() }),
             ]);
             setModels(modelResult.items);
             setChannels(channelResult.items);
@@ -168,6 +186,7 @@ export default function AdminPage() {
             setEmail(emailResult);
             setModelCosts(costResult.items);
             setSubscriptionPlans(subscriptionResult.items);
+            setFinance(financeResult);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "管理数据读取失败");
         } finally {
@@ -569,6 +588,18 @@ export default function AdminPage() {
                                         <Card size="small"><div className="text-sm text-stone-500">可用路由</div><div className="mt-2 text-2xl font-semibold">{routes.filter((route) => route.available).length}</div><div className="mt-1 text-xs text-stone-400">共 {routes.length} 条路由</div></Card>
                                         <Card size="small"><div className="text-sm text-stone-500">启用定价</div><div className="mt-2 text-2xl font-semibold">{pricing.filter((item) => item.status === "active").length}</div><div className="mt-1 text-xs text-stone-400">充值套餐 {products.filter((product) => product.status === "active").length} 个</div></Card>
                                     </div>
+                                    <Card title="今日营收" extra={<span className="text-xs text-stone-400">默认展示最近 7 天，明细请进入账户与支付</span>}>
+                                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                                            <div><div className="text-sm text-stone-500">充值到账</div><div className="mt-1 text-xl font-semibold">¥{((finance?.todayRechargeFen || 0) / 100).toFixed(2)}</div></div>
+                                            <div><div className="text-sm text-stone-500">调用收入</div><div className="mt-1 text-xl font-semibold text-emerald-600">{(finance?.todayRevenueQuota || 0).toLocaleString()} 积分</div></div>
+                                            <div><div className="text-sm text-stone-500">调用成本</div><div className="mt-1 text-xl font-semibold text-amber-600">{(finance?.todayCostQuota || 0).toLocaleString()} 积分</div></div>
+                                            <div><div className="text-sm text-stone-500">今日利润</div><div className={`mt-1 text-xl font-semibold ${(finance?.todayProfitQuota || 0) >= 0 ? "text-sky-600" : "text-red-600"}`}>{(finance?.todayProfitQuota || 0).toLocaleString()} 积分</div></div>
+                                        </div>
+                                        <div className="mt-5 border-t border-stone-100 pt-4 dark:border-stone-800">
+                                            <div className="mb-2 flex items-center justify-between text-xs text-stone-500"><span>收入 / 成本 / 利润趋势</span><span>绿色收入 · 黄色成本 · 蓝色利润</span></div>
+                                            <FinanceTrend daily={finance?.daily || []} />
+                                        </div>
+                                    </Card>
                                     <Card title="运营状态" extra={<Button type="link" icon={<RefreshCw className="size-4" />} onClick={() => void load()}>刷新数据</Button>}>
                                         <div className="grid gap-4 md:grid-cols-3">
                                             <div className="rounded-xl bg-stone-50 p-4 dark:bg-stone-900"><div className="flex items-center gap-2 text-sm font-medium"><Activity className="size-4 text-emerald-500" />渠道服务</div><div className="mt-2 text-xs text-stone-500">{channels.filter((channel) => channel.status === "active").length ? "已有启用渠道" : "等待配置渠道"}</div></div>
