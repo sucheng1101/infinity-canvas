@@ -149,10 +149,7 @@ func (s *Service) Create(userID uint, input CreateInput) (View, error) {
 }
 
 func (s *Service) userChannelModelAvailable(tx *gorm.DB, userID, channelID uint, name, capability string) bool {
-	var entitlementCount int64
-	if tx.Model(&model.UserChannelEntitlement{}).
-		Where("user_id = ? AND status = ? AND (expires_at IS NULL OR expires_at > ?)", userID, model.UserChannelActive, time.Now().UTC()).
-		Count(&entitlementCount).Error != nil || entitlementCount == 0 {
+	if !hasCustomChannelEntitlement(tx, userID) {
 		return false
 	}
 	var channel model.UserChannel
@@ -173,6 +170,29 @@ func (s *Service) userChannelModelAvailable(tx *gorm.DB, userID, channelID uint,
 		}
 	}
 	return false
+}
+
+func hasCustomChannelEntitlement(tx *gorm.DB, userID uint) bool {
+	now := time.Now().UTC()
+	var entitlementCount int64
+	if tx.Model(&model.UserChannelEntitlement{}).
+		Where("user_id = ? AND status = ? AND (expires_at IS NULL OR expires_at > ?)", userID, model.UserChannelActive, now).
+		Count(&entitlementCount).Error != nil {
+		return false
+	}
+	if entitlementCount > 0 {
+		return true
+	}
+	// Subscription plans include custom-channel access by default. The
+	// subscription fallback keeps older purchases usable when their entitlement
+	// row was not created by the earlier purchase implementation.
+	var subscriptionCount int64
+	if tx.Model(&model.UserSubscription{}).
+		Where("user_id = ? AND status = ? AND expires_at > ?", userID, model.SubscriptionActive, now).
+		Count(&subscriptionCount).Error != nil {
+		return false
+	}
+	return subscriptionCount > 0
 }
 
 func (s *Service) Get(userID uint, taskID string) (View, error) {
