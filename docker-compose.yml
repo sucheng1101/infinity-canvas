@@ -1,3 +1,4 @@
+name: infinite-canvas
 services:
   app:
     image: ghcr.io/sucheng1101/infinite-canvas:latest

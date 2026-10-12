@@ -1,9 +1,13 @@
+name: infinite-canvas
 services:
   app:
     image: infinite-canvas:local
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # 本地镜像使用 local 模式，打开即进入画布工作台，不需要账户服务。
+        VITE_APP_MODE: local
     ports:
       - "1010:1010"
     restart: unless-stopped
