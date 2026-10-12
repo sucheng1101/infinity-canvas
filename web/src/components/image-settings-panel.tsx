@@ -10,9 +10,11 @@ import type { HostedQualitySpec } from "@/hooks/use-hosted-model-quality";
 
 const qualityOptions = [
     { value: "auto", labelKey: "auto" },
-    { value: "high", labelKey: "high" },
-    { value: "medium", labelKey: "medium" },
     { value: "low", labelKey: "low" },
+    { value: "medium", labelKey: "medium" },
+    { value: "high", labelKey: "high" },
+    { value: "xhigh", labelKey: "xhigh" },
+    { value: "max", labelKey: "max" },
 ];
 const DIMENSION_STEP = 16;
 
@@ -82,10 +84,10 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                 {showTitle ? <div className="text-lg font-semibold">{t("settingsPanels.image.title")}</div> : null}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.quality")}</SettingTitle>
-                    <div className="grid grid-cols-4 gap-2.5">
+                    <div className={`grid ${qualityItems.length > 4 ? "grid-cols-3" : "grid-cols-4"} gap-2.5`}>
                         {qualityItems.map((item) => (
                             <OptionPill key={"value" in item ? item.value : item.key} selected={quality === ("value" in item ? item.value : item.key)} theme={theme} onClick={() => onConfigChange("quality", "value" in item ? item.value : item.key)}>
-                                {"value" in item ? item.label : item.label}
+                                {item.label}
                             </OptionPill>
                         ))}
                     </div>
@@ -193,7 +195,7 @@ export function ImageSettingsTheme({ theme, children }: { theme: CanvasTheme; ch
 }
 
 export function imageQualityLabel(value: string) {
-    return (["auto", "high", "medium", "low"].includes(value) ? i18n.t(`settingsPanels.common.${value}`) : value);
+    return qualityOptions.some((item) => item.value === value) ? i18n.t(`settingsPanels.common.${value}`) : value;
 }
 
 export function imageSizeLabel(size: string) {

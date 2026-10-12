@@ -15,11 +15,15 @@ docker compose up -d
 
 Open `http://localhost:1010`.
 
+> The published image tracks the latest release and is not necessarily the current source. To run the current source locally, use the local build below.
+
 ## Build locally
 
 ```bash
 docker compose -f docker-compose.local.yml up -d --build
 ```
+
+Both compose files pin the project name with a top-level `name: infinite-canvas` (this repository directory has no ASCII characters, so omitting it fails with `project name must not be empty`). The local build pulls `oven/bun:1.3.13` and `nginx:1.27-alpine`, and `bun install` inside the container needs access to an npm registry.
 
 ## Documentation image
 

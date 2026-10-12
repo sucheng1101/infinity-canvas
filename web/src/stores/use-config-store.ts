@@ -65,6 +65,8 @@ export type AiConfig = {
     canvasImageCount: string;
     proxyEnabled: boolean;
     proxyUrl: string;
+    nodeRegenerateBehavior: "new-node" | "overwrite";
+    autoFocusOnSelect: boolean;
 };
 
 export type WebdavSyncConfig = {
@@ -126,6 +128,8 @@ export const defaultConfig: AiConfig = {
     canvasImageCount: "1",
     proxyEnabled: false,
     proxyUrl: DEFAULT_LOCAL_PROXY_URL,
+    nodeRegenerateBehavior: "new-node",
+    autoFocusOnSelect: false,
 };
 
 export const defaultWebdavSyncConfig: WebdavSyncConfig = {
@@ -187,8 +191,13 @@ export function modelMatchesCapability(config: AiConfig, value: string, capabili
 export function resolveModelForCapability(config: AiConfig, currentModel: string | undefined, capability: ModelCapability) {
     const defaultModel = capability === "image" ? config.imageModel : capability === "video" ? config.videoModel : capability === "audio" ? config.audioModel : config.textModel;
     const fallbackModel = capability === "image" ? defaultConfig.imageModel : capability === "video" ? defaultConfig.videoModel : capability === "audio" ? defaultConfig.audioModel : defaultConfig.textModel;
-    if (currentModel && modelMatchesCapability(config, currentModel, capability)) return currentModel;
-    if (defaultModel && modelMatchesCapability(config, defaultModel, capability)) return defaultModel;
+    for (const model of [currentModel, defaultModel]) {
+        if (!model) continue;
+        const configuredCapability = modelCapabilityOf(config, model);
+        // Keep unavailable selections visible so the readiness check blocks the
+        // request. Only a known capability switch may choose another model.
+        if (!configuredCapability || configuredCapability === capability) return model;
+    }
     return fallbackModel;
 }
 
@@ -204,8 +213,10 @@ export function resolveModelScript(config: AiConfig, value: string) {
 
 function isAiConfigReady(config: AiConfig, model: string) {
     if (isHostedMode) return true;
-    const requestConfig = resolveModelRequestConfig(config, model);
-    return Boolean(model.trim() && requestConfig.baseUrl.trim() && requestConfig.apiKey.trim());
+    // 官方 v0.20.0：已保存的模型若在渠道里被删除/渠道被移除，不得回退到首个渠道继续请求，直接判定为未就绪。
+    const match = findChannelModel(config, model);
+    if (!match) return false;
+    return Boolean(match.channel.baseUrl.trim() && resolveChannelApiKey(match.channel, match.model.name).trim());
 }
 
 export const useConfigStore = create<ConfigStore>()(
@@ -387,7 +398,9 @@ export function resolveModelRequestConfig(config: AiConfig, value: string) {
 
 export function resolveChannelApiKey(channel: ModelChannel, model: string) {
     const modelKey = (channel.modelApiKeys || []).find((item) => item.models.includes(model) && item.apiKey.trim());
-    return modelKey?.apiKey.trim() || "";
+    // 模型专用 Key 优先；未绑定时回退渠道级 Key。新版渠道编辑器不再写入渠道级 Key，
+    // 因此全新配置走不到回退分支；回退只为兼容升级前保存的旧配置与官方 v0.20.0 的判定语义。
+    return modelKey?.apiKey.trim() || channel.apiKey.trim() || "";
 }
 
 export function hasAnyChannelApiKey(channel: ModelChannel) {

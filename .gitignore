@@ -4,6 +4,8 @@ node_modules/
 .env*
 !.env.example
 !server/.env.example
+# 测试环境固定 local 模式（bun test 自动加载），不含任何密钥，需要入库。
+!web/.env.test
 data/
 *.log
 *.tsbuildinfo

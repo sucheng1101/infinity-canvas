@@ -7,6 +7,7 @@ import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
+import { imageSizePresets, inferMediaScale } from "@/lib/media-size";
 import type { ReferenceImage } from "@/types/image";
 import { isHostedMode } from "@/lib/app-mode";
 import { hostedImages, hostedText } from "./hosted-generation";
@@ -110,14 +111,9 @@ type GeminiPayload = {
 type GeminiStreamState = { buffer: string; text: string; toolCalls: ResponseToolCall[]; error?: string };
 type RequestOptions = { signal?: AbortSignal };
 
-const QUALITY_BASE: Record<string, number> = {
-    low: 1024,
-    medium: 2048,
-    high: 2880,
-    standard: 1024,
-    hd: 2048,
-};
-const QUALITY_ALIASES: Record<string, string> = {
+const IMAGE_QUALITY_VALUES = ["low", "medium", "high", "xhigh", "max"];
+// 托管渠道的自定义质量档位可能按 1K / 2K / 4K 命名，请求前统一映射为质量值，保持二开渠道行为不变。
+const IMAGE_QUALITY_ALIASES: Record<string, string> = {
     "1k": "low",
     "2k": "medium",
     "4k": "high",
@@ -133,12 +129,11 @@ const IMAGE_OUTPUT_FORMAT = "png";
 const IMAGE_REQUEST_TIMEOUT_MS = 10 * 60_000;
 
 const GEMINI_SUPPORTED_RATIOS = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
-const GEMINI_IMAGE_SIZE_BY_QUALITY: Record<string, string> = { low: "1K", medium: "2K", high: "4K", standard: "1K", hd: "2K" };
 
 function normalizeQuality(quality: string) {
     const value = quality.trim().toLowerCase();
-    const normalized = QUALITY_ALIASES[value] || value;
-    return QUALITY_BASE[normalized] ? normalized : undefined;
+    const normalized = IMAGE_QUALITY_ALIASES[value] || value;
+    return IMAGE_QUALITY_VALUES.includes(normalized) ? normalized : undefined;
 }
 
 /** Only "transparent" is forwarded; any other value (incl. empty) means keep the default opaque background. */
@@ -146,25 +141,15 @@ function normalizeBackground(background: string | undefined) {
     return background?.trim().toLowerCase() === "transparent" ? "transparent" : undefined;
 }
 
-/** Map "quality + ratio" to an explicit pixel dimension like "3840x2160". */
-function resolveSize(quality: string | undefined, ratio: string): string {
+/** Map a bare ratio such as "1:1" to an explicit pixel dimension like "1024x1024". */
+function resolveSize(ratio: string): string {
     const parsedRatio = parseImageRatio(ratio);
-    const basePixels = quality ? QUALITY_BASE[quality] : undefined;
+    const preset = imageSizePresets["1k"][ratio];
+    if (preset) return preset;
     const isLandscape = parsedRatio.width >= parsedRatio.height;
     const longRatio = isLandscape ? parsedRatio.width / parsedRatio.height : parsedRatio.height / parsedRatio.width;
-    let longSide: number;
-    let shortSide: number;
-
-    if (basePixels) {
-        const targetPixels = basePixels * basePixels;
-        const longSideRaw = Math.sqrt(targetPixels * longRatio);
-        longSide = Math.floor(longSideRaw / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
-        shortSide = Math.round(longSide / longRatio / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
-    } else {
-        shortSide = DEFAULT_IMAGE_SHORT_SIDE;
-        longSide = Math.round((shortSide * longRatio) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
-    }
-
+    const shortSide = DEFAULT_IMAGE_SHORT_SIDE;
+    const longSide = Math.round((shortSide * longRatio) / IMAGE_SIZE_STEP) * IMAGE_SIZE_STEP;
     const width = isLandscape ? longSide : shortSide;
     const height = isLandscape ? shortSide : longSide;
     validateImageSize(width, height);
@@ -201,7 +186,7 @@ function validateImageSize(width: number, height: number) {
     if (pixels < IMAGE_MIN_PIXELS || pixels > IMAGE_MAX_PIXELS) throw new Error(apiText("imagePixelLimit"));
 }
 
-function resolveRequestSize(quality: string | undefined, size: string) {
+function resolveRequestSize(size: string) {
     const value = size.trim();
     if (!value || value.toLowerCase() === "auto") return undefined;
     const dimensions = parseImageDimensions(value);
@@ -209,7 +194,7 @@ function resolveRequestSize(quality: string | undefined, size: string) {
         validateImageSize(dimensions.width, dimensions.height);
         return `${dimensions.width}x${dimensions.height}`;
     }
-    if (value.includes(":")) return resolveSize(quality, value);
+    if (value.includes(":")) return resolveSize(value);
     throw new Error(apiText("invalidImageSizeFormat"));
 }
 
@@ -218,7 +203,7 @@ function resolveGeminiImageConfig(config: AiConfig) {
     const dimensions = parseImageDimensions(value);
     const ratio = dimensions ? `${dimensions.width}:${dimensions.height}` : value;
     const aspectRatio = value && value.toLowerCase() !== "auto" ? closestGeminiAspectRatio(ratio) : undefined;
-    const imageSize = supportsGeminiImageSize(config.model) ? resolveGeminiImageSize(config.quality, dimensions) : undefined;
+    const imageSize = resolveGeminiImageSize(dimensions);
     const image = { ...(aspectRatio ? { aspectRatio } : {}), ...(imageSize ? { imageSize } : {}) };
     // Gemini's native generateContent API expects image settings under imageConfig.
     return Object.keys(image).length ? { imageConfig: image } : {};
@@ -234,20 +219,14 @@ function closestGeminiAspectRatio(value: string) {
     });
 }
 
-function resolveGeminiImageSize(quality: string, dimensions: { width: number; height: number } | null) {
-    const normalizedQuality = normalizeQuality(quality);
-    if (normalizedQuality) return GEMINI_IMAGE_SIZE_BY_QUALITY[normalizedQuality];
+/** Gemini takes the resolution tier and the ratio separately; the tier comes from the size presets. */
+function resolveGeminiImageSize(dimensions: { width: number; height: number } | null) {
     if (!dimensions) return undefined;
     const edge = Math.max(dimensions.width, dimensions.height);
     if (edge <= 768) return "512";
     if (edge <= 1536) return "1K";
     if (edge <= 3072) return "2K";
     return "4K";
-}
-
-function supportsGeminiImageSize(model: string) {
-    const value = model.toLowerCase();
-    return value.includes("gemini-3") || value.includes("3.1") || value.includes("3-pro");
 }
 
 function resolveImageSource(item: Record<string, unknown>) {
@@ -770,7 +749,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
         const quality = normalizeQuality(config.quality);
-        const requestSize = resolveRequestSize(quality, config.size);
+        const requestSize = resolveRequestSize(config.size);
         const background = normalizeBackground(config.background);
         try {
             const result = await runModelPlugin({
@@ -779,7 +758,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
                 config: requestConfig,
                 prompt: withSystemPrompt(requestConfig, prompt),
                 images: [],
-                params: { size: requestSize, quality, count: n, ...(background ? { background } : {}) },
+                params: { size: requestSize, resolution: inferMediaScale(config.size), quality, count: n, ...(background ? { background } : {}) },
                 signal: options?.signal,
             });
             return normalizePluginImages(result).map((image) => ({ id: nanoid(), ...image }));
@@ -795,7 +774,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
         }
     }
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(config.size);
     const background = normalizeBackground(config.background);
     try {
         const response = await axios.post<ImageApiResponse>(
@@ -832,7 +811,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     const script = resolveModelScript(config, config.model || config.imageModel);
     if (script) {
         const quality = normalizeQuality(config.quality);
-        const requestSize = resolveRequestSize(quality, config.size);
+        const requestSize = resolveRequestSize(config.size);
         const background = normalizeBackground(config.background);
         const refs = await Promise.all(references.map((image) => imageToDataUrl(image)));
         try {
@@ -842,7 +821,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
                 config: requestConfig,
                 prompt: withSystemPrompt(requestConfig, requestPrompt),
                 images: refs,
-                params: { size: requestSize, quality, count: n, ...(background ? { background } : {}) },
+                params: { size: requestSize, resolution: inferMediaScale(config.size), quality, count: n, ...(background ? { background } : {}) },
                 signal: options?.signal,
             });
             return normalizePluginImages(result).map((image) => ({ id: nanoid(), ...image }));
@@ -859,7 +838,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     }
 
     const quality = normalizeQuality(config.quality);
-    const requestSize = resolveRequestSize(quality, config.size);
+    const requestSize = resolveRequestSize(config.size);
     const background = normalizeBackground(config.background);
     const formData = new FormData();
     formData.set("model", requestConfig.model);
