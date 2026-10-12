@@ -1,0 +1,21 @@
+﻿task_id: null
+status: IDLE
+mode: none
+project_class: product/application + creative/design
+operational_profile: local-only, external-integration
+branch: codex/own-agent-connection
+base_commit: 8648ece7122abd36bbc2443708454594fc4881af
+primary_writer: none
+primary_session: null
+review_session: null
+owned_paths: []
+preserved_paths: []
+docker:
+  runtime: TBD
+  start: TBD
+  test: TBD
+  build: TBD
+  health: TBD
+acceptance: []
+next_action: create task card before first edit
+last_updated: 2026-10-12
