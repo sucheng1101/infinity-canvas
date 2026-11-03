@@ -21,7 +21,7 @@ description: Implemented changes that still need manual verification
 - On a Windows checkout (`core.autocrlf=true`), rerunning `docker compose -f docker-compose.local.yml up -d --build` should keep the container running (no more exit-code 127 restart loop); `.gitattributes` now pins `*.sh` and `*.conf` to LF and the image build also strips trailing CR.
 - In the nginx deployment, opening `http://localhost:1010/assets` and `/assets/` should reach the user asset center (no more 301-then-403); sub routes such as `/assets/dashboard` and `/assets/wallet` should work too.
 - Model readiness now matches official v0.20.0 semantics: a saved model whose channel or model entry was removed should block generation and open the config; legacy configs with only a channel-level key (no model-specific binding) should still generate. `bun test` (no extra env vars) should pass all 15 tests.
-- 版本号已对齐 `v0.20.0`：设置里的版本入口应显示 `v0.20.0`，`CHANGELOG` 的 `v0.20.0` 记录里同时包含官方 14 条更新和本地改动，`## Unreleased` 保持为空等待下一版。
+- 版本号已对齐 `v0.20.0`：`VERSION` 为 `v0.20.0`，`CHANGELOG` 的 `v0.20.0` 记录里同时包含官方 14 条更新和本地改动，`## Unreleased` 保持为空等待下一版；构建产物里注入的版本号应为 v0.20.0。
 
 ## 订阅保存、自定义渠道与财务总览
 
