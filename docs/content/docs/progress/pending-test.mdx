@@ -5,6 +5,13 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+## 本地一键启动（MySQL + 账户服务 + 前端）
+
+- 双击根目录 `start-local.cmd`（或执行 `powershell -ExecutionPolicy Bypass -File .\start-local.ps1`）后，应先启动 MySQL、再启动账户服务、最后启动前端，并打印 `本地服务已就绪：http://localhost:1010`。
+- 机器上还没有 `%LOCALAPPDATA%\InfiniteCanvas\mysql-data` 时，脚本应自动初始化数据目录、按 `DATABASE_DSN` 创建 `infinite_canvas` 库并绑定 DSN 里的账号密码，不需要手工建库。
+- 启动完成后 `http://127.0.0.1:1011/healthz` 返回 `{"status":"ok","checks":{"mysql":"ok","redis":"ok"}}`，登录页不再出现「账户服务内部异常（HTTP 500）」。
+- 关闭浏览器后重新执行一次，脚本应复用已在运行的 MySQL、账户服务和前端，不重复启动。
+
 ## Local Docker entry and official v0.20.0 merge
 
 - `docker compose -f docker-compose.local.yml up -d --build` should build and start the local image without `project name must not be empty`, and `http://localhost:1010` should open straight into the canvas workbench (local mode, no login page).

@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased
+- [优化] 本地启动脚本在 MySQL 数据目录为空时自动初始化数据库并按 DSN 建库，新增 `start-local.cmd` 一键拉起 MySQL、账户服务与前端，避免只启动前端时登录页报「账户服务内部异常（HTTP 500）」；启动脚本改为 UTF-8 BOM，Windows PowerShell 下中文提示不再乱码。
 - [修复] 修正本地 Docker 启动入口：两个 compose 文件固定项目名 `infinite-canvas`，避免仓库中文目录名导致 `docker compose` 报 `project name must not be empty`、只能手工 `docker run` 旧发布镜像。
 - [新增] 镜像构建支持 `VITE_APP_MODE` 参数，默认 hosted 与发布镜像一致；`docker-compose.local.yml` 以 local 模式构建本地镜像，`http://localhost:1010` 打开即进入画布工作台。
 - [修复] 修正容器启动因换行符失败：新增 `.gitattributes` 固定 `*.sh` 与 `*.conf` 为 LF，并在镜像构建阶段去除行尾 CR，修复 Windows 检出（`core.autocrlf=true`）下 nginx 入口脚本报 `not found`、容器以退出码 127 反复重启的问题。

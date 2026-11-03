@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 $root = $PSScriptRoot
 $serverScript = Join-Path $root "server\start-local.ps1"
