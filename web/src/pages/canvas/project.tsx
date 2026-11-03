@@ -259,6 +259,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
     const [projectLoaded, setProjectLoaded] = useState(false);
+    const [restoreFailed, setRestoreFailed] = useState(false);
     const [toolbarNodeId, setToolbarNodeId] = useState<string | null>(null);
     const [nodeImageSettingsOpen, setNodeImageSettingsOpen] = useState(false);
     const [dialogNodeId, setDialogNodeId] = useState<string | null>(null);
@@ -462,30 +463,35 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         }
 
         const restore = async () => {
-            const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes));
-            const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
-            setNodes(restoredNodes);
-            setConnections(project.connections);
-            setChatSessions(restoredSessions);
-            setActiveChatId(project.activeChatId || null);
-            setBackgroundMode(project.backgroundMode);
-            setShowImageInfo(project.showImageInfo || false);
-            setViewport(project.viewport);
-            historyRef.current = { past: [], future: [] };
-            if (historyCommitTimerRef.current) {
-                clearTimeout(historyCommitTimerRef.current);
-                historyCommitTimerRef.current = null;
+            try {
+                const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes));
+                const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
+                setNodes(restoredNodes);
+                setConnections(project.connections);
+                setChatSessions(restoredSessions);
+                setActiveChatId(project.activeChatId || null);
+                setBackgroundMode(project.backgroundMode);
+                setShowImageInfo(project.showImageInfo || false);
+                setViewport(project.viewport);
+                historyRef.current = { past: [], future: [] };
+                if (historyCommitTimerRef.current) {
+                    clearTimeout(historyCommitTimerRef.current);
+                    historyCommitTimerRef.current = null;
+                }
+                lastHistoryRef.current = {
+                    nodes: restoredNodes,
+                    connections: project.connections,
+                    chatSessions: restoredSessions,
+                    activeChatId: project.activeChatId || null,
+                    backgroundMode: project.backgroundMode,
+                    showImageInfo: project.showImageInfo || false,
+                };
+                setHistoryState({ canUndo: false, canRedo: false });
+                setProjectLoaded(true);
+            } catch (error) {
+                console.error("restore canvas failed", error);
+                setRestoreFailed(true);
             }
-            lastHistoryRef.current = {
-                nodes: restoredNodes,
-                connections: project.connections,
-                chatSessions: restoredSessions,
-                activeChatId: project.activeChatId || null,
-                backgroundMode: project.backgroundMode,
-                showImageInfo: project.showImageInfo || false,
-            };
-            setHistoryState({ canUndo: false, canRedo: false });
-            setProjectLoaded(true);
         };
         void restore();
     }, [hydrated, navigate, openProject, projectId]);
@@ -1206,10 +1212,19 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     }, [createProject, navigate, t]);
 
     const deleteCurrentProject = useCallback(() => {
-        deleteProjects([projectId]);
-        cleanupAssetImages();
-        navigate("/canvas");
-    }, [cleanupAssetImages, deleteProjects, navigate, projectId]);
+        modal.confirm({
+            title: t("canvas.deleteCurrent"),
+            content: t("canvas.projectPage.deleteDescription"),
+            okText: t("common.delete"),
+            cancelText: t("common.cancel"),
+            okButtonProps: { danger: true },
+            onOk: () => {
+                deleteProjects([projectId]);
+                cleanupAssetImages();
+                navigate("/canvas");
+            },
+        });
+    }, [cleanupAssetImages, deleteProjects, modal, navigate, projectId, t]);
 
     const exportCurrentProject = useCallback(async () => {
         const project = useCanvasStore.getState().projects.find((item) => item.id === projectId);
@@ -1495,65 +1510,80 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     }, [finishNodeDrag, handleGlobalMouseMove, handleGlobalMouseUp, handleGlobalPointerMove]);
 
     const createImageFileNode = useCallback(async (file: File, position: Position) => {
-        const image = await uploadImage(file);
-        const size = fitNodeSize(image.width, image.height);
-        const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        const newNode: CanvasNodeData = {
-            id,
-            type: CanvasNodeType.Image,
-            title: file.name,
-            position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
-            width: size.width,
-            height: size.height,
-            metadata: imageMetadata(image),
-        };
-
-        setNodes((prev) => [...prev, newNode]);
-        setSelectedNodeIds(new Set([id]));
-        setSelectedConnectionId(null);
-        setDialogNodeId(id);
-    }, []);
-
-    const createVideoFileNode = useCallback(async (file: File, position: Position) => {
-        const video = await uploadMediaFile(file, "video");
-        const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
-        const id = `video-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        setNodes((prev) => [
-            ...prev,
-            {
+        try {
+            const image = await uploadImage(file);
+            const size = fitNodeSize(image.width, image.height);
+            const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            const newNode: CanvasNodeData = {
                 id,
-                type: CanvasNodeType.Video,
+                type: CanvasNodeType.Image,
                 title: file.name,
                 position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
                 width: size.width,
                 height: size.height,
-                metadata: videoMetadata(video),
-            },
-        ]);
-        setSelectedNodeIds(new Set([id]));
-        setSelectedConnectionId(null);
-        setDialogNodeId(id);
-    }, []);
+                metadata: imageMetadata(image),
+            };
+
+            setNodes((prev) => [...prev, newNode]);
+            setSelectedNodeIds(new Set([id]));
+            setSelectedConnectionId(null);
+            setDialogNodeId(id);
+        } catch (error) {
+            console.error("import image failed", error);
+            message.error(t("canvas.projectPage.importFailed"));
+        }
+    }, [message, t]);
+
+    const createVideoFileNode = useCallback(async (file: File, position: Position) => {
+        try {
+            const video = await uploadMediaFile(file, "video");
+            const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+            const id = `video-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            setNodes((prev) => [
+                ...prev,
+                {
+                    id,
+                    type: CanvasNodeType.Video,
+                    title: file.name,
+                    position: { x: position.x - size.width / 2, y: position.y - size.height / 2 },
+                    width: size.width,
+                    height: size.height,
+                    metadata: videoMetadata(video),
+                },
+            ]);
+            setSelectedNodeIds(new Set([id]));
+            setSelectedConnectionId(null);
+            setDialogNodeId(id);
+        } catch (error) {
+            console.error("import video failed", error);
+            message.error(t("canvas.projectPage.importFailed"));
+        }
+    }, [message, t]);
 
     const createAudioFileNode = useCallback(async (file: File, position: Position) => {
-        const audio = await uploadMediaFile(file, "audio");
-        const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
-        const id = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-        setNodes((prev) => [
-            ...prev,
-            {
-                id,
-                type: CanvasNodeType.Audio,
-                title: file.name,
-                position: { x: position.x - spec.width / 2, y: position.y - spec.height / 2 },
-                width: spec.width,
-                height: spec.height,
-                metadata: audioMetadata(audio),
-            },
-        ]);
-        setSelectedNodeIds(new Set([id]));
-        setSelectedConnectionId(null);
-    }, []);
+        try {
+            const audio = await uploadMediaFile(file, "audio");
+            const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
+            const id = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            setNodes((prev) => [
+                ...prev,
+                {
+                    id,
+                    type: CanvasNodeType.Audio,
+                    title: file.name,
+                    position: { x: position.x - spec.width / 2, y: position.y - spec.height / 2 },
+                    width: spec.width,
+                    height: spec.height,
+                    metadata: audioMetadata(audio),
+                },
+            ]);
+            setSelectedNodeIds(new Set([id]));
+            setSelectedConnectionId(null);
+        } catch (error) {
+            console.error("import audio failed", error);
+            message.error(t("canvas.projectPage.importFailed"));
+        }
+    }, [message, t]);
 
     const createTextNodeFromClipboard = useCallback(
         (text: string) => {
@@ -1947,63 +1977,74 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
 
     const cropImageNode = useCallback(async (node: CanvasNodeData, crop: CanvasImageCropRect) => {
         if (!node.metadata?.content) return;
-        const cropped = await cropDataUrl(node.metadata.content, crop);
-        const image = await uploadImage(cropped);
-        const width = Math.min(node.width, Math.max(220, image.width));
-        const childId = nanoid();
-        const child: CanvasNodeData = {
-            id: childId,
-            type: CanvasNodeType.Image,
-            title: "Cropped Image",
-            position: { x: node.position.x + node.width + 96, y: node.position.y },
-            width,
-            height: width * (image.height / image.width),
-            metadata: {
-                ...imageMetadata(image),
-                prompt: node.metadata?.prompt,
-            },
-        };
-        setNodes((prev) => [...prev, child]);
-        setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
-        setSelectedNodeIds(new Set([childId]));
-        setDialogNodeId(childId);
-        setCropNodeId(null);
-    }, []);
+        try {
+            const cropped = await cropDataUrl(node.metadata.content, crop);
+            const image = await uploadImage(cropped);
+            const width = Math.min(node.width, Math.max(220, image.width));
+            const childId = nanoid();
+            const child: CanvasNodeData = {
+                id: childId,
+                type: CanvasNodeType.Image,
+                title: "Cropped Image",
+                position: { x: node.position.x + node.width + 96, y: node.position.y },
+                width,
+                height: width * (image.height / image.width),
+                metadata: {
+                    ...imageMetadata(image),
+                    prompt: node.metadata?.prompt,
+                },
+            };
+            setNodes((prev) => [...prev, child]);
+            setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+            setSelectedNodeIds(new Set([childId]));
+            setDialogNodeId(childId);
+            setCropNodeId(null);
+        } catch (error) {
+            console.error("crop image failed", error);
+            setCropNodeId(null);
+            message.error(t("common.imageReadFailed"));
+        }
+    }, [message, t]);
 
     const splitImageNode = useCallback(
         async (node: CanvasNodeData, params: CanvasImageSplitParams) => {
             if (!node.metadata?.content) return;
             setSplitNodeId(null);
-            const pieces = await splitDataUrl(node.metadata.content, params);
-            const gap = 16;
-            const cellWidth = node.width / params.columns;
-            const cellHeight = node.height / params.rows;
-            const startX = node.position.x + node.width + 96;
-            const startY = node.position.y;
-            const childNodes = await Promise.all(
-                pieces.map(async (piece) => {
-                    const image = await uploadImage(piece.dataUrl);
-                    const id = nanoid();
-                    return {
-                        id,
-                        type: CanvasNodeType.Image,
-                        title: t("canvas.projectPage.splitTitle", { name: node.title || t("assets.kinds.image"), row: piece.row + 1, column: piece.column + 1 }),
-                        position: { x: startX + piece.column * (cellWidth + gap), y: startY + piece.row * (cellHeight + gap) },
-                        width: cellWidth,
-                        height: cellHeight,
-                        metadata: {
-                            ...imageMetadata(image),
-                            prompt: node.metadata?.prompt,
-                        },
-                    } satisfies CanvasNodeData;
-                }),
-            );
-            setNodes((prev) => [...prev, ...childNodes]);
-            setConnections((prev) => [...prev, ...childNodes.map((child) => ({ id: nanoid(), fromNodeId: node.id, toNodeId: child.id }))]);
-            setSelectedNodeIds(new Set(childNodes.map((child) => child.id)));
-            setSelectedConnectionId(null);
-            setDialogNodeId(null);
-            message.success(t("canvas.projectPage.splitSuccess", { count: childNodes.length }));
+            try {
+                const pieces = await splitDataUrl(node.metadata.content, params);
+                const gap = 16;
+                const cellWidth = node.width / params.columns;
+                const cellHeight = node.height / params.rows;
+                const startX = node.position.x + node.width + 96;
+                const startY = node.position.y;
+                const childNodes = await Promise.all(
+                    pieces.map(async (piece) => {
+                        const image = await uploadImage(piece.dataUrl);
+                        const id = nanoid();
+                        return {
+                            id,
+                            type: CanvasNodeType.Image,
+                            title: t("canvas.projectPage.splitTitle", { name: node.title || t("assets.kinds.image"), row: piece.row + 1, column: piece.column + 1 }),
+                            position: { x: startX + piece.column * (cellWidth + gap), y: startY + piece.row * (cellHeight + gap) },
+                            width: cellWidth,
+                            height: cellHeight,
+                            metadata: {
+                                ...imageMetadata(image),
+                                prompt: node.metadata?.prompt,
+                            },
+                        } satisfies CanvasNodeData;
+                    }),
+                );
+                setNodes((prev) => [...prev, ...childNodes]);
+                setConnections((prev) => [...prev, ...childNodes.map((child) => ({ id: nanoid(), fromNodeId: node.id, toNodeId: child.id }))]);
+                setSelectedNodeIds(new Set(childNodes.map((child) => child.id)));
+                setSelectedConnectionId(null);
+                setDialogNodeId(null);
+                message.success(t("canvas.projectPage.splitSuccess", { count: childNodes.length }));
+            } catch (error) {
+                console.error("split image failed", error);
+                message.error(t("common.imageReadFailed"));
+            }
         },
         [message, t],
     );
@@ -2080,27 +2121,32 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const upscaleImageNode = useCallback(async (node: CanvasNodeData, params: CanvasImageUpscaleParams) => {
         if (!node.metadata?.content) return;
         setUpscaleNodeId(null);
-        const upscaled = await upscaleDataUrl(node.metadata.content, params);
-        const image = await uploadImage(upscaled);
-        const size = fitNodeSize(image.width, image.height);
-        const childId = nanoid();
-        const child: CanvasNodeData = {
-            id: childId,
-            type: CanvasNodeType.Image,
-            title: "Upscaled Image",
-            position: { x: node.position.x + node.width + 96, y: node.position.y },
-            width: size.width,
-            height: size.height,
-            metadata: {
-                ...imageMetadata(image),
-                prompt: node.metadata?.prompt,
-            },
-        };
-        setNodes((prev) => [...prev, child]);
-        setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
-        setSelectedNodeIds(new Set([childId]));
-        setDialogNodeId(childId);
-    }, []);
+        try {
+            const upscaled = await upscaleDataUrl(node.metadata.content, params);
+            const image = await uploadImage(upscaled);
+            const size = fitNodeSize(image.width, image.height);
+            const childId = nanoid();
+            const child: CanvasNodeData = {
+                id: childId,
+                type: CanvasNodeType.Image,
+                title: "Upscaled Image",
+                position: { x: node.position.x + node.width + 96, y: node.position.y },
+                width: size.width,
+                height: size.height,
+                metadata: {
+                    ...imageMetadata(image),
+                    prompt: node.metadata?.prompt,
+                },
+            };
+            setNodes((prev) => [...prev, child]);
+            setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
+            setSelectedNodeIds(new Set([childId]));
+            setDialogNodeId(childId);
+        } catch (error) {
+            console.error("upscale image failed", error);
+            message.error(t("common.imageReadFailed"));
+        }
+    }, [message, t]);
 
     const generateAngleNode = useCallback(
         async (node: CanvasNodeData, params: CanvasImageAngleParams) => {
@@ -3269,7 +3315,20 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     }
     const retainedPreview = retainedPreviewRef.current;
 
-    if (!projectLoaded) return <CanvasRefreshShell />;
+    if (!projectLoaded) {
+        if (!restoreFailed) return <CanvasRefreshShell />;
+        return (
+            <main className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center" style={{ background: theme.canvas.background, color: theme.node.text }}>
+                <div className="max-w-md text-sm opacity-80">{t("canvas.projectPage.restoreFailed")}</div>
+                <div className="flex gap-3">
+                    <Button onClick={() => window.location.reload()}>{t("common.retry")}</Button>
+                    <Button type="primary" onClick={() => navigate("/canvas")}>
+                        {t("canvas.projects")}
+                    </Button>
+                </div>
+            </main>
+        );
+    }
 
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
