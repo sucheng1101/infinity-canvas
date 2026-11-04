@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { CircleDot, Eraser, Grid2x2, Group, Hand, Image as ImageIcon, Info, LayoutGrid, LocateFixed, Moon, MousePointer2, Music2, Palette, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
+import { CircleDot, Eraser, Grid2x2, Group, Hand, Image as ImageIcon, Info, LayoutGrid, LocateFixed, MessageSquare, Moon, MousePointer2, Music2, Palette, Play, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
 import { getNodePluginId, listNodeDefinitions, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
@@ -24,6 +24,8 @@ export function CanvasToolbar({
     onAddConfig,
     onAddGroup,
     onTidyImages,
+    onGenerateSet,
+    onPromptChat,
     onAddExtensionNode,
     onUndo,
     onRedo,
@@ -48,6 +50,9 @@ export function CanvasToolbar({
     onAddConfig: () => void;
     onAddGroup: () => void;
     onTidyImages: () => void;
+    /** Ecommerce-only actions; the buttons render only when a handler is provided. */
+    onGenerateSet?: () => void;
+    onPromptChat?: () => void;
     onAddExtensionNode: (type: string) => void;
     onUndo: () => void;
     onRedo: () => void;
@@ -57,7 +62,8 @@ export function CanvasToolbar({
     onCanvasToolChange: (tool: "select" | "pan") => void;
     onBackgroundModeChange: (mode: CanvasBackgroundMode) => void;
     onShowImageInfoChange: (show: boolean) => void;
-    onFocusSelected: () => void;
+    /** Omitted by the ecommerce toolbar, which does not offer a focus action. */
+    onFocusSelected?: () => void;
 }) {
     const wrapRef = useRef<HTMLDivElement>(null);
     const { t } = useTranslation();
@@ -105,9 +111,11 @@ export function CanvasToolbar({
                 <ToolbarButton id="tool-redo" label={t("canvas.redo")} disabled={!canRedo} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onRedo}>
                     <Redo2 className="size-4.5" />
                 </ToolbarButton>
-                <ToolbarButton id="tool-focus" label={t("canvas.toolbar.focus")} disabled={!selectedCount} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onFocusSelected}>
-                    <LocateFixed className="size-4.5" />
-                </ToolbarButton>
+                {onFocusSelected ? (
+                    <ToolbarButton id="tool-focus" label={t("canvas.toolbar.focus")} disabled={!selectedCount} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onFocusSelected}>
+                        <LocateFixed className="size-4.5" />
+                    </ToolbarButton>
+                ) : null}
                 <Divider theme={theme} />
                 <ToolbarButton id="tool-text" label={t("canvas.toolbar.text")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onAddText}>
                     <Type className="size-4.5" />
@@ -130,6 +138,16 @@ export function CanvasToolbar({
                 <ToolbarButton id="tool-tidy-images" label={t("canvas.toolbar.tidyImages")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onTidyImages}>
                     <LayoutGrid className="size-4.5" />
                 </ToolbarButton>
+                {onGenerateSet ? (
+                    <ToolbarButton id="tool-generate-set" label={t("canvas.toolbar.generateSet")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onGenerateSet}>
+                        <Play className="size-4.5" />
+                    </ToolbarButton>
+                ) : null}
+                {onPromptChat ? (
+                    <ToolbarButton id="tool-prompt-chat" label={t("canvas.toolbar.promptChat")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onPromptChat}>
+                        <MessageSquare className="size-4.5" />
+                    </ToolbarButton>
+                ) : null}
                 {extensionDefs.length ? (
                     <ToolbarButton
                         id="tool-extensions"
@@ -375,6 +393,8 @@ function toolLabel(id: string, t: (key: string) => string) {
     if (id === "tool-config") return t("canvas.toolbar.config");
     if (id === "tool-group") return t("canvas.toolbar.group");
     if (id === "tool-tidy-images") return t("canvas.toolbar.tidyImages");
+    if (id === "tool-generate-set") return t("canvas.toolbar.generateSet");
+    if (id === "tool-prompt-chat") return t("canvas.toolbar.promptChat");
     if (id === "tool-extensions") return t("canvas.toolbar.extensions");
     if (id === "tool-upload") return t("canvas.toolbar.upload");
     if (id === "tool-style") return t("canvas.toolbar.appearance");

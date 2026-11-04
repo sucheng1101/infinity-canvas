@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Group, Ungroup } from "lucide-react";
+import { Group, Play, Ungroup } from "lucide-react";
 import { Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -16,16 +16,20 @@ export function CanvasSelectionToolbar({
     showToolbar,
     canGroup,
     canUngroup,
+    canGenerate,
     onGroup,
     onUngroup,
+    onGenerate,
 }: {
     nodes: CanvasNodeData[];
     viewport: ViewportTransform;
     showToolbar: boolean;
     canGroup: boolean;
     canUngroup: boolean;
+    canGenerate?: boolean;
     onGroup: () => void;
     onUngroup: () => void;
+    onGenerate?: () => void;
 }) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -36,7 +40,7 @@ export function CanvasSelectionToolbar({
     const top = viewport.y + bounds.top * viewport.k - SELECTION_PAD;
     const width = (bounds.right - bounds.left) * viewport.k + SELECTION_PAD * 2;
     const height = (bounds.bottom - bounds.top) * viewport.k + SELECTION_PAD * 2;
-    const showActions = showToolbar && (canGroup || canUngroup);
+    const showActions = showToolbar && (canGroup || canUngroup || Boolean(canGenerate && onGenerate));
 
     return (
         <>
@@ -63,6 +67,7 @@ export function CanvasSelectionToolbar({
                     onMouseDown={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
                 >
+                    {canGenerate && onGenerate ? <SelectionAction title={t("canvas.nodeToolbar.batchGenerateTitle")} label={t("canvas.nodeToolbar.batchGenerate")} icon={<Play className="size-4" />} onClick={onGenerate} /> : null}
                     {canGroup ? <SelectionAction title={t("canvas.nodeToolbar.groupTitle")} label={t("canvas.nodeToolbar.group")} icon={<Group className="size-4" />} onClick={onGroup} /> : null}
                     {canUngroup ? <SelectionAction title={t("canvas.nodeToolbar.ungroupTitle")} label={t("canvas.nodeToolbar.ungroup")} icon={<Ungroup className="size-4" />} onClick={onUngroup} /> : null}
                 </div>

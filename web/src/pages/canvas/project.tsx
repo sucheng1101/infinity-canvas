@@ -26,9 +26,6 @@ import { NODE_DEFAULT_SIZE, getNodeSpec } from "@/constant/canvas";
 import { ActiveConnectionPath, ConnectionPath } from "@/components/canvas/canvas-connections";
 import { CanvasConfigComposer } from "@/components/canvas/canvas-config-composer";
 import { CanvasConfigNodePanel } from "@/components/canvas/canvas-config-node-panel";
-import { CanvasConfigNodePanel as EcommerceConfigNodePanel } from "@/components/canvas/ecommerce/canvas-config-node-panel";
-import { CanvasSelectionToolbar as EcommerceSelectionToolbar } from "@/components/canvas/ecommerce/canvas-selection-toolbar";
-import { CanvasToolbar as EcommerceCanvasToolbar } from "@/components/canvas/ecommerce/canvas-toolbar";
 import { PromptChatPanel } from "@/components/canvas/ecommerce/prompt-chat-panel";
 import { GeneratePanel } from "@/components/canvas/ecommerce/generate-panel";
 import { CanvasNodeContextMenu } from "@/components/canvas/canvas-context-menu";
@@ -174,9 +171,6 @@ function measureFocusFrame(container: HTMLDivElement | null, nodeId: string) {
 
 function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerce" }) {
     const isEcommerce = canvasKind === "ecommerce";
-    const ToolbarComponent = (isEcommerce ? EcommerceCanvasToolbar : CanvasToolbar) as typeof CanvasToolbar;
-    const SelectionToolbarComponent = (isEcommerce ? EcommerceSelectionToolbar : CanvasSelectionToolbar) as typeof CanvasSelectionToolbar;
-    const ConfigPanelComponent = (isEcommerce ? EcommerceConfigNodePanel : CanvasConfigNodePanel) as typeof CanvasConfigNodePanel;
     const { message, modal } = App.useApp();
     const { t } = useTranslation();
     // Subscribe to the registry version so plugin registration changes rerender the canvas.
@@ -3231,7 +3225,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
 
     const renderNodeContentPanel = useCallback(
         (contentNode: CanvasNodeData) => (
-            <ConfigPanelComponent
+            <CanvasConfigNodePanel
                 node={contentNode}
                 isRunning={runningNodeId === contentNode.id}
                 inputSummary={getInputSummary(configInputsById.get(contentNode.id) || [])}
@@ -3242,6 +3236,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     const target = nodesRef.current.find((item) => item.id === nodeId);
                     void handleGenerateNode(nodeId, target?.metadata?.generationMode || "image", target?.metadata?.composerContent ?? target?.metadata?.prompt ?? "");
                 }}
+                showNodeTitle={isEcommerce}
             />
         ),
         [configInputsById, confirmStopGeneration, handleConfigNodeChange, handleGenerateNode, isEcommerce, runningNodeId],
@@ -3557,22 +3552,23 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     <PromptChatPanel onClose={() => setPromptChatOpen(false)} getTargets={getEcommercePromptTargets} onApply={applyEcommercePromptUpdates} />
                 ) : null}
                 {hasMultipleSelectedNodes && !selectionBox ? (
-                    <SelectionToolbarComponent
+                    <CanvasSelectionToolbar
                         nodes={selectedNodes}
                         viewport={viewport}
                         showToolbar={!isNodeDragging && !isNodeResizing}
                         canGroup={canGroupSelection}
                         canUngroup={canUngroupSelection}
+                        canGenerate={isEcommerce && selectedConfigNodes.length > 1}
                         onGroup={groupSelection}
                         onUngroup={ungroupSelection}
-                        {...(isEcommerce ? { canGenerate: selectedConfigNodes.length > 1, onGenerate: batchGenerateSelection } : {})}
+                        onGenerate={isEcommerce ? batchGenerateSelection : undefined}
                     />
                 ) : null}
 
-                <ToolbarComponent
+                <CanvasToolbar
                     selectedCount={selectedNodeIds.size}
                     canvasTool={canvasTool}
-                    onFocusSelected={focusSelectedNode}
+                    onFocusSelected={isEcommerce ? undefined : focusSelectedNode}
                     canUndo={historyState.canUndo}
                     canRedo={historyState.canRedo}
                     backgroundMode={backgroundMode}
@@ -3583,8 +3579,9 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     onAddText={() => createNode(CanvasNodeType.Text)}
                     onAddConfig={() => createNode(CanvasNodeType.Config)}
                     onAddGroup={() => createNode(CanvasNodeType.Group)}
-                    onTidyImages={() => setNodes((prev) => tidyImageNodePositions(prev))}
-                    {...(isEcommerce ? { onTidy: () => setNodes((prev) => tidyNodePositions(prev)), onGenerateSet: openGeneratePanel, onPromptChat: openPromptChat } : {})}
+                    onTidyImages={() => setNodes((prev) => (isEcommerce ? tidyNodePositions(prev) : tidyImageNodePositions(prev)))}
+                    onGenerateSet={isEcommerce ? openGeneratePanel : undefined}
+                    onPromptChat={isEcommerce ? openPromptChat : undefined}
                     onAddExtensionNode={(type) => createNode(type)}
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
