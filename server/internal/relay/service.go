@@ -29,6 +29,10 @@ var (
 	ErrResponseTooLarge = errors.New("upstream response is too large")
 )
 
+// maxUpstreamResponseBytes caps a single upstream response body at 32MB, which
+// covers base64 payloads of large images while keeping one response bounded.
+const maxUpstreamResponseBytes int64 = 32 << 20
+
 type Service struct {
 	DB           *gorm.DB
 	Generation   *generation.Service
@@ -141,9 +145,13 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metad
 		return failWithLog("UPSTREAM_REQUEST_FAILED", err)
 	}
 	defer response.Body.Close()
-	data, readErr := io.ReadAll(response.Body)
+	// Bound the read so a single oversized upstream body cannot exhaust memory.
+	data, readErr := io.ReadAll(io.LimitReader(response.Body, maxUpstreamResponseBytes+1))
 	if readErr != nil {
 		return failWithLog("UPSTREAM_RESPONSE_FAILED", readErr)
+	}
+	if int64(len(data)) > maxUpstreamResponseBytes {
+		return failWithLog("UPSTREAM_RESPONSE_TOO_LARGE", ErrResponseTooLarge)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return failWithLog("UPSTREAM_HTTP_ERROR", fmt.Errorf("upstream returned HTTP %d: %s", response.StatusCode, compact(string(data))))

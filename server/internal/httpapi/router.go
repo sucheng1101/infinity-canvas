@@ -903,10 +903,19 @@ func parseAdminID(value string) (uint, error) {
 
 func (a *Router) cancelGenerationTask(c *gin.Context) {
 	user, _ := currentUser(c)
-	// Interrupt a running upstream HTTP request before settling the persisted
-	// task. Queued tasks simply skip this branch and use the normal transition.
-	a.Relay.Cancel(c.Param("id"))
-	task, err := a.Generation.Cancel(user.ID, c.Param("id"))
+	taskID := c.Param("id")
+	// Ownership is checked before any side effect: cancelling another user's
+	// task must not interrupt its in-flight upstream request. The state machine
+	// in Generation.Cancel still decides whether the task can be cancelled.
+	if _, err := a.Generation.Get(user.ID, taskID); err != nil {
+		if errors.Is(err, generation.ErrTaskNotFound) {
+			errorJSON(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
+			return
+		}
+		errorJSON(c, http.StatusBadRequest, "TASK_CANCEL_FAILED", "生成任务取消失败")
+		return
+	}
+	task, err := a.Generation.Cancel(user.ID, taskID)
 	if errors.Is(err, generation.ErrTaskNotFound) {
 		errorJSON(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
 		return
@@ -919,6 +928,8 @@ func (a *Router) cancelGenerationTask(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "TASK_CANCEL_FAILED", "生成任务取消失败")
 		return
 	}
+	// Interrupt the upstream request only after the persisted transition passed.
+	a.Relay.Cancel(taskID)
 	successJSON(c, http.StatusOK, task)
 }
 

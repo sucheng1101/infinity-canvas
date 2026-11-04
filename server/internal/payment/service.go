@@ -247,6 +247,15 @@ func (s *Service) Order(userID, orderID uint) (model.TopupOrder, Checkout, error
 	return order, checkout, nil
 }
 
+// ExpireOrders flips every unpaid order past its deadline in one statement, so
+// late payments are recognised without waiting for the buyer to poll the order.
+func (s *Service) ExpireOrders(now time.Time) (int64, error) {
+	result := s.DB.Model(&model.TopupOrder{}).
+		Where("status = ? AND expires_at < ?", model.TopupOrderPendingPayment, now).
+		Update("status", model.TopupOrderExpired)
+	return result.RowsAffected, result.Error
+}
+
 func (s *Service) HandleEpayWebhook(values url.Values) error {
 	settings, err := s.EpaySettings()
 	if err != nil || !settings.Enabled || settings.Key == "" {
@@ -283,17 +292,10 @@ func (s *Service) HandleEpayWebhook(values url.Values) error {
 			event.ProcessedAt = &now
 			return tx.Create(&event).Error
 		}
-		if order.Status == model.TopupOrderExpired || !now.Before(order.ExpiresAt) {
-			if order.Status == model.TopupOrderPendingPayment {
-				order.Status = model.TopupOrderExpired
-				if err := tx.Save(&order).Error; err != nil {
-					return err
-				}
-			}
-			event.VerifyState = VerifyRejected
-			event.ProcessedAt = &now
-			return tx.Create(&event).Error
-		}
+		// A late notification for an expired order is still a real payment: the
+		// buyer's money arrived, so credit it instead of rejecting the callback.
+		// Double crediting is prevented by the order status transition below and
+		// the per-provider event ID, not by the deadline.
 		if !isSuccessStatus(params["trade_status"]) {
 			event.ProcessedAt = &now
 			return tx.Create(&event).Error

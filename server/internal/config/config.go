@@ -23,6 +23,7 @@ type Config struct {
 	PaymentOrderTTL               time.Duration
 	QuoteTTL                      time.Duration
 	RelayTimeout                  time.Duration
+	ShutdownTimeout               time.Duration
 	CookieSecure                  bool
 	DevExposeTokens               bool
 	InvitationRewardOpen          bool
@@ -104,6 +105,7 @@ func Load() Config {
 		PaymentOrderTTL:               envDuration("PAYMENT_ORDER_TTL", 30*time.Minute),
 		QuoteTTL:                      envDuration("QUOTE_TTL", 5*time.Minute),
 		RelayTimeout:                  envDuration("RELAY_TIMEOUT", 5*time.Minute),
+		ShutdownTimeout:               envDuration("SHUTDOWN_TIMEOUT", 60*time.Second),
 		CookieSecure:                  envBool("COOKIE_SECURE", false),
 		DevExposeTokens:               envBool("DEV_EXPOSE_TOKENS", false),
 		InvitationRewardOpen:          envBool("INVITATION_REWARD_OPEN", false),
