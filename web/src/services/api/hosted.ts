@@ -1,3 +1,5 @@
+import { requestJson as request } from "@/services/api/http";
+
 export type QuotaSummary = { balance: number; reserved: number; available: number };
 export type QuotaLedger = { id: number; delta: number; balanceAfter: number; source: string; businessType: string; reason?: string; createdAt: string };
 export type UserUsageLog = { id: number; taskId: string; project: string; capability: string; billingUnit: string; billedUnits: number; status: "running" | "succeeded" | "failed"; durationMs: number; totalTokens: number; chargedQuota: number; errorMessage?: string; startedAt: string; completedAt?: string };
@@ -56,21 +58,6 @@ export type HostedGenerationTask = {
     completedAt?: string;
     createdAt: string;
 };
-
-type Envelope<T> = { data: T; requestId?: string };
-type ErrorEnvelope = { error?: { code?: string; message?: string } };
-const apiBase = (import.meta.env.VITE_HOSTED_API_BASE || "/api/v1").replace(/\/$/, "");
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${apiBase}${path}`, {
-        ...init,
-        credentials: "include",
-        headers: { "Content-Type": "application/json", ...init?.headers },
-    });
-    const body = (await response.json().catch(() => ({}))) as Envelope<T> & ErrorEnvelope;
-    if (!response.ok) throw new Error(body.error?.message || "请求处理失败");
-    return body.data;
-}
 
 export const hostedApi = {
     quota: () => request<QuotaSummary>("/account/quota"),

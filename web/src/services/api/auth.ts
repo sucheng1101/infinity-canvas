@@ -1,3 +1,5 @@
+import { performRequest } from "@/services/api/http";
+
 export type AuthUser = {
     id: number;
     username: string;
@@ -6,9 +8,6 @@ export type AuthUser = {
     role: "user" | "admin";
     emailVerifiedAt?: string;
 };
-
-type ApiEnvelope<T> = { data: T; requestId?: string };
-type ApiErrorEnvelope = { error?: { code?: string; message?: string }; requestId?: string };
 
 export class AuthApiError extends Error {
     constructor(
@@ -20,20 +19,12 @@ export class AuthApiError extends Error {
     }
 }
 
-const apiBase = (import.meta.env.VITE_HOSTED_API_BASE || "/api/v1").replace(/\/$/, "");
-
 async function request<T>(path: string, init?: RequestInit) {
-    let response: Response;
-    try {
-        response = await fetch(`${apiBase}${path}`, {
-            ...init,
-            credentials: "include",
-            headers: { "Content-Type": "application/json", ...init?.headers },
-        });
-    } catch {
+    const result = await performRequest<T>(path, init);
+    if ("networkError" in result) {
         throw new AuthApiError("\u8fde\u63a5\u8d26\u6237\u670d\u52a1\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u3001\u670d\u52a1\u72b6\u6001\u6216 API \u5730\u5740\u914d\u7f6e", "SERVICE_UNAVAILABLE");
     }
-    const body = (await response.json().catch(() => ({}))) as ApiEnvelope<T> & ApiErrorEnvelope;
+    const { body, response } = result;
     if (!response.ok) {
         if (!body.error && [502, 503, 504].includes(response.status)) {
             throw new AuthApiError(`\u8d26\u6237\u670d\u52a1\u672a\u5c31\u7eea\uff08HTTP ${response.status}\uff09\uff0c\u8bf7\u68c0\u67e5\u670d\u52a1\u72b6\u6001\u3001MySQL \u4e0e Redis \u8fde\u63a5`, "UPSTREAM_UNAVAILABLE", response.status);

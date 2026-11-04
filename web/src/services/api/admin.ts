@@ -1,4 +1,5 @@
 import type { PublishedModel, RechargeProduct } from "@/services/api/hosted";
+import { requestJson as request } from "@/services/api/http";
 
 export type AdminChannel = {
     id: number;
@@ -223,20 +224,6 @@ export type AdminGeneration = {
 export type AdminAuditLog = { id: number; operatorId?: number; operatorName?: string; action: string; resourceType: string; resourceId: string; requestId?: string; createdAt: string };
 export type AdminFinanceDailyPoint = { date: string; rechargeFen: number; usageCount: number; revenueQuota: number; costQuota: number; profitQuota: number };
 export type AdminFinanceSummary = { rechargeOrders: number; rechargeFen: number; usageCount: number; revenueQuota: number; costQuota: number; profitQuota: number; failedCount: number; todayRechargeFen: number; todayRevenueQuota: number; todayCostQuota: number; todayProfitQuota: number; daily: AdminFinanceDailyPoint[] };
-
-type Envelope<T> = { data: T; requestId?: string; error?: { message?: string } };
-const apiBase = (import.meta.env.VITE_HOSTED_API_BASE || "/api/v1").replace(/\/$/, "");
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${apiBase}${path}`, {
-        ...init,
-        credentials: "include",
-        headers: { "Content-Type": "application/json", ...init?.headers },
-    });
-    const body = (await response.json().catch(() => ({}))) as Envelope<T>;
-    if (!response.ok) throw new Error(body.error?.message || "请求处理失败");
-    return body.data;
-}
 
 const json = (body: unknown, method = "POST") => ({ method, body: JSON.stringify(body) });
 
