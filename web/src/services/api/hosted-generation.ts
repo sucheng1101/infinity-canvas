@@ -18,6 +18,20 @@ type HostedRequest = {
 
 let modelCache: { expiresAt: number; items: PublishedModel[] } | null = null;
 
+const terminalStatuses = new Set(["succeeded", "failed", "cancelled"]);
+
+// 托管生成已改成入队执行，execute 只返回 202 + 排队状态，这里负责轮询到终态。
+async function waitForHostedTask(taskId: string, signal?: AbortSignal) {
+    const deadline = Date.now() + 10 * 60 * 1000;
+    while (Date.now() < deadline) {
+        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+        const current = await hostedApi.getGenerationTask(taskId);
+        if (terminalStatuses.has(current.status)) return current;
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+    throw new Error("生成任务超时，请稍后在任务中心查看结果");
+}
+
 export async function executeHostedGeneration(input: HostedRequest): Promise<HostedOutput> {
     if (input.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     const resolved = await resolvePublishedModel(input.capability, input.preferredModel, input.signal);
@@ -34,7 +48,8 @@ export async function executeHostedGeneration(input: HostedRequest): Promise<Hos
         channelModel: resolved.channelModel,
         signal: input.signal,
     });
-    const result = await hostedApi.executeGenerationTask(task.id, input.signal);
+    const started = await hostedApi.executeGenerationTask(task.id, input.signal);
+    const result = terminalStatuses.has(started.status) ? started : await waitForHostedTask(task.id, input.signal);
     if (result.status !== "succeeded") throw new Error(result.errorMessage || "托管生成失败");
     return result.output || {};
 }

@@ -108,6 +108,7 @@ export const hostedApi = {
         });
     },
     getGenerationTask: (id: string) => request<HostedGenerationTask>(`/generation-tasks/${encodeURIComponent(id)}`),
+    generationTasks: (params: Record<string, string | number | undefined> = {}) => request<{ items: HostedGenerationTask[] }>(`/generation-tasks?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
     executeGenerationTask: (id: string, signal?: AbortSignal) => request<HostedGenerationTask>(`/generation-tasks/${encodeURIComponent(id)}/execute`, { method: "POST", signal }),
     cancelGenerationTask: (id: string) => request<HostedGenerationTask>(`/generation-tasks/${encodeURIComponent(id)}/cancel`, { method: "POST" }),
 };

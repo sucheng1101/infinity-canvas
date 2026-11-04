@@ -1,10 +1,11 @@
-import { Bot, ChevronDown, Coins, Menu, UserRound } from "lucide-react";
+import { Bot, ChevronDown, Coins, ListChecks, Menu, UserRound } from "lucide-react";
 import { Button, Dropdown, Tooltip } from "antd";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { accountMenuItems, adminMenuItem, isAccountPath, navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { AppConfigModal } from "@/components/layout/app-config-modal";
+import { GenerationTaskDrawer } from "@/components/canvas/generation-task-drawer";
 import { AccountMenu } from "@/components/layout/account-menu";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
@@ -22,6 +23,7 @@ export function AppTopNav() {
     const navigate = useNavigate();
     const user = useAuthStore((state) => state.user);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const [taskDrawerOpen, setTaskDrawerOpen] = useState(false);
     const autoConnectRef = useRef(false);
     const agentToken = useAgentStore((state) => state.token);
     const agentEnabled = useAgentStore((state) => state.enabled);
@@ -124,7 +126,11 @@ export function AppTopNav() {
                                     <span className="text-xs font-medium text-stone-700 dark:text-stone-200">{availableQuota === null ? "--" : availableQuota.toLocaleString()} 积分</span>
                                 </Button>
                             ) : null}
-                            <Tooltip title={t(panelOpen ? "topNav.closeAgent" : "topNav.openAgent")}>
+                            {isHostedMode && user ? (
+                                <Tooltip title="任务中心">
+                                    <Button type="text" shape="circle" className="!h-8 !w-8 !min-w-8" icon={<ListChecks className="size-4" />} onClick={() => setTaskDrawerOpen(true)} aria-label="任务中心" />
+                                </Tooltip>
+                            ) : null}                            <Tooltip title={t(panelOpen ? "topNav.closeAgent" : "topNav.openAgent")}>
                                 <Button type="text" shape="circle" className="!h-8 !w-8 !min-w-8" icon={<Bot className="size-4" />} onClick={togglePanel} aria-label={t(panelOpen ? "topNav.closeAgent" : "topNav.openAgent")} />
                             </Tooltip>
                             <UserStatusActions />
@@ -135,6 +141,7 @@ export function AppTopNav() {
             ) : null}
 
             <MobileNavDrawer open={mobileNavOpen} activeToolSlug={activeToolSlug} onClose={() => setMobileNavOpen(false)} />
+            <GenerationTaskDrawer open={taskDrawerOpen} onClose={() => setTaskDrawerOpen(false)} />
             <AppConfigModal />
         </>
     );

@@ -196,6 +196,29 @@ func hasCustomChannelEntitlement(tx *gorm.DB, userID uint) bool {
 	return subscriptionCount > 0
 }
 
+// List returns the user's recent tasks, newest first, filtered by status when given.
+func (s *Service) List(userID uint, statuses []string, limit int) ([]View, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 30
+	}
+	query := s.DB.Where("user_id = ?", userID)
+	if len(statuses) > 0 {
+		query = query.Where("status IN ?", statuses)
+	}
+	var tasks []model.GenerationTask
+	if err := query.Order("created_at DESC").Limit(limit).Find(&tasks).Error; err != nil {
+		return nil, err
+	}
+	views := make([]View, 0, len(tasks))
+	for _, task := range tasks {
+		view, err := toView(task)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, view)
+	}
+	return views, nil
+}
 func (s *Service) Get(userID uint, taskID string) (View, error) {
 	var task model.GenerationTask
 	if err := s.DB.Where("id = ? AND user_id = ?", taskID, userID).First(&task).Error; err != nil {

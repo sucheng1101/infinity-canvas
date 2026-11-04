@@ -29,6 +29,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/modelcatalog"
 	"github.com/sucheng1101/infinity-canvas/server/internal/payment"
 	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
+	"github.com/sucheng1101/infinity-canvas/server/internal/queue"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
 	"github.com/sucheng1101/infinity-canvas/server/internal/relay"
 	"github.com/sucheng1101/infinity-canvas/server/internal/storage"
@@ -57,13 +58,14 @@ type Router struct {
 	Subscriptions  *subscription.Service
 	CostPricing    *costpricing.Service
 	Storage        *storageadmin.Service
+	Queue          *queue.Queue
 	Assets         *assets.Service
 	Registry       *storage.Registry
 	Redis          *redis.Client
 	Mailer         mailer.Mailer
 }
 
-func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbound mailer.Mailer, storageRegistry *storage.Registry) *gin.Engine {
+func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbound mailer.Mailer, storageRegistry *storage.Registry) (*gin.Engine, *queue.Queue) {
 	service := &auth.Service{DB: db, Cfg: cfg}
 	quotaService := &quota.Service{DB: db}
 	invitationService := &invitation.Service{DB: db, Cfg: cfg, Quota: quotaService}
@@ -79,7 +81,8 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	userChannelService := &userchannel.Service{DB: db, Cfg: cfg, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	costPricingService := &costpricing.Service{DB: db}
 	relayService.UserChannels = userChannelService
-	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Subscriptions: subscriptionService, CostPricing: costPricingService, Storage: &storageadmin.Service{DB: db, Cfg: cfg, Registry: storageRegistry}, Assets: &assets.Service{DB: db, Registry: storageRegistry}, Registry: storageRegistry, Redis: redisClient, Mailer: outbound}
+	generationQueue := queue.New(db, relayService, cfg.RelayWorkers, cfg.QueueMaxPending)
+	app := &Router{Queue: generationQueue, Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Subscriptions: subscriptionService, CostPricing: costPricingService, Storage: &storageadmin.Service{DB: db, Cfg: cfg, Registry: storageRegistry}, Assets: &assets.Service{DB: db, Registry: storageRegistry}, Registry: storageRegistry, Redis: redisClient, Mailer: outbound}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(requestID())
@@ -98,6 +101,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.GET("/models", app.models)
 	v1.POST("/quotes", app.requireAuth(), app.createQuote)
 	v1.POST("/generation-tasks", app.requireAuth(), app.createGenerationTask)
+	v1.GET("/generation-tasks", app.requireAuth(), app.listGenerationTasks)
 	v1.GET("/generation-tasks/:id", app.requireAuth(), app.getGenerationTask)
 	v1.POST("/generation-tasks/:id/execute", app.requireAuth(), app.executeGenerationTask)
 	v1.POST("/generation-tasks/:id/cancel", app.requireAuth(), app.cancelGenerationTask)
@@ -199,7 +203,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.GET("/files/*key", app.assetFile)
 	v1.POST("/admin/model-cost-pricing", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateModelCostPricing)
 	v1.PUT("/admin/model-cost-pricing/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateModelCostPricing)
-	return r
+	return r, generationQueue
 }
 
 type credentialsRequest struct {
@@ -593,32 +597,54 @@ func (a *Router) getGenerationTask(c *gin.Context) {
 
 func (a *Router) executeGenerationTask(c *gin.Context) {
 	user, _ := currentUser(c)
-	task, err := a.Relay.Execute(c.Request.Context(), user.ID, c.Param("id"), relay.ExecuteMeta{RequestID: c.GetString("requestId"), IP: c.ClientIP(), RequestType: "generation"})
-	if errors.Is(err, relay.ErrTaskNotFound) {
+	task, err := a.Generation.Get(user.ID, c.Param("id"))
+	if errors.Is(err, generation.ErrTaskNotFound) {
 		errorJSON(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
 		return
 	}
-	if errors.Is(err, relay.ErrRouteUnavailable) {
-		errorJSON(c, http.StatusServiceUnavailable, "ROUTE_UNAVAILABLE", "模型暂时没有可用渠道")
-		return
-	}
-	if errors.Is(err, relay.ErrUnsupported) {
-		errorJSON(c, http.StatusBadRequest, "CAPABILITY_UNSUPPORTED", "当前模型能力暂不支持托管生成")
-		return
-	}
 	if err != nil {
-		// The task has already been marked failed by Relay. Return the task view
-		// so the client can display the persisted failure state and error code.
-		if task.ID != "" {
-			successJSON(c, http.StatusOK, task)
+		errorJSON(c, http.StatusInternalServerError, "TASK_READ_FAILED", "任务读取失败")
+		return
+	}
+	// 已结束的任务直接回现状；排队/运行中重复调用是幂等的，不会重复执行。
+	switch task.Status {
+	case model.GenerationTaskSucceeded, model.GenerationTaskFailed, model.GenerationTaskCancelled:
+		successJSON(c, http.StatusOK, task)
+		return
+	}
+	if a.Queue == nil {
+		errorJSON(c, http.StatusServiceUnavailable, "QUEUE_UNAVAILABLE", "任务队列不可用")
+		return
+	}
+	if err := a.Queue.Enqueue(user.ID, task.ID); err != nil {
+		if errors.Is(err, queue.ErrQueueFull) {
+			errorJSON(c, http.StatusTooManyRequests, "QUEUE_FULL", "排队任务过多，请稍后再试")
 			return
 		}
-		errorJSON(c, http.StatusBadGateway, "UPSTREAM_GENERATION_FAILED", "上游模型生成失败")
+		errorJSON(c, http.StatusInternalServerError, "QUEUE_FAILED", "任务入队失败")
 		return
 	}
-	successJSON(c, http.StatusOK, task)
+	successJSON(c, http.StatusAccepted, task)
 }
 
+func (a *Router) listGenerationTasks(c *gin.Context) {
+	user, _ := currentUser(c)
+	var statuses []string
+	if raw := strings.TrimSpace(c.Query("status")); raw != "" {
+		for _, item := range strings.Split(raw, ",") {
+			if value := strings.TrimSpace(item); value != "" {
+				statuses = append(statuses, value)
+			}
+		}
+	}
+	limit, _ := strconv.Atoi(c.Query("limit"))
+	items, err := a.Generation.List(user.ID, statuses, limit)
+	if err != nil {
+		errorJSON(c, http.StatusInternalServerError, "TASKS_READ_FAILED", "任务列表读取失败")
+		return
+	}
+	successJSON(c, http.StatusOK, gin.H{"items": items})
+}
 func (a *Router) adminUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.Query("page"))
 	pageSize, _ := strconv.Atoi(c.Query("pageSize"))

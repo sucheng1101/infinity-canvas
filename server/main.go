@@ -58,7 +58,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("storage registry: %v", err)
 	}
-	router := httpapi.NewRouter(cfg, db, redisClient, mailer.NewSMTP(cfg), storageRegistry)
+	router, generationQueue := httpapi.NewRouter(cfg, db, redisClient, mailer.NewSMTP(cfg), storageRegistry)
+	generationQueue.Start(ctx)
+	if err := generationQueue.Recover(ctx); err != nil {
+		log.Printf("recover queued tasks failed: %v", err)
+	}
 	// 只有 TRUSTED_PROXIES 中显式列出的代理才允许影响客户端 IP；默认为空表示不信任任何代理，
 	// 避免伪造 X-Forwarded-For 绕过登录 / 注册 / 找回密码的频率限制。
 	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
@@ -79,6 +83,7 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		log.Printf("graceful shutdown failed: %v", err)
 	}
+	generationQueue.Stop()
 }
 
 // reapStaleTasks releases quota stranded by tasks that were left running when

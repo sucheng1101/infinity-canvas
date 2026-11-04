@@ -23,6 +23,8 @@ type Config struct {
 	PaymentOrderTTL               time.Duration
 	QuoteTTL                      time.Duration
 	RelayTimeout                  time.Duration
+	RelayWorkers                  int
+	QueueMaxPending               int
 	ShutdownTimeout               time.Duration
 	LogRetention                  time.Duration
 	CookieSecure                  bool
@@ -117,6 +119,8 @@ func Load() Config {
 		PaymentOrderTTL:               envDuration("PAYMENT_ORDER_TTL", 30*time.Minute),
 		QuoteTTL:                      envDuration("QUOTE_TTL", 5*time.Minute),
 		RelayTimeout:                  envDuration("RELAY_TIMEOUT", 5*time.Minute),
+		RelayWorkers:                  envInt("RELAY_WORKERS", 2),
+		QueueMaxPending:               envInt("QUEUE_MAX_PENDING", 200),
 		ShutdownTimeout:               envDuration("SHUTDOWN_TIMEOUT", 60*time.Second),
 		LogRetention:                  envDuration("LOG_RETENTION", 180*24*time.Hour),
 		CookieSecure:                  envBool("COOKIE_SECURE", false),
