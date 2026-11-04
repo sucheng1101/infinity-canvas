@@ -56,6 +56,17 @@ type Config struct {
 	EpayPayMethods                []string
 	EpayCallbackURL               string
 	ChannelEncryptionKey          string
+	// Storage: "local" writes to disk, "s3" targets any S3-compatible service
+	// (MinIO, R2, OSS, COS, B2, AWS S3) through one set of settings.
+	StorageDriver     string
+	StorageLocalDir   string
+	StoragePublicBase string
+	S3Endpoint        string
+	S3Region          string
+	S3Bucket          string
+	S3AccessKey       string
+	S3SecretKey       string
+	S3UsePathStyle    bool
 }
 
 const defaultChannelEncryptionKey = "infinite-canvas-local-channel-key"
@@ -139,6 +150,15 @@ func Load() Config {
 		EpayPayMethods:                envList("EPAY_PAY_METHODS", []string{"alipay", "wxpay"}),
 		EpayCallbackURL:               env("EPAY_CALLBACK_URL", "http://localhost:1011"),
 		ChannelEncryptionKey:          env("CHANNEL_ENCRYPTION_KEY", defaultChannelEncryptionKey),
+		StorageDriver:                 env("STORAGE_DRIVER", "local"),
+		StorageLocalDir:               env("STORAGE_LOCAL_DIR", "data/uploads"),
+		StoragePublicBase:             env("STORAGE_PUBLIC_BASE", "/api/v1/files"),
+		S3Endpoint:                    os.Getenv("S3_ENDPOINT"),
+		S3Region:                      env("S3_REGION", "auto"),
+		S3Bucket:                      os.Getenv("S3_BUCKET"),
+		S3AccessKey:                   os.Getenv("S3_ACCESS_KEY"),
+		S3SecretKey:                   os.Getenv("S3_SECRET_KEY"),
+		S3UsePathStyle:                envBool("S3_USE_PATH_STYLE", true),
 	}
 }
 
