@@ -1,7 +1,9 @@
 import { App, Button, Drawer, Empty, Form, Input, InputNumber, Modal, Popconfirm, Select, Spin, Tag } from "antd";
-import { Plus } from "lucide-react";
+import { Download, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { saveAs } from "file-saver";
+import { exportJianyingDraft, exportStoryboardPackage, type ExportShot } from "@/lib/canvas/export-storyboard";
 import { storyboardApi, type SceneInput, type ShotInput, type StoryboardScene, type StoryboardShot } from "@/services/api/storyboard";
 
 type ShotFormValues = { durationSec: number; shotSize: string; camera: string; dialogue: string; prompt: string };
@@ -18,6 +20,8 @@ type Props = {
     onInsertShot: (shot: StoryboardShot) => void;
     open?: boolean;
     onClose?: () => void;
+    // 由调用方按 imageNodeId / videoNodeId 找到画布节点上的媒体地址。
+    resolveMedia?: (shot: StoryboardShot) => { imageUrl?: string; videoUrl?: string } | Promise<{ imageUrl?: string; videoUrl?: string }>;
 };
 
 const selectOptions = (values: string[]) => values.map((value) => ({ value, label: value }));
@@ -25,7 +29,7 @@ const selectOptions = (values: string[]) => values.map((value) => ({ value, labe
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
 // 分镜抽屉：场次分组展示镜头，增删改直接落库，镜头落画布交给调用方。
-export function StoryboardPanel({ projectId, onInsertShot, open, onClose }: Props) {
+export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolveMedia }: Props) {
     const { message } = App.useApp();
     const [scenes, setScenes] = useState<StoryboardScene[]>([]);
     const [loading, setLoading] = useState(false);
@@ -135,6 +139,39 @@ export function StoryboardPanel({ projectId, onInsertShot, open, onClose }: Prop
         }
     };
 
+    const [exporting, setExporting] = useState(false);
+    const exportPackage = async (mode: "package" | "draft" = "package") => {
+        const flat: ExportShot[] = [];
+        for (const scene of scenes) {
+            for (const shot of scene.shots) {
+                const media = resolveMedia ? await resolveMedia(shot) : undefined;
+                flat.push({
+                    index: flat.length + 1,
+                    sceneName: scene.name,
+                    durationSec: shot.durationSec,
+                    dialogue: shot.dialogue,
+                    prompt: shot.prompt,
+                    imageUrl: media?.imageUrl,
+                    videoUrl: media?.videoUrl,
+                    assetRefs: shot.assetRefs,
+                });
+            }
+        }
+        if (flat.length === 0) {
+            message.warning("还没有镜头可以导出");
+            return;
+        }
+        setExporting(true);
+        try {
+            const blob = mode === "draft" ? await exportJianyingDraft(projectId, flat) : await exportStoryboardPackage(projectId, flat);
+            saveAs(blob, mode === "draft" ? `jianying-${projectId}.zip` : `storyboard-${projectId}.zip`);
+            message.success(mode === "draft" ? `已导出剪映草稿（${flat.length} 个镜头）` : `已导出 ${flat.length} 个镜头的工程包`);
+        } catch (error) {
+            message.error(errorText(error, "导出失败"));
+        } finally {
+            setExporting(false);
+        }
+    };
     return (
         <Drawer
             title="分镜"
@@ -143,9 +180,14 @@ export function StoryboardPanel({ projectId, onInsertShot, open, onClose }: Prop
             open={visible}
             onClose={close}
             extra={
-                <Button size="small" type="primary" icon={<Plus className="size-4" />} onClick={() => openSceneForm()}>
-                    新增场次
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button size="small" icon={<Download className="size-4" />} loading={exporting} onClick={() => void exportPackage("package")}>
+                        导出工程包
+                    </Button>
+                    <Button size="small" type="primary" icon={<Plus className="size-4" />} onClick={() => openSceneForm()}>
+                        新增场次
+                    </Button>
+                </div>
             }
         >
             {loading && scenes.length === 0 ? (

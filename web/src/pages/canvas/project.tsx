@@ -9,7 +9,7 @@ import { requestEdit, requestGeneration, requestImageQuestion } from "@/services
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { cancelHostedVideoTask, createVideoGenerationTask, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
-import { ensureImagePreview, uploadImage } from "@/services/image-storage";
+import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
@@ -206,6 +206,16 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const params = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    // 分镜导出时按节点 id 取媒体地址：图片走 resolveImageUrl，视频直接用节点 content。
+    const resolveStoryboardMedia = async (shot: StoryboardShot) => {
+        const imageNode = shot.imageNodeId ? nodes.find((node) => node.id === shot.imageNodeId) : undefined;
+        const image = imageNode?.metadata?.images?.[0];
+        const videoNode = shot.videoNodeId ? nodes.find((node) => node.id === shot.videoNodeId) : undefined;
+        return {
+            imageUrl: image ? await resolveImageUrl(image.storageKey, image.content) : undefined,
+            videoUrl: videoNode?.type === CanvasNodeType.Video ? videoNode.metadata?.content : undefined,
+        };
+    };
     // 分镜「落到画布」：生成一个配置节点，提示词用该镜头的提示词。
     const insertStoryboardShot = (shot: StoryboardShot) => {
         const right = nodes.length ? Math.max(...nodes.map((node) => node.position.x + 320)) : 0;
@@ -3125,7 +3135,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     onShowImageInfoChange={setShowImageInfo}
                 />
 
-                {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} /> : null}
+                {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} resolveMedia={resolveStoryboardMedia} /> : null}
             {isMiniMapOpen ? <Minimap nodes={nodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />

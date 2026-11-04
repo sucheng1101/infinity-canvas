@@ -1,6 +1,8 @@
 # CHANGELOG
 
 ## Unreleased
+- [新增] 分镜面板支持「导出工程包」与「剪映草稿」：前者含 manifest.json / subtitles.srt 与能取到的媒体，后者生成 draft_content.json 与 draft_meta_info.json。
+- [新增] 剧本转分镜解析（prompt + 容错 JSON 解析），为后续接入文本模型拆镜做准备。
 - [新增] 画布工具栏新增「分镜」：可按场次维护镜头（时长/景别/运镜/台词/提示词），并一键把镜头落成画布配置节点。
 - [新增] 分镜工程包导出：生成 manifest.json 与 subtitles.srt，并打包能取到的图片与视频。
 - [调整] 托管生成改为异步执行：POST /generation-tasks/:id/execute 现在入队后立即返回 202，生成结果由前端轮询任务状态；避免了长任务占用请求。

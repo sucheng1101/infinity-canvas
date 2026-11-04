@@ -1,4 +1,5 @@
 import { createZip } from "@/lib/zip";
+import { buildDraftMetaInfo, buildJianyingDraft } from "@/lib/canvas/jianying-draft";
 
 export type ExportShot = {
     index: number;
@@ -100,4 +101,13 @@ export async function exportStoryboardPackage(project: string, shots: ExportShot
         }
     }
     return createZip(files);
+}
+
+// 剪映草稿包：只含 draft_content.json 与 draft_meta_info.json，媒体文件由剪映自己解析路径。
+export async function exportJianyingDraft(project: string, shots: ExportShot[]) {
+    const draft = buildJianyingDraft(shots);
+    return createZip([
+        { name: "draft_content.json", data: JSON.stringify(draft, null, 2) },
+        { name: "draft_meta_info.json", data: JSON.stringify(buildDraftMetaInfo(project, draft), null, 2) },
+    ]);
 }
