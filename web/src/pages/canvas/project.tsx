@@ -181,6 +181,22 @@ function canvasDerivationSignature(nodes: CanvasNodeData[], connections: CanvasC
     return `${nodePart}\u0003${connectionPart}`;
 }
 
+// Runs tasks with a fixed concurrency so a batch does not flood the upstream.
+async function runLimited<T>(items: T[], limit: number, worker: (item: T) => Promise<void>, shouldStop: () => boolean) {
+    let cursor = 0;
+    const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
+        while (cursor < items.length && !shouldStop()) {
+            const item = items[cursor];
+            cursor += 1;
+            await worker(item);
+        }
+    });
+    await Promise.all(runners);
+}
+
+const BATCH_GENERATION_CONCURRENCY = 3;
+const BATCH_GENERATION_MESSAGE_KEY = "canvas-batch-generation";
+
 function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerce" }) {
     const isEcommerce = canvasKind === "ecommerce";
     const { message, modal } = App.useApp();
@@ -298,6 +314,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const connectingParamsRef = useRef(connectingParams);
     const connectionTargetNodeIdRef = useRef(connectionTargetNodeId);
     const selectionBoxRef = useRef(selectionBox);
+    const batchCanceledRef = useRef(false);
     // Marquee updates are coalesced into one frame, otherwise every pointermove
     // walks all nodes and re-renders the whole canvas.
     const marqueeFrameRef = useRef<number | null>(null);
@@ -3265,9 +3282,43 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         const imageTargets = targets.filter((node) => !node.metadata?.ecommerceQa);
         const qaTargets = targets.filter((node) => node.metadata?.ecommerceQa);
         void (async () => {
-            await Promise.allSettled(imageTargets.map((node) => handleGenerateNode(node.id, node.metadata?.generationMode || "image", node.metadata?.composerContent ?? node.metadata?.prompt ?? "")));
+            if (imageTargets.length > 1) {
+                let done = 0;
+                batchCanceledRef.current = false;
+                const showProgress = () =>
+                    message.open({
+                        key: BATCH_GENERATION_MESSAGE_KEY,
+                        type: "loading",
+                        duration: 0,
+                        content: (
+                            <span className="flex items-center gap-3">
+                                {t("canvas.projectPage.batchProgress", { done, total: imageTargets.length })}
+                                <Button size="small" type="link" className="px-0" onClick={stopBatchGeneration}>
+                                    {t("common.cancel")}
+                                </Button>
+                            </span>
+                        ),
+                    });
+                showProgress();
+                await runLimited(imageTargets, BATCH_GENERATION_CONCURRENCY, async (node) => {
+                    await handleGenerateNode(node.id, node.metadata?.generationMode || "image", node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
+                    done += 1;
+                    if (!batchCanceledRef.current) showProgress();
+                }, () => batchCanceledRef.current);
+                message.destroy(BATCH_GENERATION_MESSAGE_KEY);
+            } else {
+                await Promise.allSettled(imageTargets.map((node) => handleGenerateNode(node.id, node.metadata?.generationMode || "image", node.metadata?.composerContent ?? node.metadata?.prompt ?? "")));
+            }
+            if (batchCanceledRef.current) return;
             qaTargets.forEach((node) => void handleGenerateNode(node.id, node.metadata?.generationMode || "text", node.metadata?.composerContent ?? node.metadata?.prompt ?? ""));
         })();
+    };
+    const stopBatchGeneration = () => {
+        batchCanceledRef.current = true;
+        message.destroy(BATCH_GENERATION_MESSAGE_KEY);
+        const runningIds = new Set<string>();
+        generationRequestsRef.current.forEach((request) => runningIds.add(request.runningNodeId));
+        runningIds.forEach((runningId) => stopGenerationByRunningId(runningId));
     };
     const batchGenerateSelection = () => runGenerationTargets(selectedConfigNodes);
     const runEcommerceGenerationSet = () => runGenerationTargets(isEcommerce ? nodesRef.current.filter((node) => node.metadata?.ecommerceImageSource || node.metadata?.ecommerceQa) : []);
