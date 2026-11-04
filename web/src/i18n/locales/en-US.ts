@@ -5,6 +5,25 @@ export default {
     },
     theme: { toggle: "Toggle theme" },
     authPage: {
+        forgot: {
+            eyebrow: "Account security", title: "Reset your password", titleSent: "Request received",
+            description: "Enter your account email and we will send a reset link.",
+            emailLabel: "Email", emailRequired: "Enter your email", emailInvalid: "Enter a valid email",
+            submit: "Send reset email", back: "Back to sign in",
+        },
+        verify: {
+            eyebrow: "Email verification", titleLoading: "Verifying your email", titleSuccess: "Email verified", titleError: "This link is no longer valid",
+            descriptionSuccess: "Your account is active. You can start creating now.", descriptionPending: "Please wait.",
+            missingToken: "This verification link is missing information", enter: "Enter workspace", back: "Back to sign in",
+        },
+        reset: {
+            eyebrow: "Account security", title: "Set a new password", titleDone: "Password updated",
+            description: "The new password must be 8 to 72 characters.", descriptionDone: "Sign in with your new password.",
+            missingToken: "This reset link is missing information", login: "Sign in with the new password",
+            passwordLabel: "New password", passwordRequired: "Enter a new password", passwordMin: "Use at least 8 characters",
+            confirmLabel: "Confirm new password", confirmRequired: "Enter the new password again", mismatch: "The two passwords do not match",
+            submit: "Update password",
+        },
         login: {
             eyebrow: "Welcome back", title: "Sign in to your workspace", description: "Sign in to use the models and credits your administrator configured.",
             resendSent: "Verification email sent again. Check your inbox.",

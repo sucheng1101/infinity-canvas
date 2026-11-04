@@ -5,6 +5,25 @@ export default {
     },
     theme: { toggle: "切换主题" },
     authPage: {
+        forgot: {
+            eyebrow: "账户安全", title: "找回密码", titleSent: "请求已受理",
+            description: "输入注册邮箱，我们会发送密码重置链接。",
+            emailLabel: "邮箱", emailRequired: "请输入邮箱", emailInvalid: "请输入有效邮箱",
+            submit: "发送重置邮件", back: "返回登录",
+        },
+        verify: {
+            eyebrow: "邮箱验证", titleLoading: "正在验证邮箱", titleSuccess: "邮箱验证成功", titleError: "验证链接失效",
+            descriptionSuccess: "账号已经启用，现在可以进入创作空间。", descriptionPending: "请稍候。",
+            missingToken: "验证链接缺少必要信息", enter: "进入创作空间", back: "返回登录",
+        },
+        reset: {
+            eyebrow: "账户安全", title: "设置新密码", titleDone: "密码已更新",
+            description: "新密码应为 8 至 72 位。", descriptionDone: "请使用新密码重新登录。",
+            missingToken: "重置链接缺少必要信息", login: "使用新密码登录",
+            passwordLabel: "新密码", passwordRequired: "请输入新密码", passwordMin: "密码至少 8 位",
+            confirmLabel: "确认新密码", confirmRequired: "请再次输入新密码", mismatch: "两次输入的密码不一致",
+            submit: "更新密码",
+        },
         login: {
             eyebrow: "欢迎回来", title: "登录你的创作空间", description: "登录后即可使用管理员配置好的模型与积分。",
             resendSent: "验证邮件已重新发送，请检查邮箱",
