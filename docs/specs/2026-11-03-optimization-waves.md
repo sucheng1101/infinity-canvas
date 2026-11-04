@@ -66,7 +66,7 @@
 | --- | --- | --- | --- |
 | WP6 | 画布渲染：mention 引用增量缓存、修 `React.memo` 命中、框选与滚轮 rAF 合并、保存节流到 800ms | `web/src/pages/canvas/project.tsx`、`web/src/components/canvas/infinite-canvas.tsx`、`web/src/stores/canvas/use-canvas-store.ts` | 200 节点画布拖拽不卡；框选不抖；流式输出不重渲染全树 |
 | WP7 | 服务端性能：模型目录同步移出读路径、后台订单/用量列表分页下推、SQL 聚合替代内存统计、连接池配置 | `server/internal/modelcatalog/service.go`、`server/internal/admin/service.go`、`server/internal/store/store.go` | `/models` 读不再写库；订单列表分页正确且 total 准确 |
-| WP8 | 前端数据层：抽 `services/api/http.ts` 合并三份 `request`、react-query 接管 billing/model-plaza/channels/assets、积分统一 `queryKey` | `web/src/services/api/http.ts`（新增）、`web/src/services/api/auth.ts`、`hosted.ts`、`admin.ts`、`web/src/pages/billing/**`、`web/src/pages/model-plaza/**`、`web/src/pages/channels/**`、`web/src/pages/assets/**` | 各页加载/错误态一致；积分只请求一次；后台保存后只刷新受影响的 key |
+| WP8 | 3–11 | 已验收 | 总控台 | `5724e36`、`fc78bf5`、`7aa5821` | `services/api/http.ts` 合并三份 `request`；`useQuota` 统一积分查询；充值、模型广场、自定义渠道三个页面改为 `useQuery`（缓存、去重、统一 loading/error），管理后台仍为手写 `load()` |
 | WP9 | 副本收敛：电商工具栏/选择栏/配置面板三个副本合并为带 variant 的单一实现，并补回 `data-canvas-bottom-toolbar` | `web/src/components/canvas/canvas-toolbar.tsx`、`canvas-selection-toolbar.tsx`、`canvas-config-node-panel.tsx`、`web/src/components/canvas/ecommerce/*` | 通用画布与电商画布视觉与行为不变；电商自动聚焦不再顶到工具栏下 |
 
 ### Wave 3：结构收敛与测试

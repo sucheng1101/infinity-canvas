@@ -5,6 +5,12 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+## 优化 Wave 11：账户页改用查询缓存
+
+- `/assets/wallet`、`/model-plaza`、`/channels` 三个页面应正常加载数据，首次进入有 loading，失败时弹出错误提示。
+- 在三个页面之间来回切换时，已加载的数据应立即显示（不再每次全屏 loading），刷新按钮/保存后仍能拿到最新数据。
+- 充值下单、订阅购买、渠道保存/停用/测试后，页面数据应自动刷新为新状态。
+
 ## 优化 Wave 9–10：充值页与模型广场中英双语
 
 - 切到 English 后，`/assets/wallet`（积分与充值）应显示英文：积分卡、邀请奖励、套餐价格、订阅区块、积分流水表头与空态、支付状态提示。
