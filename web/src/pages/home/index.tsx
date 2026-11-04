@@ -1,4 +1,5 @@
 import { ArrowRight } from "lucide-react";
+import { Film, LayoutGrid, Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { App, Button, Image, Tag } from "antd";
 import { useNavigate } from "react-router-dom";
@@ -55,6 +56,27 @@ export default function IndexPage() {
                         <Button size="large" onClick={() => navigate("/canvas")}>
                             {t("home.openCanvas")}
                         </Button>
+                    </div>
+
+                    <div className="mt-12 grid w-full max-w-4xl gap-3 sm:grid-cols-3">
+                        {[
+                            { key: "product", path: "/projects?create=1", icon: <Sparkles className="size-4 text-orange-500" /> },
+                            { key: "video", path: "/workbench?mode=video", icon: <Film className="size-4 text-violet-500" /> },
+                            { key: "canvas", path: "/canvas", icon: <LayoutGrid className="size-4 text-stone-500" /> },
+                        ].map((card) => (
+                            <button
+                                key={card.key}
+                                type="button"
+                                onClick={() => navigate(card.path)}
+                                className="group flex flex-col gap-2 rounded-xl border border-stone-200 bg-white/70 p-4 text-left transition hover:-translate-y-0.5 hover:border-stone-300 hover:shadow-sm dark:border-stone-800 dark:bg-stone-950/60 dark:hover:border-stone-700"
+                            >
+                                <span className="flex items-center gap-2 text-sm font-medium text-stone-900 dark:text-stone-100">
+                                    {card.icon}
+                                    {t(`home.quickStart.${card.key}`)}
+                                </span>
+                                <span className="text-xs leading-5 text-stone-500 dark:text-stone-400">{t(`home.quickStart.${card.key}Desc`)}</span>
+                            </button>
+                        ))}
                     </div>
                 </div>
 

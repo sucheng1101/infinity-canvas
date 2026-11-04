@@ -8,6 +8,7 @@ import { readZip } from "@/lib/zip";
 import { setMediaBlob } from "@/services/file-storage";
 import { setImageBlob } from "@/services/image-storage";
 import { CanvasDeleteProjectsDialog } from "@/components/canvas/canvas-delete-projects-dialog";
+import { CanvasKindTabs } from "@/components/canvas/canvas-kind-tabs";
 import { CanvasProjectCard } from "@/components/canvas/canvas-project-card";
 import type { CanvasExportFile } from "@/types/canvas-export";
 import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
@@ -80,6 +81,7 @@ export default function CanvasPage() {
                     <div>
                         <p className="text-xs text-stone-500">{t("canvas.library")}</p>
                         <h1 className="mt-3 text-3xl font-semibold">{t("canvas.title")}</h1>
+                        <CanvasKindTabs />
                     </div>
                     <div className="flex items-center gap-2">
                         {selectedIds.length ? (

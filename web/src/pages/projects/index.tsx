@@ -10,6 +10,7 @@ import { setMediaBlob } from "@/services/file-storage";
 import { imageToDataUrl, setImageBlob, uploadImage } from "@/services/image-storage";
 import { requestImageQuestion } from "@/services/api/image";
 import { CanvasDeleteProjectsDialog } from "@/components/canvas/canvas-delete-projects-dialog";
+import { CanvasKindTabs } from "@/components/canvas/canvas-kind-tabs";
 import { CanvasProjectCard } from "@/components/canvas/canvas-project-card";
 import { ModelPicker } from "@/components/model-picker";
 import type { CanvasExportFile } from "@/types/canvas-export";
@@ -60,6 +61,7 @@ export default function ProjectsPage() {
     const ecommerceReferenceInputRef = useRef<HTMLInputElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const autoOpenRef = useRef(false);
+    const createHandledRef = useRef(false);
     const hydrated = useCanvasStore((state) => state.hydrated);
     const allProjects = useCanvasStore((state) => state.projects);
     // 项目管理只管理电商项目；普通画布归「我的画布」（/canvas）。
@@ -91,6 +93,15 @@ export default function ProjectsPage() {
         setEcommerceRequests([]);
         setEcommerceOpen(true);
     };
+    // Home entry cards link here with ?create=1 to skip the extra click.
+    useEffect(() => {
+        if (createHandledRef.current || searchParams.get("create") !== "1") return;
+        createHandledRef.current = true;
+        openEcommerce();
+        const next = new URLSearchParams(searchParams);
+        next.delete("create");
+        navigate(`/projects${next.size ? `?${next}` : ""}`, { replace: true });
+    }, [navigate, openEcommerce, searchParams]);
     const addEcommerceReferences = async (files?: FileList | null) => {
         const next = await Promise.all(Array.from(files || []).filter((file) => file.type.startsWith("image/")).map(async (file) => {
             const stored = await uploadImage(file);
@@ -236,6 +247,7 @@ export default function ProjectsPage() {
                     <div>
                         <p className="text-xs text-stone-500">{t("canvas.library")}</p>
                         <h1 className="mt-3 text-3xl font-semibold">{t("navigation.projects")}</h1>
+                        <CanvasKindTabs />
                     </div>
                     <div className="flex items-center gap-2">
                         {selectedIds.length ? (

@@ -1,9 +1,9 @@
-import { Bot, Coins, Menu, Settings2 } from "lucide-react";
-import { Button, Tooltip } from "antd";
+import { Bot, ChevronDown, Coins, Menu, UserRound } from "lucide-react";
+import { Button, Dropdown, Tooltip } from "antd";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
-import { navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
+import { accountMenuItems, adminMenuItem, isAccountPath, navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { AppConfigModal } from "@/components/layout/app-config-modal";
 import { AccountMenu } from "@/components/layout/account-menu";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
@@ -32,6 +32,11 @@ export function AppTopNav() {
     const hideHeader = /^\/canvas\/[^/]+/.test(pathname);
     const slug = pathname.split("/").filter(Boolean)[0];
     const activeToolSlug = navigationTools.some((tool) => tool.slug === slug) ? (slug as NavigationToolSlug) : undefined;
+    const accountActive = isAccountPath(pathname);
+    const accountItems = [
+        ...accountMenuItems.map((item) => ({ key: item.path, icon: <item.icon className="size-4" />, label: t(`topNav.account.${item.key}`) })),
+        ...(user?.role === "admin" ? [{ type: "divider" as const }, { key: adminMenuItem.path, icon: <adminMenuItem.icon className="size-4" />, label: t("topNav.account.admin") }] : []),
+    ];
 
     useEffect(() => {
         if (autoConnectRef.current || agentEnabled || agentConnected || !agentToken.trim()) return;
@@ -89,6 +94,21 @@ export function AppTopNav() {
                                         </Link>
                                     );
                                 })}
+                                <Dropdown menu={{ items: accountItems, onClick: ({ key }) => navigate(key) }} trigger={["click"]} placement="bottomLeft">
+                                    <button
+                                        type="button"
+                                        className={cn(
+                                            "relative flex h-14 shrink-0 items-center gap-2 text-sm leading-6 transition after:absolute after:inset-x-0 after:bottom-0 after:h-px",
+                                            accountActive
+                                                ? "font-medium text-stone-950 after:bg-stone-950 dark:text-stone-100 dark:after:bg-stone-100"
+                                                : "text-stone-500 after:bg-transparent hover:text-stone-950 dark:text-stone-400 dark:hover:text-stone-100",
+                                        )}
+                                    >
+                                        <UserRound className="size-4" />
+                                        <span className="truncate">{t("navigation.account")}</span>
+                                        <ChevronDown className="size-3.5 opacity-60" />
+                                    </button>
+                                </Dropdown>
                             </nav>
                         </div>
 
@@ -102,17 +122,6 @@ export function AppTopNav() {
                                     title="Quota balance"
                                 >
                                     <span className="text-xs font-medium text-stone-700 dark:text-stone-200">{availableQuota === null ? "--" : availableQuota.toLocaleString()} 积分</span>
-                                </Button>
-                            ) : null}
-                            {user?.role === "admin" ? (
-                                <Button
-                                    type="text"
-                                    className="!h-8 !px-2"
-                                    icon={<Settings2 className="size-4" />}
-                                    onClick={() => navigate("/admin")}
-                                    aria-label="管理后台"
-                                >
-                                    <span className="hidden text-xs sm:inline">管理后台</span>
                                 </Button>
                             ) : null}
                             <Tooltip title={t(panelOpen ? "topNav.closeAgent" : "topNav.openAgent")}>
