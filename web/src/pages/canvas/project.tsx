@@ -9,6 +9,7 @@ import { requestEdit, requestGeneration, requestImageQuestion } from "@/services
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { cancelHostedVideoTask, createVideoGenerationTask, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
+import { buildStoryboardPrompt, parseStoryboard } from "@/lib/canvas/storyboard-parse";
 import { assetsApi } from "@/services/api/assets";
 import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
@@ -207,6 +208,14 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const params = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    // 剧本 → 分镜：调文本模型拿到 JSON，解析失败时把原始输出抛给调用方提示。
+    const generateStoryboardFromScript = async (script: string) => {
+        let buffer = "";
+        await requestImageQuestion(effectiveConfig, [{ role: "user", content: buildStoryboardPrompt(script) }], (delta) => {
+            buffer += delta;
+        });
+        return parseStoryboard(buffer);
+    };
     // 把选中的画布节点存成资产：描述取节点提示词，有图就把首图一并上传。
     const saveNodeAsAsset = async () => {
         const node = contextMenuNode ?? nodes.find((item) => item.id === activeNodeId) ?? nodes.find((item) => selectedNodeIds.has(item.id));
@@ -3154,7 +3163,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     onShowImageInfoChange={setShowImageInfo}
                 />
 
-                {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} resolveMedia={resolveStoryboardMedia} /> : null}
+                {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} resolveMedia={resolveStoryboardMedia} onGenerateFromScript={generateStoryboardFromScript} /> : null}
             {isMiniMapOpen ? <Minimap nodes={nodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />

@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased
+- [新增] 分镜面板支持「从剧本生成」：贴入剧本后调用文本模型拆成场次与镜头并直接保存。
 - [新增] 画布节点右键菜单新增「存为资产」：把节点提示词与首图存进资产库。
 - [新增] 分镜面板支持「导出工程包」与「剪映草稿」：前者含 manifest.json / subtitles.srt 与能取到的媒体，后者生成 draft_content.json 与 draft_meta_info.json。
 - [新增] 剧本转分镜解析（prompt + 容错 JSON 解析），为后续接入文本模型拆镜做准备。
