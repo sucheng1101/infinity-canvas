@@ -32,6 +32,7 @@ const config: AiConfig = {
             baseUrl: "https://example.com",
             apiKey: "test-key",
             apiFormat: "openai",
+            modelApiKeys: [],
             models: [
                 { name: "video-b", capability: "video" },
                 { name: "video-a", capability: "video" },
