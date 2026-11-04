@@ -333,7 +333,9 @@ func (s *Service) prepare(existing *model.StorageProvider, input Input) (model.S
 	if driver == "local" && row.LocalDir == "" {
 		row.LocalDir = s.Cfg.StorageLocalDir
 	}
-	if row.PublicBase == "" {
+	// Only the local driver serves files through our API; S3 URLs come from the
+	// endpoint/bucket or an explicitly configured CDN base.
+	if driver == "local" && row.PublicBase == "" {
 		row.PublicBase = s.Cfg.StoragePublicBase
 	}
 	return row, nil
