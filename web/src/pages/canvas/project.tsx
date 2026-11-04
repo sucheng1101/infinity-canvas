@@ -3554,6 +3554,13 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     ) : null}
                 </InfiniteCanvas>
 
+                {!nodes.length ? (
+                    <div className="pointer-events-none absolute inset-0 z-[40] flex flex-col items-center justify-center gap-2 text-center" style={{ color: theme.node.muted }}>
+                        <div className="text-base font-medium">{t("canvas.projectPage.emptyTitle")}</div>
+                        <div className="text-sm opacity-80">{t("canvas.projectPage.emptyHint")}</div>
+                    </div>
+                ) : null}
+
                 {referencePickerNodeId ? <button type="button" className="absolute left-1/2 top-4 z-[90] -translate-x-1/2 rounded-full border px-4 py-2 text-sm font-medium shadow-lg backdrop-blur" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border }} onClick={exitNodeReferenceSelection}>{t("canvas.references.selectingHint")}</button> : null}
 
                 <div
