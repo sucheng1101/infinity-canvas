@@ -120,33 +120,57 @@ func (r *Registry) ResolveForUser(userID uint) (Store, model.StorageProvider, er
 	if err := r.DB.Select("id", "storage_provider_id").First(&user, userID).Error; err != nil {
 		return nil, model.StorageProvider{}, err
 	}
-	var providers []model.StorageProvider
-	if err := r.DB.Where("enabled = ?", true).Order("sort_order ASC").Order("created_at ASC").Find(&providers).Error; err != nil {
+	providers, err := r.providers()
+	if err != nil {
 		return nil, model.StorageProvider{}, err
 	}
-	if len(providers) == 0 {
-		return nil, model.StorageProvider{}, ErrNoProvider
+	return r.storeFor(pickProvider(providers, user.StorageProviderID))
+}
+
+// Default returns the administrator default store, used for reads that are not
+// tied to a user (public file URLs).
+func (r *Registry) Default() (Store, model.StorageProvider, error) {
+	providers, err := r.providers()
+	if err != nil {
+		return nil, model.StorageProvider{}, err
 	}
-	chosen := providers[0]
-	if user.StorageProviderID != "" {
+	return r.storeFor(pickProvider(providers, ""))
+}
+
+// providers lists the enabled providers in the administrator's display order.
+func (r *Registry) providers() ([]model.StorageProvider, error) {
+	var providers []model.StorageProvider
+	if err := r.DB.Where("enabled = ?", true).Order("sort_order ASC").Order("created_at ASC").Find(&providers).Error; err != nil {
+		return nil, err
+	}
+	if len(providers) == 0 {
+		return nil, ErrNoProvider
+	}
+	return providers, nil
+}
+
+func (r *Registry) storeFor(provider model.StorageProvider) (Store, model.StorageProvider, error) {
+	store, err := r.ForProvider(provider)
+	if err != nil {
+		return nil, model.StorageProvider{}, err
+	}
+	return store, provider, nil
+}
+
+// pickProvider applies the shared rule: the user's own choice wins when it is
+// still enabled, then the administrator default, then the first enabled one.
+func pickProvider(providers []model.StorageProvider, preferred string) model.StorageProvider {
+	if preferred != "" {
 		for _, provider := range providers {
-			if provider.ID == user.StorageProviderID {
-				chosen = provider
-				break
+			if provider.ID == preferred {
+				return provider
 			}
 		}
 	}
 	for _, provider := range providers {
 		if provider.IsDefault {
-			if user.StorageProviderID == "" {
-				chosen = provider
-			}
-			break
+			return provider
 		}
 	}
-	store, err := r.ForProvider(chosen)
-	if err != nil {
-		return nil, model.StorageProvider{}, err
-	}
-	return store, chosen, nil
+	return providers[0]
 }

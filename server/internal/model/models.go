@@ -230,17 +230,17 @@ const (
 )
 
 type SubscriptionPlan struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	Name         string    `gorm:"size:128;not null" json:"name"`
-	Cycle        string    `gorm:"size:32;index;not null" json:"cycle"`
-	PriceQuota   int64     `gorm:"not null" json:"priceQuota"`
-	DurationDays int       `gorm:"not null" json:"durationDays"`
-	CustomChannelEnabled bool `gorm:"not null;default:true" json:"customChannelEnabled"`
-	CustomChannelLimit int `gorm:"not null;default:1" json:"customChannelLimit"`
-	Status       string    `gorm:"size:32;index;not null" json:"status"`
-	SortOrder    int       `gorm:"not null;default:0" json:"sortOrder"`
-	CreatedAt    time.Time `json:"createdAt"`
-	UpdatedAt    time.Time `json:"updatedAt"`
+	ID                   uint      `gorm:"primaryKey" json:"id"`
+	Name                 string    `gorm:"size:128;not null" json:"name"`
+	Cycle                string    `gorm:"size:32;index;not null" json:"cycle"`
+	PriceQuota           int64     `gorm:"not null" json:"priceQuota"`
+	DurationDays         int       `gorm:"not null" json:"durationDays"`
+	CustomChannelEnabled bool      `gorm:"not null;default:true" json:"customChannelEnabled"`
+	CustomChannelLimit   int       `gorm:"not null;default:1" json:"customChannelLimit"`
+	Status               string    `gorm:"size:32;index;not null" json:"status"`
+	SortOrder            int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt            time.Time `json:"createdAt"`
+	UpdatedAt            time.Time `json:"updatedAt"`
 }
 
 type SubscriptionPlanQuota struct {
@@ -623,6 +623,42 @@ const (
 	IPBlockActive = "active"
 	IPBlockHidden = "hidden"
 )
+
+const (
+	AssetKindCharacter = "character"
+	AssetKindScene     = "scene"
+	AssetKindProp      = "prop"
+	AssetKindMedia     = "media"
+	AssetLicenseOwn    = "own"
+)
+
+// Asset is one reusable card in the user's asset library: a character, a scene,
+// a prop or a plain media item. Tags are stored as a JSON string and only the
+// decoded list is serialized to clients.
+type Asset struct {
+	ID        string    `gorm:"size:36;primaryKey" json:"id"`
+	UserID    uint      `gorm:"index;not null" json:"userId"`
+	Kind      string    `gorm:"size:16;index;not null" json:"kind"`
+	Name      string    `gorm:"size:128;not null" json:"name"`
+	Prompt    string    `gorm:"type:text" json:"prompt"`
+	TagsJSON  string    `gorm:"type:text" json:"-"`
+	License   string    `gorm:"size:16;not null;default:own" json:"license"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// AssetImage is one reference image of an asset; the binary lives in the object
+// store and StorageKey is the only pointer back to it.
+type AssetImage struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	AssetID    string    `gorm:"size:36;index;not null" json:"assetId"`
+	StorageKey string    `gorm:"size:255;not null" json:"storageKey"`
+	URL        string    `gorm:"size:1024;not null" json:"url"`
+	Width      int       `json:"width"`
+	Height     int       `json:"height"`
+	Bytes      int64     `json:"bytes"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
 
 // RecordAudit appends an administrator audit entry. It runs on the caller's
 // transaction so the trail and the change it describes commit together.
