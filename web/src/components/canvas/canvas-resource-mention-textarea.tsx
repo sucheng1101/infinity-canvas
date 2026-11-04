@@ -1,10 +1,11 @@
-import { forwardRef, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent, PointerEvent, TextareaHTMLAttributes } from "react";
 import { createPortal } from "react-dom";
 import { FileText, Image as ImageIcon, Music2, Video } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { isImeComposing, isPlainEnterKey } from "@/lib/keyboard-event";
+import { usePromptTargetStore } from "@/stores/use-prompt-target-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
 
@@ -36,6 +37,21 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
         if (!query) return activeReferences;
         return activeReferences.filter((item) => `${item.label} ${item.title} ${item.kind} ${item.text || ""}`.toLowerCase().includes(query));
     }, [mention, references]);
+    const registerTarget = usePromptTargetStore((state) => state.register);
+    const unregisterTarget = usePromptTargetStore((state) => state.unregister);
+    useEffect(() => {
+        return () => unregisterTarget("canvas-prompt");
+    }, [unregisterTarget]);
+    const focusPromptTarget = () => {
+        registerTarget({
+            label: "canvas-prompt",
+            insert: (text) => {
+                const element = textareaRef.current;
+                const cursor = element?.selectionStart ?? value.length;
+                updateValue(value.slice(0, cursor) + text + value.slice(cursor), cursor + text.length);
+            },
+        });
+    };
     const activeLabels = useMemo(() => (highlightLabels ? Array.from(new Set(references.filter((item) => item.active).map((item) => item.label))).sort((a, b) => b.length - a.length) : []), [highlightLabels, references]);
 
     const updateValue = (next: string, selectionStart?: number) => {
@@ -110,6 +126,10 @@ export const CanvasResourceMentionTextarea = forwardRef<HTMLTextAreaElement, Pro
                     else if (forwardedRef) forwardedRef.current = node;
                 }}
                 value={value}
+                onFocus={(event) => {
+                    props.onFocus?.(event);
+                    focusPromptTarget();
+                }}
                 className={className}
                 style={mergedStyle}
                 onChange={(event) => {

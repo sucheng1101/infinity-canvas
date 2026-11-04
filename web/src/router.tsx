@@ -19,7 +19,7 @@ const EcommerceCanvasProjectPage = lazy(() => import("@/pages/canvas/ecommerce-p
 const ConfigPage = lazy(() => import("@/pages/config"));
 const HomePage = lazy(() => import("@/pages/home"));
 const NotFound = lazy(() => import("@/pages/not-found"));
-const PromptsPage = lazy(() => import("@/pages/prompts"));
+const PromptsShell = lazy(() => import("@/pages/prompts/shell").then((module) => ({ default: module.PromptsShell })));
 const WorkbenchPage = lazy(() => import("@/pages/workbench"));
 const ProjectsPage = lazy(() => import("@/pages/projects"));
 const ModelPlazaPage = lazy(() => import("@/pages/model-plaza"));
@@ -94,7 +94,7 @@ export const router = createBrowserRouter([
                     { path: "/channels", element: <ChannelsPage /> },
                     { path: "/admin", element: <AdminPage /> },
                     { path: "/admin/settings", element: <AdminSettingsPage /> },
-                    { path: "/prompts", element: <PromptsPage /> },
+                    { path: "/prompts", element: <PromptsShell /> },
                     { path: "/canvas", element: <CanvasPage /> },
                     { path: "/canvas/:id", element: <CanvasProjectPage /> },
                     { path: "/config", element: <ConfigPage /> },
