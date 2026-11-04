@@ -98,7 +98,7 @@
 | WP10-A | 5 | 已验收 | 总控台 | `a2939f6` | 生成链路（`handleGenerateNode` + `handleRetryNode`，共 614 行）抽到 `useCanvasGeneration`，页面从 3800 行降到 2977 行，节点状态常量抽到 `lib/canvas/node-status.ts`；`tsc` + 生产构建 + 热更新通过 |
 | WP12 | 6 | 已验收 | 总控台 | `3f6b6cd`、`97f5654` | 计费单位收敛到 `internal/billing`（三份 `billingUnit` + 两份 `billingUnits` 合并，语义与回退值保持不变），新增 `billing` 单测；测试目录纳入 typecheck（用本地 `bun:test` 类型声明替代 `@types/bun`，避免动 lockfile） |
 | WP6 收尾 | 6 | 已验收 | 总控台 | `b5f8b05` | 小地图按 100ms 节流重绘，拖拽时不再每帧重建全部方块 |
-| WP11 i18n | 7–8 | 进行中 | 总控台 | `02680d8`、`3953c6e`、`324c57f`、`d6ca206` | 登录、注册、找回密码、邮箱验证、重置密码五个页面完成中英双语（`authPage.*`，登录路径中文硬编码清零）；自定义渠道页完成（`channelsPage.*`）；`billing` 与 `model-plaza` 待做 |
+| WP11 i18n | 7–8 | 进行中 | 总控台 | `02680d8`、`3953c6e`、`324c57f`、`d6ca206` | 登录、注册、找回密码、邮箱验证、重置密码五个页面完成中英双语（`authPage.*`，登录路径中文硬编码清零）；自定义渠道页、模型广场完成（`channelsPage.*`、`modelPlaza.*`）；仅剩 `billing` 页面 |
 
 状态取值：`待启动` → `进行中` → `待验收` → `已验收` / `阻塞`。
 
