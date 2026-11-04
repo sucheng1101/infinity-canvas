@@ -5,7 +5,9 @@ description: Planned follow-up work
 
 # TODO
 
-- Hosted commercial platform follow-up: hosted video generation still executes upstream synchronously, so cancelling only marks the task and releases quota without interrupting the upstream call; move to a task-keyed cancellable execution context. Cleanup of completed tasks, expired quotes, and expired orders is still missing.
+- 短剧后续：多宫格分镜（一次生成 6/9 格再切成子节点）未实现；资产库目前只能「画布节点 → 存为资产」，反向「把资产拖入画布」还没做。
+- 托管生成的异步链路需要接上真实模型渠道后验证：本机 `/api/v1/models` 为空，`execute → 202 → worker → 轮询终态`、剧本拆镜、剪映草稿导入都还没在真机跑通过。
+- 剪映草稿 `draft_content.json` 是按公开可观察结构生成的最小骨架，导入真实剪映是否能识别未经验证；失败时以工程包（manifest + srt）为准。- Hosted commercial platform follow-up: hosted video generation still executes upstream synchronously, so cancelling only marks the task and releases quota without interrupting the upstream call; move to a task-keyed cancellable execution context. Cleanup of completed tasks, expired quotes, and expired orders is still missing.
 - Replace the Claude Code CLI adapter with a Claude Agent SDK adapter and improve the tool queue, following the [Local Agent Integration Plan](/docs/progress/local-agent-integration-plan).
 - Add Skill installation from web search, Skill resource-file management, and controlled local-memory persistence.
 - Add studio project templates for photo enhancement, wedding portraits, and ID-photo workflows.
