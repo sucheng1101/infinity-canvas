@@ -10,9 +10,10 @@ import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
+
 import { useAgentStore } from "@/stores/use-agent-store";
 import { isHostedMode } from "@/lib/app-mode";
-import { hostedApi } from "@/services/api/hosted";
+import { useQuota } from "@/hooks/use-quota";
 import { useAuthStore } from "@/stores/use-auth-store";
 
 export function AppTopNav() {
@@ -21,7 +22,6 @@ export function AppTopNav() {
     const navigate = useNavigate();
     const user = useAuthStore((state) => state.user);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
-    const [availableQuota, setAvailableQuota] = useState<number | null>(null);
     const autoConnectRef = useRef(false);
     const agentToken = useAgentStore((state) => state.token);
     const agentEnabled = useAgentStore((state) => state.enabled);
@@ -39,24 +39,8 @@ export function AppTopNav() {
         connectAgent({ silent: true });
     }, [agentConnected, agentEnabled, agentToken, connectAgent]);
 
-    useEffect(() => {
-        if (!isHostedMode || !user) {
-            setAvailableQuota(null);
-            return;
-        }
-        let active = true;
-        const loadQuota = () => {
-            void hostedApi.quota().then((summary) => {
-                if (active) setAvailableQuota(summary.available);
-            }).catch(() => undefined);
-        };
-        loadQuota();
-        const timer = window.setInterval(loadQuota, 30000);
-        return () => {
-            active = false;
-            window.clearInterval(timer);
-        };
-    }, [user]);
+    const quotaQuery = useQuota(isHostedMode && Boolean(user), 30_000);
+    const availableQuota = quotaQuery.data ? quotaQuery.data.available : null;
 
     return (
         <>

@@ -3,17 +3,19 @@ import { ArrowRight, Coins, Images, ScrollText } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { hostedApi, type QuotaSummary, type UserUsageResult } from "@/services/api/hosted";
+import { hostedApi, type UserUsageResult } from "@/services/api/hosted";
+import { useQuota } from "@/hooks/use-quota";
 
 export default function AssetDashboardPage() {
     const { message } = App.useApp();
     const navigate = useNavigate();
-    const [quota, setQuota] = useState<QuotaSummary>();
+    const quotaQuery = useQuota();
+    const quota = quotaQuery.data;
     const [usage, setUsage] = useState<UserUsageResult>();
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        void Promise.all([hostedApi.quota(), hostedApi.usageLogs({ page: 1, pageSize: 5 })]).then(([quotaResult, usageResult]) => { setQuota(quotaResult); setUsage(usageResult); }).catch((error) => message.error(error instanceof Error ? error.message : "数据看板读取失败")).finally(() => setLoading(false));
+        void hostedApi.usageLogs({ page: 1, pageSize: 5 }).then(setUsage).catch((error) => message.error(error instanceof Error ? error.message : "数据看板读取失败")).finally(() => setLoading(false));
     }, [message]);
 
     if (loading) return <div className="p-7"><Skeleton active paragraph={{ rows: 8 }} /></div>;
