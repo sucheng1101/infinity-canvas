@@ -1,19 +1,31 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { type CanvasNodeData, type ViewportTransform } from "@/types/canvas";
 
+// The minimap redraws one element per node, so it follows the canvas at a lower
+// rate instead of on every drag frame.
+const MINIMAP_UPDATE_INTERVAL_MS = 100;
+
 export function Minimap({ nodes, viewport, viewportSize, onViewportChange }: { nodes: CanvasNodeData[]; viewport: ViewportTransform; viewportSize: { width: number; height: number }; onViewportChange: (viewport: ViewportTransform) => void }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [snapshot, setSnapshot] = useState(nodes);
+    const latestNodesRef = useRef(nodes);
+    latestNodesRef.current = nodes;
     const width = 240;
     const height = 160;
 
+    useEffect(() => {
+        const timer = window.setTimeout(() => setSnapshot(latestNodesRef.current), MINIMAP_UPDATE_INTERVAL_MS);
+        return () => window.clearTimeout(timer);
+    }, [nodes]);
+
     const { worldBounds, scale, offset } = useMemo(() => {
-        if (!nodes.length) {
+        if (!snapshot.length) {
             return { worldBounds: { x: -500, y: -500, w: 1000, h: 1000 }, scale: 0.16, offset: { x: 40, y: 0 } };
         }
 
@@ -22,7 +34,7 @@ export function Minimap({ nodes, viewport, viewportSize, onViewportChange }: { n
         let maxX = -Infinity;
         let maxY = -Infinity;
 
-        nodes.forEach((node) => {
+        snapshot.forEach((node) => {
             minX = Math.min(minX, node.position.x);
             minY = Math.min(minY, node.position.y);
             maxX = Math.max(maxX, node.position.x + node.width);
@@ -45,7 +57,7 @@ export function Minimap({ nodes, viewport, viewportSize, onViewportChange }: { n
             scale: nextScale,
             offset: { x: (width - mapContentW) / 2, y: (height - mapContentH) / 2 },
         };
-    }, [nodes]);
+    }, [snapshot]);
 
     const toMinimap = useCallback(
         (worldX: number, worldY: number) => {
@@ -112,7 +124,7 @@ export function Minimap({ nodes, viewport, viewportSize, onViewportChange }: { n
                 onPointerUp={() => setIsDragging(false)}
                 onPointerLeave={() => setIsDragging(false)}
             >
-                {nodes.map((node) => {
+                {snapshot.map((node) => {
                     const pos = toMinimap(node.position.x, node.position.y);
                     const color = getNodeDefinition(node.type)?.minimapColor || theme.node.muted;
                     return (
