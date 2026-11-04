@@ -315,6 +315,9 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const connectionTargetNodeIdRef = useRef(connectionTargetNodeId);
     const selectionBoxRef = useRef(selectionBox);
     const batchCanceledRef = useRef(false);
+    // Persistence is debounced in the store, so surface a short "saved" hint only
+    // after edits settle instead of on every keystroke or drag frame.
+    const [saveHintVisible, setSaveHintVisible] = useState(false);
     // Marquee updates are coalesced into one frame, otherwise every pointermove
     // walks all nodes and re-renders the whole canvas.
     const marqueeFrameRef = useRef<number | null>(null);
@@ -529,6 +532,16 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         // Resume once after the current canvas is restored, not on later config identity changes.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [projectLoaded]);
+
+    useEffect(() => {
+        if (!projectLoaded) return;
+        const showTimer = window.setTimeout(() => setSaveHintVisible(true), 900);
+        const hideTimer = window.setTimeout(() => setSaveHintVisible(false), 2600);
+        return () => {
+            window.clearTimeout(showTimer);
+            window.clearTimeout(hideTimer);
+        };
+    }, [connections, nodes, projectLoaded]);
 
     useEffect(() => {
         if (!projectLoaded || !["new", "recent", "choose"].includes(searchParams.get("mode") || "")) return;
@@ -1556,6 +1569,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     }, [finishNodeDrag, handleGlobalMouseMove, handleGlobalMouseUp, handleGlobalPointerMove]);
 
     const createImageFileNode = useCallback(async (file: File, position: Position) => {
+        const hideLoading = message.loading(t("canvas.projectPage.importing"), 0);
         try {
             const image = await uploadImage(file);
             const size = fitNodeSize(image.width, image.height);
@@ -1577,10 +1591,13 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         } catch (error) {
             console.error("import image failed", error);
             message.error(t("canvas.projectPage.importFailed"));
+        } finally {
+            hideLoading();
         }
     }, [message, t]);
 
     const createVideoFileNode = useCallback(async (file: File, position: Position) => {
+        const hideLoading = message.loading(t("canvas.projectPage.importing"), 0);
         try {
             const video = await uploadMediaFile(file, "video");
             const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
@@ -1603,10 +1620,13 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         } catch (error) {
             console.error("import video failed", error);
             message.error(t("canvas.projectPage.importFailed"));
+        } finally {
+            hideLoading();
         }
     }, [message, t]);
 
     const createAudioFileNode = useCallback(async (file: File, position: Position) => {
+        const hideLoading = message.loading(t("canvas.projectPage.importing"), 0);
         try {
             const audio = await uploadMediaFile(file, "audio");
             const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
@@ -1628,6 +1648,8 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         } catch (error) {
             console.error("import audio failed", error);
             message.error(t("canvas.projectPage.importFailed"));
+        } finally {
+            hideLoading();
         }
     }, [message, t]);
 
@@ -3558,6 +3580,12 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     <div className="pointer-events-none absolute inset-0 z-[40] flex flex-col items-center justify-center gap-2 text-center" style={{ color: theme.node.muted }}>
                         <div className="text-base font-medium">{t("canvas.projectPage.emptyTitle")}</div>
                         <div className="text-sm opacity-80">{t("canvas.projectPage.emptyHint")}</div>
+                    </div>
+                ) : null}
+
+                {saveHintVisible ? (
+                    <div className="pointer-events-none absolute bottom-4 left-4 z-[45] text-xs transition-opacity duration-300" style={{ color: theme.node.muted }}>
+                        {t("canvas.projectPage.saved")}
                     </div>
                 ) : null}
 
