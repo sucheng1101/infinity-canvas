@@ -1,9 +1,10 @@
-import { BarChart3, Images, Settings2, WalletCards, ScrollText } from "lucide-react";
+import { BarChart3, Boxes, Images, Settings2, WalletCards, ScrollText } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useConfigStore } from "@/stores/use-config-store";
 
 const items = [
-    { key: "/assets", label: "资产管理", icon: Images, end: true },
+    { key: "/assets", label: "媒体库", icon: Images, end: true },
+    { key: "/assets/library", label: "资产库", icon: Boxes },
     { key: "/assets/dashboard", label: "数据看板", icon: BarChart3 },
     { key: "/assets/usage", label: "使用日志", icon: ScrollText },
     { key: "/assets/wallet", label: "钱包管理", icon: WalletCards },

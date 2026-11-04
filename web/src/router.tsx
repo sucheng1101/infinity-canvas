@@ -12,6 +12,7 @@ const AssetCenterLayout = lazy(() => import("@/pages/assets/center-layout"));
 const AssetDashboardPage = lazy(() => import("@/pages/assets/dashboard"));
 const UserUsagePage = lazy(() => import("@/pages/assets/user-usage"));
 const AssetSettingsPage = lazy(() => import("@/pages/assets/settings"));
+const AssetLibraryPage = lazy(() => import("@/pages/assets/library"));
 const BillingPage = lazy(() => import("@/pages/billing"));
 const CanvasPage = lazy(() => import("@/pages/canvas"));
 const CanvasProjectPage = lazy(() => import("@/pages/canvas/project"));
@@ -86,7 +87,8 @@ export const router = createBrowserRouter([
                             { path: "dashboard", element: <AssetDashboardPage /> },
                             { path: "usage", element: <UserUsagePage /> },
                             { path: "wallet", element: <BillingPage /> },
-                            { path: "settings", element: <AssetSettingsPage /> },
+                            { path: "library", element: <AssetLibraryPage /> },
+                { path: "settings", element: <AssetSettingsPage /> },
                         ],
                     },
                     { path: "/model-plaza", element: <ModelPlazaPage /> },
