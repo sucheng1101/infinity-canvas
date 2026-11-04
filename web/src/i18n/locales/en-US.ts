@@ -4,7 +4,16 @@ export default {
         description: "An infinite canvas creation tool",
     },
     theme: { toggle: "Toggle theme" },
-    common: {
+    authPage: {
+        login: {
+            eyebrow: "Welcome back", title: "Sign in to your workspace", description: "Sign in to use the models and credits your administrator configured.",
+            resendSent: "Verification email sent again. Check your inbox.",
+            emailLabel: "Email or username", emailRequired: "Enter your email or username", emailPlaceholder: "Username or name@example.com",
+            passwordLabel: "Password", passwordRequired: "Enter your password", passwordPlaceholder: "Enter your password",
+            forgot: "Forgot password?", submit: "Sign in and continue", resend: "Resend verification email",
+            noAccount: "No account yet?", register: "Create one",
+        },
+    },    common: {
         cancel: "Cancel",
         save: "Save",
         edit: "Edit",

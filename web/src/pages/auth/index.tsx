@@ -2,6 +2,7 @@ import { Alert, Button, Form, Input } from "antd";
 import { ArrowRight, CheckCircle2, KeyRound, LoaderCircle, LockKeyhole, Mail, UserRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { AuthShell } from "@/components/auth/auth-shell";
 import { authApi, AuthApiError } from "@/services/api/auth";
@@ -21,6 +22,7 @@ function SubmitButton({ loading, children }: { loading: boolean; children: strin
 }
 
 export function LoginPage() {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const returnPath = useReturnPath();
     const status = useAuthStore((state) => state.status);
@@ -39,7 +41,7 @@ export function LoginPage() {
         finally { setLoading(false); }
     };
     const resend = async () => { setLoading(true); setError(""); try { await authApi.resendVerification(unverifiedEmail); setResendSent(true); } catch (requestError) { setError((requestError as Error).message); } finally { setLoading(false); } };
-    return <AuthShell eyebrow="欢迎回来" title="登录你的创作空间" description="登录后即可使用管理员配置好的模型与积分。"><ErrorAlert error={error} />{resendSent ? <Alert className="mb-5" type="success" showIcon message="验证邮件已重新发送，请检查邮箱" /> : null}<Form layout="vertical" requiredMark={false} onFinish={submit}><Form.Item label="邮箱或用户名" name="email" rules={[{ required: true, message: "请输入邮箱或用户名" }]}><Input size="large" prefix={<UserRound className="size-4 text-stone-400" />} placeholder="用户名或 name@example.com" autoComplete="username" /></Form.Item><Form.Item label="密码" name="password" rules={[{ required: true, message: "请输入密码" }]}><Input.Password size="large" prefix={<LockKeyhole className="size-4 text-stone-400" />} placeholder="输入密码" autoComplete="current-password" /></Form.Item><div className="-mt-2 flex justify-end"><Link className="text-sm text-stone-500 hover:text-stone-950 dark:text-stone-400 dark:hover:text-white" to="/forgot-password">忘记密码？</Link></div><SubmitButton loading={loading}>登录并继续</SubmitButton></Form>{unverifiedEmail ? <Button className="mt-3" block type="text" onClick={() => void resend()} disabled={loading}>重新发送验证邮件</Button> : null}<p className="mt-7 text-center text-sm text-stone-500 dark:text-stone-400">还没有账号？ <Link className="font-medium text-stone-950 dark:text-white" to="/register" state={{ from: returnPath }}>免费注册</Link></p></AuthShell>;
+    return <AuthShell eyebrow={t("authPage.login.eyebrow")} title={t("authPage.login.title")} description={t("authPage.login.description")}><ErrorAlert error={error} />{resendSent ? <Alert className="mb-5" type="success" showIcon message={t("authPage.login.resendSent")} /> : null}<Form layout="vertical" requiredMark={false} onFinish={submit}><Form.Item label={t("authPage.login.emailLabel")} name="email" rules={[{ required: true, message: t("authPage.login.emailRequired") }]}><Input size="large" prefix={<UserRound className="size-4 text-stone-400" />} placeholder={t("authPage.login.emailPlaceholder")} autoComplete="username" /></Form.Item><Form.Item label={t("authPage.login.passwordLabel")} name="password" rules={[{ required: true, message: t("authPage.login.passwordRequired") }]}><Input.Password size="large" prefix={<LockKeyhole className="size-4 text-stone-400" />} placeholder={t("authPage.login.passwordPlaceholder")} autoComplete="current-password" /></Form.Item><div className="-mt-2 flex justify-end"><Link className="text-sm text-stone-500 hover:text-stone-950 dark:text-stone-400 dark:hover:text-white" to="/forgot-password">{t("authPage.login.forgot")}</Link></div><SubmitButton loading={loading}>{t("authPage.login.submit")}</SubmitButton></Form>{unverifiedEmail ? <Button className="mt-3" block type="text" onClick={() => void resend()} disabled={loading}>{t("authPage.login.resend")}</Button> : null}<p className="mt-7 text-center text-sm text-stone-500 dark:text-stone-400">{t("authPage.login.noAccount")} <Link className="font-medium text-stone-950 dark:text-white" to="/register" state={{ from: returnPath }}>{t("authPage.login.register")}</Link></p></AuthShell>;
 }
 
 export function RegisterPage() {

@@ -4,7 +4,16 @@ export default {
         description: "一个无限画布创作工具",
     },
     theme: { toggle: "切换主题" },
-    common: {
+    authPage: {
+        login: {
+            eyebrow: "欢迎回来", title: "登录你的创作空间", description: "登录后即可使用管理员配置好的模型与积分。",
+            resendSent: "验证邮件已重新发送，请检查邮箱",
+            emailLabel: "邮箱或用户名", emailRequired: "请输入邮箱或用户名", emailPlaceholder: "用户名或 name@example.com",
+            passwordLabel: "密码", passwordRequired: "请输入密码", passwordPlaceholder: "输入密码",
+            forgot: "忘记密码？", submit: "登录并继续", resend: "重新发送验证邮件",
+            noAccount: "还没有账号？", register: "免费注册",
+        },
+    },    common: {
         cancel: "取消",
         save: "保存",
         edit: "编辑",
