@@ -33,6 +33,16 @@ var (
 // covers base64 payloads of large images while keeping one response bounded.
 const maxUpstreamResponseBytes int64 = 32 << 20
 
+const (
+	// upstreamAttempts is the total number of tries, so 2 means one retry.
+	upstreamAttempts   = 2
+	upstreamRetryDelay = 500 * time.Millisecond
+)
+
+func retryableUpstreamStatus(status int) bool {
+	return status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+}
+
 type Service struct {
 	DB           *gorm.DB
 	Generation   *generation.Service
@@ -129,18 +139,40 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metad
 		return failWithLog("CAPABILITY_UNSUPPORTED", err)
 	}
 	requestURL := joinURL(selected.channel.BaseURL, path)
-	req, err := http.NewRequestWithContext(runCtx, http.MethodPost, requestURL, strings.NewReader(body))
-	if err != nil {
-		return failWithLog("UPSTREAM_REQUEST_INVALID", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+selected.key.APIKey)
-	applyHeaders(req, selected.channel.SettingsJSON, selected.model.SettingsJSON)
 	client := s.Client
 	if client == nil {
 		client = http.DefaultClient
 	}
-	response, err := client.Do(req)
+	// One retry for transport errors, 429 and 5xx keeps a flaky upstream from
+	// turning into a user-visible failure, without hiding a real outage.
+	var response *http.Response
+	for attempt := 1; ; attempt++ {
+		attemptReq, reqErr := http.NewRequestWithContext(runCtx, http.MethodPost, requestURL, strings.NewReader(body))
+		if reqErr != nil {
+			return failWithLog("UPSTREAM_REQUEST_INVALID", reqErr)
+		}
+		attemptReq.Header.Set("Content-Type", "application/json")
+		attemptReq.Header.Set("Authorization", "Bearer "+selected.key.APIKey)
+		applyHeaders(attemptReq, selected.channel.SettingsJSON, selected.model.SettingsJSON)
+		response, err = client.Do(attemptReq)
+		retryable := err == nil && retryableUpstreamStatus(response.StatusCode)
+		if err != nil {
+			retryable = !errors.Is(err, context.Canceled)
+		}
+		if !retryable || attempt >= upstreamAttempts {
+			break
+		}
+		if response != nil {
+			_, _ = io.Copy(io.Discard, response.Body)
+			response.Body.Close()
+			response = nil
+		}
+		select {
+		case <-runCtx.Done():
+			return failWithLog("UPSTREAM_REQUEST_FAILED", runCtx.Err())
+		case <-time.After(upstreamRetryDelay):
+		}
+	}
 	if err != nil {
 		return failWithLog("UPSTREAM_REQUEST_FAILED", err)
 	}

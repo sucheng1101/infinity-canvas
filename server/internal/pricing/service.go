@@ -168,6 +168,15 @@ func (s *Service) Retire(operatorID uint, id uint) error {
 	})
 }
 
+// ExpireQuotes flips every unused quote past its deadline in one statement, so
+// the quotes table stops growing as an append-only log of abandoned requests.
+func (s *Service) ExpireQuotes(now time.Time) (int64, error) {
+	result := s.DB.Model(&model.Quote{}).
+		Where("status = ? AND expires_at < ?", model.QuoteStatusIssued, now).
+		Update("status", model.QuoteStatusExpired)
+	return result.RowsAffected, result.Error
+}
+
 func (s *Service) Quote(userID uint, input QuoteInput) (QuoteView, error) {
 	if input.ModelID == 0 || input.Count <= 0 || input.Count > 1000 {
 		return QuoteView{}, ErrQuoteParameter

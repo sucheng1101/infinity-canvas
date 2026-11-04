@@ -17,6 +17,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/mailer"
 	"github.com/sucheng1101/infinity-canvas/server/internal/modelcatalog"
 	"github.com/sucheng1101/infinity-canvas/server/internal/payment"
+	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
 	"github.com/sucheng1101/infinity-canvas/server/internal/store"
 	"github.com/sucheng1101/infinity-canvas/server/internal/subscription"
@@ -50,6 +51,7 @@ func main() {
 	defer stop()
 	go reapStaleTasks(ctx, db, cfg)
 	go expireOrders(ctx, &payment.Service{DB: db, Cfg: cfg, Quota: &quota.Service{DB: db}})
+	go maintainData(ctx, db, cfg)
 
 	router := httpapi.NewRouter(cfg, db, redisClient, mailer.NewSMTP(cfg))
 	// 只有 TRUSTED_PROXIES 中显式列出的代理才允许影响客户端 IP；默认为空表示不信任任何代理，
@@ -118,6 +120,44 @@ func expireOrders(ctx context.Context, service *payment.Service) {
 			}
 			if expired > 0 {
 				log.Printf("expired %d topup order(s)", expired)
+			}
+		}
+	}
+}
+
+// maintainData expires abandoned quotes and trims operational logs so the tables
+// stop growing forever. Deletion is batched and only keeps the retention window.
+func maintainData(ctx context.Context, db *gorm.DB, cfg config.Config) {
+	pricingService := &pricing.Service{DB: db, QuoteTTL: cfg.QuoteTTL}
+	targets := []struct{ table, column string }{
+		{"audit_logs", "created_at"},
+		{"access_events", "created_at"},
+		{"usage_logs", "started_at"},
+	}
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if expired, err := pricingService.ExpireQuotes(time.Now().UTC()); err != nil {
+				log.Printf("expire quotes failed: %v", err)
+			} else if expired > 0 {
+				log.Printf("expired %d quote(s)", expired)
+			}
+			cutoff := time.Now().UTC().Add(-cfg.LogRetention)
+			for _, target := range targets {
+				for {
+					deleted, err := store.PurgeOldRows(db, target.table, target.column, cutoff, 1000)
+					if err != nil {
+						log.Printf("purge %s failed: %v", target.table, err)
+						break
+					}
+					if deleted < 1000 {
+						break
+					}
+				}
 			}
 		}
 	}

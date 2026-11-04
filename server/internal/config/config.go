@@ -24,6 +24,7 @@ type Config struct {
 	QuoteTTL                      time.Duration
 	RelayTimeout                  time.Duration
 	ShutdownTimeout               time.Duration
+	LogRetention                  time.Duration
 	CookieSecure                  bool
 	DevExposeTokens               bool
 	InvitationRewardOpen          bool
@@ -106,6 +107,7 @@ func Load() Config {
 		QuoteTTL:                      envDuration("QUOTE_TTL", 5*time.Minute),
 		RelayTimeout:                  envDuration("RELAY_TIMEOUT", 5*time.Minute),
 		ShutdownTimeout:               envDuration("SHUTDOWN_TIMEOUT", 60*time.Second),
+		LogRetention:                  envDuration("LOG_RETENTION", 180*24*time.Hour),
 		CookieSecure:                  envBool("COOKIE_SECURE", false),
 		DevExposeTokens:               envBool("DEV_EXPOSE_TOKENS", false),
 		InvitationRewardOpen:          envBool("INVITATION_REWARD_OPEN", false),
