@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/sucheng1101/infinity-canvas/server/internal/assets"
+	"github.com/sucheng1101/infinity-canvas/server/internal/model"
 	"github.com/sucheng1101/infinity-canvas/server/internal/storage"
 )
 
@@ -139,7 +140,7 @@ func (a *Router) assetFile(c *gin.Context) {
 		errorJSON(c, http.StatusServiceUnavailable, "STORAGE_NOT_CONFIGURED", "暂无可用的存储")
 		return
 	}
-	store, provider, err := a.Registry.Default()
+	store, provider, err := a.fileStoreForKey(key)
 	if errors.Is(err, storage.ErrNoProvider) {
 		errorJSON(c, http.StatusServiceUnavailable, "STORAGE_NOT_CONFIGURED", "暂无可用的存储")
 		return
@@ -170,4 +171,19 @@ func (a *Router) assetFile(c *gin.Context) {
 	if _, err := io.Copy(c.Writer, body); err != nil {
 		_ = c.Error(err)
 	}
+}
+
+// fileStoreForKey 按对象 key 找到所属用户，再用该用户选择的存储读取；找不到归属时回落到默认存储。
+func (a *Router) fileStoreForKey(key string) (storage.Store, model.StorageProvider, error) {
+	parts := strings.SplitN(key, "/", 3)
+	if len(parts) >= 3 && parts[0] == "asset" {
+		var image model.AssetImage
+		if err := a.DB.Where("storage_key = ?", key).First(&image).Error; err == nil {
+			var asset model.Asset
+			if err := a.DB.Select("id", "user_id").First(&asset, "id = ?", image.AssetID).Error; err == nil {
+				return a.Registry.ResolveForUser(asset.UserID)
+			}
+		}
+	}
+	return a.Registry.Default()
 }
