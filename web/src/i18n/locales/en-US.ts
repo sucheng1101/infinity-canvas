@@ -27,6 +27,8 @@ export default {
         durationMinutes: "{{minutes}}m {{seconds}}s",
         durationSeconds: "{{seconds}}s",
         imageReadFailed: "Failed to read image",
+        storageWriteFailed: "Local storage write failed. It may be full, so recent changes might not be saved.",
+        storageReadFailed: "Local canvas data could not be read and was reset to an empty canvas.",
         retry: "Retry",
     },
     settingsPanels: {

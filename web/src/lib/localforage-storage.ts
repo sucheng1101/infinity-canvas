@@ -6,6 +6,15 @@ localforage.config({
     storeName: "app_state",
 });
 
+export const CANVAS_STORAGE_ERROR_EVENT = "infinite-canvas:storage-error";
+
+// Storage failures used to be swallowed, which silently lost canvas edits.
+// Announce them so the app can tell the user instead of failing quietly.
+export function reportCanvasStorageError(reason: "read" | "write", error: unknown) {
+    console.error(`canvas storage ${reason} failed`, error);
+    window.dispatchEvent(new CustomEvent(CANVAS_STORAGE_ERROR_EVENT, { detail: reason }));
+}
+
 export const localForageStorage: StateStorage = {
     getItem: async (name) => {
         if (typeof window === "undefined") return null;
@@ -19,8 +28,12 @@ export const localForageStorage: StateStorage = {
         if (typeof window === "undefined") return;
         try {
             await localforage.setItem(name, value);
-        } catch {
-            window.localStorage.setItem(name, value);
+        } catch (error) {
+            try {
+                window.localStorage.setItem(name, value);
+            } catch (fallbackError) {
+                reportCanvasStorageError("write", fallbackError ?? error);
+            }
         }
     },
     removeItem: async (name) => {

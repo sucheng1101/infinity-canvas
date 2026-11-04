@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { useConfigStore } from "@/stores/use-config-store";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
+import { CANVAS_STORAGE_ERROR_EVENT } from "@/lib/localforage-storage";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
@@ -15,6 +16,15 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
 
     usePromptSourceScheduler();
+
+    useEffect(() => {
+        const onStorageError = (event: Event) => {
+            const reason = (event as CustomEvent<"read" | "write">).detail;
+            message.error(t(reason === "read" ? "common.storageReadFailed" : "common.storageWriteFailed"));
+        };
+        window.addEventListener(CANVAS_STORAGE_ERROR_EVENT, onStorageError);
+        return () => window.removeEventListener(CANVAS_STORAGE_ERROR_EVENT, onStorageError);
+    }, [message, t]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;

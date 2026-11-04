@@ -27,6 +27,8 @@ export default {
         durationMinutes: "{{minutes}}分{{seconds}}秒",
         durationSeconds: "{{seconds}}秒",
         imageReadFailed: "读取图片失败",
+        storageWriteFailed: "本地存储写入失败，空间可能已满，最新改动可能没有保存。",
+        storageReadFailed: "本地画布数据读取失败，已重置为空白状态。",
         retry: "重试",
     },
     settingsPanels: {
