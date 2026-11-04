@@ -158,8 +158,7 @@ export default function CanvasPage({ canvasKind }: { canvasKind?: "general" | "e
     return <InfiniteCanvasPage canvasKind={canvasKind} />;
 }
 
-function measureFocusFrame(container: HTMLDivElement | null, nodeId: string) {
-    if (!container) return {};
+function measureFocusFrame(container: HTMLDivElement | null, nodeId: string) {    if (!container) return {};
     const nodeRect = container.querySelector<HTMLElement>(`[data-node-id="${nodeId}"]`)?.getBoundingClientRect();
     const panelRect = container.querySelector<HTMLElement>(`[data-node-id="${nodeId}"] [data-node-panel]`)?.getBoundingClientRect();
     const toolbarRect = document.querySelector<HTMLElement>(`[data-node-toolbar="${nodeId}"]`)?.getBoundingClientRect();
@@ -167,6 +166,19 @@ function measureFocusFrame(container: HTMLDivElement | null, nodeId: string) {
     const below = nodeRect && panelRect ? panelRect.bottom - nodeRect.bottom : 0;
     const above = nodeRect && toolbarRect ? nodeRect.top - toolbarRect.top : 0;
     return { above, below, bottomInset: dockRect && below > 0 ? Math.max(0, container.getBoundingClientRect().bottom - dockRect.top) : 0 };
+}
+
+// Content-only signature for canvas-derived maps: positions, sizes and viewport
+// are deliberately excluded so drag frames reuse the cached maps.
+function canvasDerivationSignature(nodes: CanvasNodeData[], connections: CanvasConnection[]) {
+    const nodePart = nodes
+        .map((node) => {
+            const meta = node.metadata;
+            return [node.id, node.type, node.title ?? "", meta?.prompt ?? "", meta?.composerContent ?? "", meta?.images?.length ?? 0, meta?.texts?.length ?? 0, meta?.content?.length ?? 0].join("\u0001");
+        })
+        .join("\u0002");
+    const connectionPart = connections.map((connection) => `${connection.fromNodeId}>${connection.toNodeId}`).join("\u0002");
+    return `${nodePart}\u0003${connectionPart}`;
 }
 
 function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerce" }) {
@@ -791,19 +803,24 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         return { nodeIds, connectionIds };
     }, [activeNodeId, connections, nodeById, nodes]);
 
-    const configInputsById = useMemo(() => {
-        const map = new Map<string, NodeGenerationInput[]>();
+    const derivationCacheRef = useRef<{ signature: string; inputs: Map<string, NodeGenerationInput[]>; mentions: Map<string, ReturnType<typeof buildNodeMentionReferences>> } | null>(null);
+    const derivation = useMemo(() => {
+        // Rebuilding these maps walks every node and connection, so a drag frame
+        // must not trigger it. The signature ignores positions and sizes.
+        const signature = canvasDerivationSignature(nodes, connections);
+        if (derivationCacheRef.current?.signature === signature) return derivationCacheRef.current;
+        const inputs = new Map<string, NodeGenerationInput[]>();
         nodes.forEach((node) => {
             if (node.type !== CanvasNodeType.Config) return;
-            map.set(node.id, buildNodeGenerationInputs(node.id, nodes, connections));
+            inputs.set(node.id, buildNodeGenerationInputs(node.id, nodes, connections));
         });
-        return map;
+        const mentions = new Map<string, ReturnType<typeof buildNodeMentionReferences>>();
+        nodes.forEach((node) => mentions.set(node.id, buildNodeMentionReferences(node, nodes, connections)));
+        derivationCacheRef.current = { signature, inputs, mentions };
+        return derivationCacheRef.current;
     }, [connections, nodes]);
-    const mentionReferencesByNodeId = useMemo(() => {
-        const map = new Map<string, ReturnType<typeof buildNodeMentionReferences>>();
-        nodes.forEach((node) => map.set(node.id, buildNodeMentionReferences(node, nodes, connections)));
-        return map;
-    }, [connections, nodes]);
+    const configInputsById = derivation.inputs;
+    const mentionReferencesByNodeId = derivation.mentions;
     const connectedNodesByNodeId = useMemo(() => {
         const map = new Map<string, CanvasNodeData[]>();
         connections.forEach((connection) => {
