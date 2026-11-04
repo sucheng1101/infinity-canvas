@@ -19,6 +19,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/payment"
 	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
+	"github.com/sucheng1101/infinity-canvas/server/internal/storage"
 	"github.com/sucheng1101/infinity-canvas/server/internal/store"
 	"github.com/sucheng1101/infinity-canvas/server/internal/subscription"
 	"gorm.io/gorm"
@@ -53,7 +54,11 @@ func main() {
 	go expireOrders(ctx, &payment.Service{DB: db, Cfg: cfg, Quota: &quota.Service{DB: db}})
 	go maintainData(ctx, db, cfg)
 
-	router := httpapi.NewRouter(cfg, db, redisClient, mailer.NewSMTP(cfg))
+	storageRegistry, err := storage.NewRegistry(db, cfg)
+	if err != nil {
+		log.Fatalf("storage registry: %v", err)
+	}
+	router := httpapi.NewRouter(cfg, db, redisClient, mailer.NewSMTP(cfg), storageRegistry)
 	// 只有 TRUSTED_PROXIES 中显式列出的代理才允许影响客户端 IP；默认为空表示不信任任何代理，
 	// 避免伪造 X-Forwarded-For 绕过登录 / 注册 / 找回密码的频率限制。
 	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {

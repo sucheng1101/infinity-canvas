@@ -30,6 +30,8 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
 	"github.com/sucheng1101/infinity-canvas/server/internal/relay"
+	"github.com/sucheng1101/infinity-canvas/server/internal/storage"
+	"github.com/sucheng1101/infinity-canvas/server/internal/storageadmin"
 	"github.com/sucheng1101/infinity-canvas/server/internal/subscription"
 	"github.com/sucheng1101/infinity-canvas/server/internal/userchannel"
 	versionservice "github.com/sucheng1101/infinity-canvas/server/internal/version"
@@ -53,11 +55,12 @@ type Router struct {
 	UserChannels   *userchannel.Service
 	Subscriptions  *subscription.Service
 	CostPricing    *costpricing.Service
+	Storage        *storageadmin.Service
 	Redis          *redis.Client
 	Mailer         mailer.Mailer
 }
 
-func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbound mailer.Mailer) *gin.Engine {
+func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbound mailer.Mailer, storageRegistry *storage.Registry) *gin.Engine {
 	service := &auth.Service{DB: db, Cfg: cfg}
 	quotaService := &quota.Service{DB: db}
 	invitationService := &invitation.Service{DB: db, Cfg: cfg, Quota: quotaService}
@@ -73,7 +76,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	userChannelService := &userchannel.Service{DB: db, Cfg: cfg, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	costPricingService := &costpricing.Service{DB: db}
 	relayService.UserChannels = userChannelService
-	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Subscriptions: subscriptionService, CostPricing: costPricingService, Redis: redisClient, Mailer: outbound}
+	app := &Router{Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Subscriptions: subscriptionService, CostPricing: costPricingService, Storage: &storageadmin.Service{DB: db, Cfg: cfg, Registry: storageRegistry}, Redis: redisClient, Mailer: outbound}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(requestID())
@@ -177,6 +180,13 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.POST("/admin/channel-unlock-plans", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateChannelUnlockPlan)
 	v1.PUT("/admin/channel-unlock-plans/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateChannelUnlockPlan)
 	v1.GET("/admin/model-cost-pricing", app.requireAdmin(), app.adminModelCostPricing)
+	v1.GET("/admin/storage-providers", app.requireAdmin(), app.adminStorageProviders)
+	v1.POST("/admin/storage-providers", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateStorageProvider)
+	v1.PUT("/admin/storage-providers/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateStorageProvider)
+	v1.DELETE("/admin/storage-providers/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminDeleteStorageProvider)
+	v1.POST("/admin/storage-providers/:id/test", app.requireAdmin(), app.adminTestStorageProvider)
+	v1.GET("/account/storage-options", app.requireAuth(), app.accountStorageOptions)
+	v1.PUT("/account/storage", app.requireAuth(), app.allowGuard("storage-choose", 20, time.Minute), app.accountChooseStorage)
 	v1.POST("/admin/model-cost-pricing", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminCreateModelCostPricing)
 	v1.PUT("/admin/model-cost-pricing/:id", app.requireAdmin(), app.allowGuard("admin-write", 30, time.Minute), app.adminUpdateModelCostPricing)
 	return r

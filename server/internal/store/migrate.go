@@ -186,6 +186,12 @@ func migrate(db *gorm.DB) error {
 				return tx.AutoMigrate(&model.SubscriptionPlan{}, &model.SubscriptionPlanQuota{})
 			},
 		},
+		{
+			version: "20261106_m16_storage_providers",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.StorageProvider{}, &model.User{})
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64

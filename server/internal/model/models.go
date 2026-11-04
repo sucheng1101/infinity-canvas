@@ -28,8 +28,31 @@ type User struct {
 	Role            string     `gorm:"size:32;index;not null" json:"role"`
 	EmailVerifiedAt *time.Time `json:"emailVerifiedAt,omitempty"`
 	LastLoginAt     *time.Time `json:"lastLoginAt,omitempty"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	UpdatedAt       time.Time  `json:"updatedAt"`
+	// StorageProviderID is the user's own choice among admin-enabled providers.
+	StorageProviderID string    `gorm:"size:36;index" json:"storageProviderId,omitempty"`
+	CreatedAt         time.Time `json:"createdAt"`
+	UpdatedAt         time.Time `json:"updatedAt"`
+}
+
+// StorageProvider is an admin-managed storage target. Credentials are stored
+// encrypted and only a mask is ever returned to the console.
+type StorageProvider struct {
+	ID              string    `gorm:"size:36;primaryKey" json:"id"`
+	Name            string    `gorm:"size:64;not null" json:"name"`
+	Driver          string    `gorm:"size:16;not null" json:"driver"` // local | s3
+	Enabled         bool      `gorm:"not null;default:false" json:"enabled"`
+	IsDefault       bool      `gorm:"not null;default:false" json:"isDefault"`
+	Endpoint        string    `gorm:"size:255" json:"endpoint"`
+	Region          string    `gorm:"size:64" json:"region"`
+	Bucket          string    `gorm:"size:128" json:"bucket"`
+	AccessKeyCipher string    `gorm:"type:text" json:"-"`
+	SecretKeyCipher string    `gorm:"type:text" json:"-"`
+	PublicBase      string    `gorm:"size:255" json:"publicBase"`
+	UsePathStyle    bool      `gorm:"not null;default:true" json:"usePathStyle"`
+	LocalDir        string    `gorm:"size:255" json:"localDir"`
+	SortOrder       int       `gorm:"not null;default:0" json:"sortOrder"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
 type QuotaAccount struct {
