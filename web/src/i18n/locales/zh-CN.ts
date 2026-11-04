@@ -5,6 +5,21 @@ export default {
     },
     theme: { toggle: "切换主题" },
     authPage: {
+    channelsPage: {
+        title: "我的渠道", subtitle: "连接你自己的 OpenAI 兼容服务，密钥只对当前账号生效。", add: "添加渠道",
+        entitlementTitle: "自定义渠道权益", used: "已使用 {{used}} / {{limit}} 个渠道", unlockHint: "按月解锁后即可添加自己的渠道",
+        validUntil: "有效期至 {{date}}", planButton: "{{name}} · {{quota}} 积分",
+        colChannel: "渠道", colModels: "模型", colKey: "密钥", colStatus: "状态", colActions: "操作",
+        keySet: "已配置", keyMissing: "未配置", connectionError: "连接异常", active: "启用", inactive: "停用",
+        copyToken: "复制调用标识", copied: "调用标识已复制", test: "测试", edit: "编辑",
+        emptyEnabled: "还没有自定义渠道", emptyDisabled: "当前套餐未开通自定义渠道",
+        modalEdit: "编辑渠道", modalAdd: "添加渠道", nameLabel: "渠道名称", namePlaceholder: "例如：我的 OpenAI",
+        providerLabel: "协议", baseUrlLabel: "Base URL", apiKeyLabel: "API Key", apiKeyKeep: "留空保持当前密钥",
+        modelsLabel: "模型列表", modelsExtra: "格式：模型名|能力；能力支持 text / image / video / audio", save: "保存渠道",
+        loadFailed: "渠道读取失败", saved: "渠道已保存", saveFailed: "渠道保存失败",
+        confirmDeactivateTitle: "停用这个渠道？", deactivate: "停用", cancel: "取消", deactivated: "渠道已停用",
+        testOk: "渠道连接正常", testFailed: "渠道测试失败", unlockOk: "自定义渠道已按月解锁", unlockFailed: "渠道解锁失败",
+    },
         register: {
             eyebrow: "创建账号", title: "开始你的创作空间", description: "注册后即可使用平台提供的模型，无需配置 API Key。",
             usernameLabel: "用户名", usernameRequired: "请输入用户名", usernameMin: "用户名至少 3 位", usernameMax: "用户名最多 32 位", usernamePlaceholder: "请输入用户名",

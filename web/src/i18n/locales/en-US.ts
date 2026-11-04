@@ -5,6 +5,21 @@ export default {
     },
     theme: { toggle: "Toggle theme" },
     authPage: {
+    channelsPage: {
+        title: "My channels", subtitle: "Connect your own OpenAI-compatible service. The key only applies to this account.", add: "Add channel",
+        entitlementTitle: "Custom channel entitlement", used: "{{used}} / {{limit}} channels used", unlockHint: "Unlock monthly to add your own channels",
+        validUntil: "Valid until {{date}}", planButton: "{{name}} · {{quota}} credits",
+        colChannel: "Channel", colModels: "Models", colKey: "Key", colStatus: "Status", colActions: "Actions",
+        keySet: "Configured", keyMissing: "Not configured", connectionError: "Connection error", active: "Enabled", inactive: "Disabled",
+        copyToken: "Copy access token", copied: "Access token copied", test: "Test", edit: "Edit",
+        emptyEnabled: "No custom channels yet", emptyDisabled: "Your plan does not include custom channels",
+        modalEdit: "Edit channel", modalAdd: "Add channel", nameLabel: "Channel name", namePlaceholder: "For example: My OpenAI",
+        providerLabel: "Protocol", baseUrlLabel: "Base URL", apiKeyLabel: "API key", apiKeyKeep: "Leave empty to keep the current key",
+        modelsLabel: "Models", modelsExtra: "Format: model|capability; capability supports text / image / video / audio", save: "Save channel",
+        loadFailed: "Failed to load channels", saved: "Channel saved", saveFailed: "Failed to save channel",
+        confirmDeactivateTitle: "Disable this channel?", deactivate: "Disable", cancel: "Cancel", deactivated: "Channel disabled",
+        testOk: "Channel connection works", testFailed: "Channel test failed", unlockOk: "Custom channels unlocked for this month", unlockFailed: "Failed to unlock channels",
+    },
         register: {
             eyebrow: "Create account", title: "Start your workspace", description: "Registered accounts use the platform models directly, no API key needed.",
             usernameLabel: "Username", usernameRequired: "Enter a username", usernameMin: "Use at least 3 characters", usernameMax: "Use at most 32 characters", usernamePlaceholder: "Enter a username",
