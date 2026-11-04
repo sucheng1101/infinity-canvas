@@ -3300,7 +3300,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
 
     const selectedConfigNodes = isEcommerce ? selectedNodes.filter((node) => node.type === CanvasNodeType.Config) : [];
     // 电商流程：先生成全部图片节点，全部结束后再跑 QA 检查节点，避免 QA 抢跑。
-    const runGenerationTargets = (targets: CanvasNodeData[]) => {
+    const runGenerationTargets = (targets: CanvasNodeData[], options: { offerRetry?: boolean } = {}) => {
         const imageTargets = targets.filter((node) => !node.metadata?.ecommerceQa);
         const qaTargets = targets.filter((node) => node.metadata?.ecommerceQa);
         void (async () => {
@@ -3332,6 +3332,18 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                 await Promise.allSettled(imageTargets.map((node) => handleGenerateNode(node.id, node.metadata?.generationMode || "image", node.metadata?.composerContent ?? node.metadata?.prompt ?? "")));
             }
             if (batchCanceledRef.current) return;
+            if (options.offerRetry !== false) {
+                const failed = imageTargets.filter((node) => nodesRef.current.find((item) => item.id === node.id)?.metadata?.status === NODE_STATUS_ERROR);
+                if (failed.length) {
+                    modal.confirm({
+                        title: t("canvas.projectPage.retryFailedTitle", { count: failed.length }),
+                        content: t("canvas.projectPage.retryFailedContent"),
+                        okText: t("common.retry"),
+                        cancelText: t("common.cancel"),
+                        onOk: () => runGenerationTargets(failed, { offerRetry: false }),
+                    });
+                }
+            }
             qaTargets.forEach((node) => void handleGenerateNode(node.id, node.metadata?.generationMode || "text", node.metadata?.composerContent ?? node.metadata?.prompt ?? ""));
         })();
     };
