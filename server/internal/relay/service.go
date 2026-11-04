@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sucheng1101/infinity-canvas/server/internal/billing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/costpricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/generation"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
@@ -320,34 +321,22 @@ func (s *Service) finishUsage(id uint, status string, task model.GenerationTask,
 }
 
 func billingUnit(capability string) string {
-	switch strings.ToLower(strings.TrimSpace(capability)) {
-	case "image":
-		return "image"
-	case "video":
-		return "second"
-	case "text":
-		return "token"
-	default:
-		return "request"
-	}
+	return billing.UnitForCapability(capability)
 }
 
 func billedUnits(task model.GenerationTask, totalTokens int64) float64 {
-	if task.Capability == "text" {
-		return float64(totalTokens)
-	}
 	var parameters map[string]any
 	_ = json.Unmarshal([]byte(task.ParametersJSON), &parameters)
-	if task.Capability == "video" {
-		return numberValue(parameters["durationSeconds"])
+	imageCount := numberValue(parameters["count"])
+	if imageCount <= 0 {
+		imageCount = 1
 	}
-	if task.Capability == "image" {
-		value := numberValue(parameters["count"])
-		if value > 0 {
-			return value
-		}
+	units := billing.Units(task.Capability, imageCount, numberValue(parameters["durationSeconds"]), float64(totalTokens))
+	if units == 0 && billing.UnitForCapability(task.Capability) == "request" {
+		// Unknown capabilities still bill one request, as usage logs always did.
+		return 1
 	}
-	return 1
+	return units
 }
 
 func numberValue(value any) float64 {

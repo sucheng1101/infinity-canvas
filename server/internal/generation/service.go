@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sucheng1101/infinity-canvas/server/internal/billing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
 	"github.com/sucheng1101/infinity-canvas/server/internal/pricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
@@ -363,30 +364,16 @@ func billingUnits(capability string, parameters map[string]any, count int) int64
 		}
 	}
 	switch capability {
-	case "image":
-		if units := value("count"); units > 0 {
-			return units
+	case "image", "video", "text":
+		image := value("count")
+		if image <= 0 {
+			image = int64(count)
 		}
-		if count > 0 {
-			return int64(count)
-		}
-	case "video":
-		return value("durationSeconds")
-	case "text":
-		return value("inputTokens")
+		return int64(billing.Units(capability, float64(image), float64(value("durationSeconds")), float64(value("inputTokens"))))
 	}
 	return 0
 }
 
 func subscriptionUnit(capability string) string {
-	switch capability {
-	case "image":
-		return "image"
-	case "video":
-		return "second"
-	case "text":
-		return "token"
-	default:
-		return "request"
-	}
+	return billing.UnitForCapability(capability)
 }

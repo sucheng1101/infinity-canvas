@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sucheng1101/infinity-canvas/server/internal/billing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -585,16 +586,7 @@ func quotaLimit(row model.SubscriptionPlanQuota, capability string) int64 {
 	}
 }
 func billingUnit(capability string) string {
-	switch strings.ToLower(capability) {
-	case "image":
-		return "image"
-	case "video":
-		return "second"
-	case "text":
-		return "token"
-	default:
-		return "request"
-	}
+	return billing.UnitForCapability(capability)
 }
 func formatID(value uint) string { return strconv.FormatUint(uint64(value), 10) }
 
