@@ -5,6 +5,14 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+## 优化 Wave 2：画布性能、存储兜底与模型目录
+
+- 框选节点时应跟手（每帧一次更新），滚轮缩放不再抖；连续拖拽时项目只在停手后约 800ms 落盘。
+- 把浏览器存储配额塞满（或在 devtools 里让 `localforage.setItem` 抛错）后拖动节点，应弹出「本地存储写入失败」提示，而不是静默丢改动。
+- 手动把 IndexedDB 里 `infinite-canvas:canvas_store` 的值改成非法 JSON 后刷新，应提示「本地画布数据读取失败」并进入空白画布，不再永久停在加载壳。
+- 电商画布（`/projects/:id`）自动聚焦节点时应避开底部工具栏，节点不被工具栏遮住。
+- `/api/v1/models` 连续刷新多次，数据库中 `published_models` / `model_routes` 不应每次都被写入；只有在启动或管理端保存渠道后才会同步。
+
 ## 优化 Wave 1：画布健壮性、首屏、服务端与 CI
 
 - 画布右上角菜单点「删除当前画布」应先弹确认框，确认后才删除；文案说明节点与本地图片都会清除。

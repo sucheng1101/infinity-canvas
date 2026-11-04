@@ -87,10 +87,22 @@
 | WP2 | 1 | 已验收 | 总控台 | `03f16ee` | 20 个路由改懒加载、manualChunks 拆 codemirror/markdown/antd、ErrorBoundary、移除 ProConfigProvider、workbench 按 mode 懒加载；型检 + 构建通过 |
 | WP3 | 1 | 已验收 | 总控台 | `e45bd64` | 取消先校验归属、上游 32MB 上限、订单批量过期与迟到支付入账、优雅退出（默认 60s，`SHUTDOWN_TIMEOUT` 可覆盖）；`go build`/`go vet`/`go test` 通过，取消他人任务实测 404 |
 | WP4 | 1 | 已验收 | 总控台 | `3c964e4` | 新增 CI（typecheck + test + build）；删双 lockfile 与依赖清理因本地无 bun、无法同步 lock，暂缓 |
-| WP5 | 1 | 进行中 | 总控台 | — | 本文件看板、CHANGELOG 与 pending-test 同步 |
-| WP6–WP12 | 2–3 | 待启动 | — | — | 依赖 Wave 1 验收 |
+| WP5 | 1 | 已验收 | 总控台 | `75e2459` | 看板、CHANGELOG 与 pending-test 同步 |
+| WP6 | 2 | 部分完成 | 总控台 | `b69f491` | 已做框选与滚轮 rAF 合并、持久化 400→800ms；mention 缓存、memo 命中、侧栏虚拟化依赖 WP10 拆分，阻塞 |
+| S3 | 2 | 已验收 | 总控台 | `6985d06` | 本地存储读写失败提示、画布数据损坏兜底、电商工具栏补回 `data-canvas-bottom-toolbar` |
+| WP7 | 2 | 部分完成 | 总控台 | `b490ace` | `/models` 读路径不再同步写库（改为启动 + 渠道写入时同步）；后台订单列表分页下推未做 |
+| WP8–WP12 | 2–3 | 待启动 | — | — | 依赖前序 |
 
 状态取值：`待启动` → `进行中` → `待验收` → `已验收` / `阻塞`。
+
+### 4.2 仍未完成（按建议顺序）
+
+1. WP7 剩余：后台订单列表全表加载 + 内存排序分页，需改成 UNION ALL + COUNT。
+2. WP9：电商工具栏/选择栏/配置面板三份副本合并（约 640 行重复）。
+3. WP10：`project.tsx` 拆分，完成后才能落地 mention 缓存、memo 命中与侧栏虚拟化。
+4. WP8：`services/api/http.ts` 合并三份 `request`、react-query 接管 11 个页面。
+5. WP11/WP12：i18n 覆盖、死代码清理、服务端测试补齐。
+6. 被环境阻塞：依赖清理与双 lockfile（需 bun）、`tests/` 纳入 typecheck（需 `@types/bun`）。
 
 ### 4.1 已确认的边界值
 
