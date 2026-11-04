@@ -198,6 +198,12 @@ func migrate(db *gorm.DB) error {
 				return tx.AutoMigrate(&model.Asset{}, &model.AssetImage{})
 			},
 		},
+		{
+			version: "20261106_m18_storyboard",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.Scene{}, &model.Shot{})
+			},
+		},
 	}
 	for _, item := range migrations {
 		var count int64

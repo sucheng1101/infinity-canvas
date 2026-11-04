@@ -665,3 +665,35 @@ type AssetImage struct {
 func RecordAudit(tx *gorm.DB, operatorID uint, action, resourceType string, resourceID any) error {
 	return tx.Create(&AuditLog{OperatorID: &operatorID, Action: action, ResourceType: resourceType, ResourceID: fmt.Sprint(resourceID)}).Error
 }
+
+// Scene groups shots inside one canvas project; ProjectID is the client-side
+// canvas project id so the storyboard can follow the canvas without server state.
+type Scene struct {
+	ID         string    `gorm:"size:36;primaryKey" json:"id"`
+	UserID     uint      `gorm:"index;not null" json:"userId"`
+	ProjectID  string    `gorm:"size:64;index;not null" json:"projectId"`
+	Name       string    `gorm:"size:128;not null" json:"name"`
+	Summary    string    `gorm:"type:text" json:"summary"`
+	OrderIndex int       `gorm:"not null;default:0" json:"orderIndex"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+// Shot is the smallest unit of a storyboard: one camera setup with optional
+// dialogue and references to reusable assets.
+type Shot struct {
+	ID            string    `gorm:"size:36;primaryKey" json:"id"`
+	UserID        uint      `gorm:"index;not null" json:"userId"`
+	SceneID       string    `gorm:"size:36;index;not null" json:"sceneId"`
+	OrderIndex    int       `gorm:"not null;default:0" json:"orderIndex"`
+	DurationSec   int       `gorm:"not null;default:4" json:"durationSec"`
+	ShotSize      string    `gorm:"size:16" json:"shotSize"`
+	Camera        string    `gorm:"size:16" json:"camera"`
+	Dialogue      string    `gorm:"type:text" json:"dialogue"`
+	Prompt        string    `gorm:"type:text" json:"prompt"`
+	AssetRefsJSON string    `gorm:"type:text" json:"-"`
+	ImageNodeID   string    `gorm:"size:64" json:"imageNodeId"`
+	VideoNodeID   string    `gorm:"size:64" json:"videoNodeId"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
+}

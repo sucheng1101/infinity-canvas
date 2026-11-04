@@ -34,6 +34,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/relay"
 	"github.com/sucheng1101/infinity-canvas/server/internal/storage"
 	"github.com/sucheng1101/infinity-canvas/server/internal/storageadmin"
+	"github.com/sucheng1101/infinity-canvas/server/internal/storyboard"
 	"github.com/sucheng1101/infinity-canvas/server/internal/subscription"
 	"github.com/sucheng1101/infinity-canvas/server/internal/userchannel"
 	versionservice "github.com/sucheng1101/infinity-canvas/server/internal/version"
@@ -60,6 +61,7 @@ type Router struct {
 	Storage        *storageadmin.Service
 	Queue          *queue.Queue
 	Assets         *assets.Service
+	Storyboard     *storyboard.Service
 	Registry       *storage.Registry
 	Redis          *redis.Client
 	Mailer         mailer.Mailer
@@ -82,7 +84,8 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	costPricingService := &costpricing.Service{DB: db}
 	relayService.UserChannels = userChannelService
 	generationQueue := queue.New(db, relayService, cfg.RelayWorkers, cfg.QueueMaxPending)
-	app := &Router{Queue: generationQueue, Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Subscriptions: subscriptionService, CostPricing: costPricingService, Storage: &storageadmin.Service{DB: db, Cfg: cfg, Registry: storageRegistry}, Assets: &assets.Service{DB: db, Registry: storageRegistry}, Registry: storageRegistry, Redis: redisClient, Mailer: outbound}
+	storyboardService := &storyboard.Service{DB: db}
+	app := &Router{Queue: generationQueue, Storyboard: storyboardService, Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Subscriptions: subscriptionService, CostPricing: costPricingService, Storage: &storageadmin.Service{DB: db, Cfg: cfg, Registry: storageRegistry}, Assets: &assets.Service{DB: db, Registry: storageRegistry}, Registry: storageRegistry, Redis: redisClient, Mailer: outbound}
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(requestID())
@@ -194,6 +197,13 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	v1.POST("/admin/storage-providers/:id/test", app.requireAdmin(), app.adminTestStorageProvider)
 	v1.GET("/account/storage-options", app.requireAuth(), app.accountStorageOptions)
 	v1.PUT("/account/storage", app.requireAuth(), app.allowGuard("storage-choose", 20, time.Minute), app.accountChooseStorage)
+	v1.GET("/projects/:projectId/scenes", app.requireAuth(), app.storyboardScenes)
+	v1.POST("/projects/:projectId/scenes", app.requireAuth(), app.storyboardCreateScene)
+	v1.PUT("/scenes/:id", app.requireAuth(), app.storyboardUpdateScene)
+	v1.DELETE("/scenes/:id", app.requireAuth(), app.storyboardDeleteScene)
+	v1.POST("/scenes/:id/shots", app.requireAuth(), app.storyboardCreateShot)
+	v1.PUT("/shots/:id", app.requireAuth(), app.storyboardUpdateShot)
+	v1.DELETE("/shots/:id", app.requireAuth(), app.storyboardDeleteShot)
 	v1.GET("/assets", app.requireAuth(), app.assetsList)
 	v1.POST("/assets", app.requireAuth(), app.assetCreate)
 	v1.PUT("/assets/:id", app.requireAuth(), app.assetUpdate)
