@@ -5,6 +5,23 @@ export default {
     },
     theme: { toggle: "切换主题" },
     authPage: {
+    billingPage: {
+        title: "积分与充值", subtitle: "只关心可用积分，模型与渠道由平台统一维护。", refresh: "刷新账户",
+        platformCredits: "平台积分", availableReserved: "可用积分 · 已预留 {{reserved}}", usageRate: "当前可用率",
+        inviteRewardTitle: "邀请奖励", inviteDescription: "邀请朋友注册并完成验证，双方都可以获得管理员配置的积分奖励。",
+        inviteNotReady: "暂未生成", copyLink: "复制链接", invited: "已邀请", rewardCount: "奖励次数", inviteCopied: "邀请链接已复制",
+        choosePlan: "选择积分套餐", autoCreditHint: "支付后积分自动到账", alipay: "支付宝", wechat: "微信支付",
+        recommended: "推荐", baseCredits: "基础积分", giftCredits: "赠送积分", customChannel: "自定义渠道",
+        channelUnit: "个", days: "{{days}} 天", longTerm: "长期", rechargeNow: "立即充值", noProducts: "管理员还没有发布充值套餐",
+        subscriptionTitle: "订阅套餐", subscriptionHint: "订阅额度按具体模型记录：生图按张、视频按秒、文本按 Token；额度用完后自动使用积分。",
+        currentSubscription: "当前订阅：{{name}}", validUntil: "有效期至 {{date}}", activated: "已开通", creditsUnit: "积分",
+        modelNumber: "模型 #{{id}}", modelQuota: "生图 {{images}} 张 · 视频 {{seconds}} 秒 · 文本 {{tokens}} Token",
+        subscribeNow: "立即订阅", noPlans: "暂无可购买订阅套餐", ledgerTitle: "积分流水", noLedger: "暂无积分流水",
+        loadFailed: "账户信息读取失败", orderFailed: "充值订单创建失败", subscribed: "订阅已开通", subscribeFailed: "订阅购买失败",
+        paymentSuccess: "支付成功，积分已到账", paymentPending: "支付结果确认中，请稍后刷新账户", paymentFailed: "支付未完成，请检查订单状态",
+        ledgerGeneration: "生成扣费", ledgerSubscription: "订阅购买", ledgerChannelUnlock: "自定义渠道解锁",
+        ledgerRecharge: "充值到账", ledgerInvitation: "邀请奖励", ledgerAdmin: "管理员调整", ledgerOther: "积分变动",
+    },
     modelPlaza: {
         title: "模型广场", subtitle: "已开放模型的按次价格、订阅权益、质量标准和性能概览",
         allModels: "全部模型", filter: "筛选", reset: "重置", searchPlaceholder: "搜索模型名称或能力", count: "共 {{count}} 个模型", noMatch: "没有匹配的模型",

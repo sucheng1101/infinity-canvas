@@ -5,6 +5,23 @@ export default {
     },
     theme: { toggle: "Toggle theme" },
     authPage: {
+    billingPage: {
+        title: "Credits and top-up", subtitle: "Only the available credits matter. Models and channels are managed by the platform.", refresh: "Refresh account",
+        platformCredits: "Platform credits", availableReserved: "Available · {{reserved}} reserved", usageRate: "Available ratio",
+        inviteRewardTitle: "Invitation rewards", inviteDescription: "Invite a friend who registers and verifies, and both of you receive the credits configured by the administrator.",
+        inviteNotReady: "Not generated yet", copyLink: "Copy link", invited: "Invited", rewardCount: "Rewards", inviteCopied: "Invitation link copied",
+        choosePlan: "Choose a credit pack", autoCreditHint: "Credits are added right after payment", alipay: "Alipay", wechat: "WeChat Pay",
+        recommended: "Recommended", baseCredits: "Base credits", giftCredits: "Bonus credits", customChannel: "Custom channels",
+        channelUnit: "channel(s)", days: "{{days}} days", longTerm: "permanent", rechargeNow: "Top up now", noProducts: "No credit pack has been published yet",
+        subscriptionTitle: "Subscription plans", subscriptionHint: "Quota is tracked per model: images by count, video by seconds, text by tokens. Credits are used after quota runs out.",
+        currentSubscription: "Current plan: {{name}}", validUntil: "Valid until {{date}}", activated: "Active", creditsUnit: "credits",
+        modelNumber: "Model #{{id}}", modelQuota: "{{images}} images · {{seconds}} s video · {{tokens}} tokens text",
+        subscribeNow: "Subscribe now", noPlans: "No subscription plan is available", ledgerTitle: "Credit ledger", noLedger: "No credit records yet",
+        loadFailed: "Failed to load account information", orderFailed: "Failed to create the top-up order", subscribed: "Subscription activated", subscribeFailed: "Failed to purchase the subscription",
+        paymentSuccess: "Payment succeeded and credits were added", paymentPending: "Payment is being confirmed. Refresh the account later.", paymentFailed: "Payment was not completed. Check the order status.",
+        ledgerGeneration: "Generation charge", ledgerSubscription: "Subscription purchase", ledgerChannelUnlock: "Custom channel unlock",
+        ledgerRecharge: "Top-up received", ledgerInvitation: "Invitation reward", ledgerAdmin: "Administrator adjustment", ledgerOther: "Credit change",
+    },
     modelPlaza: {
         title: "Model plaza", subtitle: "Per-call pricing, subscription benefits, quality tiers and performance for published models",
         allModels: "All models", filter: "Filter", reset: "Reset", searchPlaceholder: "Search by model name or capability", count: "{{count}} models", noMatch: "No matching models",
