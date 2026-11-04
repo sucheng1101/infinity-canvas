@@ -150,6 +150,7 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, on
     const [selectMode, setSelectMode] = useState(false);
     const [checked, setChecked] = useState<Set<string>>(new Set());
     const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+    const [nodeRenderLimit, setNodeRenderLimit] = useState(120);
     const [exporting, setExporting] = useState(false);
     const nodeViewMode = useCanvasSidePanelStore((state) => state.nodeViewMode);
     const setNodeViewMode = useCanvasSidePanelStore((state) => state.setNodeViewMode);
@@ -187,6 +188,8 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, on
         });
     const allChecked = filtered.length > 0 && filtered.every((node) => checked.has(node.id));
     const toggleAll = () => setChecked(allChecked ? new Set() : new Set(filtered.map((node) => node.id)));
+    // Large canvases can hold thousands of nodes; render a window and grow it on demand.
+    const visibleNodes = filtered.slice(0, nodeRenderLimit);
 
     // Let the hover preview fade out before the canvas starts moving to the node.
     const PRESS_FOCUS_DELAY = 180;
@@ -257,7 +260,7 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, on
                 {nodeViewMode === "grid" ? (
                     filtered.length ? (
                         <div className="grid gap-2 px-1 [grid-template-columns:repeat(auto-fill,minmax(88px,1fr))]">
-                            {filtered.map((node) => {
+                            {visibleNodes.map((node) => {
                                 const Icon = NODE_TYPE_ICON[node.type] || FileText;
                                 const isImage = node.type === CanvasNodeType.Image && node.metadata?.content;
                                 const isChecked = checked.has(node.id);
@@ -340,6 +343,15 @@ function CanvasNodesTab({ nodes, selectedNodeIds, onFocusNode, onPreviewNode, on
                                 </div>
                             );
                         })}
+                        {filtered.length > visibleNodes.length ? (
+                            <button
+                                type="button"
+                                onClick={() => setNodeRenderLimit((limit) => limit + 120)}
+                                className="col-span-full mt-2 rounded-md py-2 text-xs font-medium opacity-60 transition hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10"
+                            >
+                                {t("canvas.sidePanel.showMore", { count: filtered.length - visibleNodes.length })}
+                            </button>
+                        ) : null}
                     </div>
                 ) : (
                     <div className="pt-16 text-center text-sm opacity-40">{t("canvas.sidePanel.noNodes")}</div>
