@@ -2,6 +2,7 @@ import { App, Button, Card, Col, Empty, List, Progress, Radio, Row, Skeleton, St
 import { ArrowUpRight, Coins, Copy, Gift, History, UsersRound, WalletCards } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 
 import i18n from "@/i18n";
 import { hostedApi, type InvitationSelf, type QuotaLedger, type QuotaSummary, type RechargeProduct, type SubscriptionPlan, type UserSubscription } from "@/services/api/hosted";
@@ -39,19 +40,9 @@ export default function BillingPage() {
     // Subscribing here re-renders the page (and its i18n.t helpers) when the locale changes.
     useTranslation();
     const { message } = App.useApp();
-    const [quota, setQuota] = useState<QuotaSummary>();
-    const [ledger, setLedger] = useState<QuotaLedger[]>([]);
-    const [products, setProducts] = useState<RechargeProduct[]>([]);
-    const [invitation, setInvitation] = useState<InvitationSelf>();
-    const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
-    const [subscription, setSubscription] = useState<UserSubscription>();
-    const [loading, setLoading] = useState(true);
-    const [buying, setBuying] = useState<number>();
-    const [paymentMethod, setPaymentMethod] = useState("alipay");
-
-    const load = async () => {
-        setLoading(true);
-        try {
+    const accountQuery = useQuery({
+        queryKey: ["billing-account"],
+        queryFn: async () => {
             const [quotaResult, ledgerResult, productsResult, invitationResult, subscriptionResult, currentSubscription] = await Promise.all([
                 hostedApi.quota(),
                 hostedApi.ledger(),
@@ -60,18 +51,25 @@ export default function BillingPage() {
                 hostedApi.subscriptionPlans(),
                 hostedApi.subscription(),
             ]);
-            setQuota(quotaResult);
-            setLedger(ledgerResult.items);
-            setProducts(productsResult.items);
-            setInvitation(invitationResult);
-            setSubscriptionPlans(subscriptionResult.items);
-            setSubscription(currentSubscription);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : i18n.t("billingPage.loadFailed"));
-        } finally {
-            setLoading(false);
-        }
+            return { quota: quotaResult, ledger: ledgerResult.items, products: productsResult.items, invitation: invitationResult, plans: subscriptionResult.items, subscription: currentSubscription };
+        },
+    });
+    const quota = accountQuery.data?.quota;
+    const ledger = accountQuery.data?.ledger ?? [];
+    const products = accountQuery.data?.products ?? [];
+    const invitation = accountQuery.data?.invitation;
+    const subscriptionPlans = accountQuery.data?.plans ?? [];
+    const subscription = accountQuery.data?.subscription;
+    const loading = accountQuery.isLoading;
+    const [buying, setBuying] = useState<number>();
+    const [paymentMethod, setPaymentMethod] = useState("alipay");
+
+    const load = async () => {
+        await accountQuery.refetch();
     };
+    useEffect(() => {
+        if (accountQuery.error) message.error(accountQuery.error instanceof Error ? accountQuery.error.message : i18n.t("billingPage.loadFailed"));
+    }, [accountQuery.error, message]);
 
     useEffect(() => {
         void load();
@@ -108,8 +106,7 @@ export default function BillingPage() {
 
     const buySubscription = async (plan: SubscriptionPlan) => {
         try {
-            const result = await hostedApi.purchaseSubscription(plan.id);
-            setSubscription(result);
+            await hostedApi.purchaseSubscription(plan.id);
             message.success(i18n.t("billingPage.subscribed"));
             await load();
         } catch (error) { message.error(error instanceof Error ? error.message : i18n.t("billingPage.subscribeFailed")); }

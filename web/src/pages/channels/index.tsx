@@ -2,6 +2,7 @@ import { App, Button, Card, Empty, Form, Input, Modal, Space, Spin, Table, Tag }
 import { Check, Copy, Pencil, Plus, RadioTower, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 
 import { hostedApi, type ChannelUnlockPlan, type UserChannel, type UserChannelEntitlement } from "@/services/api/hosted";
 
@@ -10,31 +11,33 @@ type FormValues = { name: string; provider: string; baseUrl: string; apiKey?: st
 export default function ChannelsPage() {
     const { message, modal } = App.useApp();
     const { t } = useTranslation();
+    const channelsQuery = useQuery({ queryKey: ["user-channels"], queryFn: () => hostedApi.channels() });
+    const unlockPlansQuery = useQuery({ queryKey: ["channel-unlock-plans"], queryFn: () => hostedApi.channelUnlockPlans() });
     const [items, setItems] = useState<UserChannel[]>([]);
     const [entitlement, setEntitlement] = useState<UserChannelEntitlement>();
-    const [loading, setLoading] = useState(true);
     const [editor, setEditor] = useState<UserChannel>();
     const [open, setOpen] = useState(false);
     const [testing, setTesting] = useState<number>();
     const [unlockPlans, setUnlockPlans] = useState<ChannelUnlockPlan[]>([]);
+    const loading = channelsQuery.isLoading;
+
+    // Queries own fetching and caching; local copies keep table editing simple.
+    useEffect(() => {
+        if (!channelsQuery.data) return;
+        setItems(channelsQuery.data.items);
+        setEntitlement(channelsQuery.data.entitlement);
+    }, [channelsQuery.data]);
+    useEffect(() => {
+        if (unlockPlansQuery.data) setUnlockPlans(unlockPlansQuery.data.items);
+    }, [unlockPlansQuery.data]);
+    useEffect(() => {
+        const error = channelsQuery.error ?? unlockPlansQuery.error;
+        if (error) message.error(error instanceof Error ? error.message : t("channelsPage.loadFailed"));
+    }, [channelsQuery.error, message, t, unlockPlansQuery.error]);
 
     const load = async () => {
-        setLoading(true);
-        try {
-            const [result, unlockResult] = await Promise.all([hostedApi.channels(), hostedApi.channelUnlockPlans()]);
-            setItems(result.items);
-            setEntitlement(result.entitlement);
-            setUnlockPlans(unlockResult.items);
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : t("channelsPage.loadFailed"));
-        } finally {
-            setLoading(false);
-        }
+        await Promise.all([channelsQuery.refetch(), unlockPlansQuery.refetch()]);
     };
-
-    useEffect(() => {
-        void load();
-    }, []);
 
     const save = async (values: FormValues) => {
         const models = String(values.models || "").split(/[\n,]/).map((value) => value.trim()).filter(Boolean).map((value) => {

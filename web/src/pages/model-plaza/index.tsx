@@ -2,6 +2,7 @@ import { App, Button, Drawer, Empty, Input, Segmented, Skeleton, Tag } from "ant
 import { ArrowUpRight, Boxes, CheckCircle2, CircleDollarSign, Gauge, Search, Sparkles, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 
 import i18n from "@/i18n";
 import { hostedApi, type PublishedModel, type SubscriptionPlan } from "@/services/api/hosted";
@@ -59,14 +60,19 @@ export default function ModelPlazaPage() {
     // Subscribing here re-renders the page (and its i18n.t helpers) when the locale changes.
     useTranslation();
     const { message } = App.useApp();
-    const [models, setModels] = useState<PublishedModel[]>([]);
-    const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
-    const [loading, setLoading] = useState(true);
+    const modelsQuery = useQuery({ queryKey: ["plaza-models"], queryFn: () => hostedApi.models() });
+    const plansQuery = useQuery({ queryKey: ["subscription-plans"], queryFn: () => hostedApi.subscriptionPlans() });
+    const models = modelsQuery.data?.items ?? [];
+    const plans = plansQuery.data?.items ?? [];
+    const loading = modelsQuery.isLoading || plansQuery.isLoading;
     const [query, setQuery] = useState("");
     const [capability, setCapability] = useState<Capability>("all");
     const [priceMode, setPriceMode] = useState<"points" | "cny">("points");
     const [selected, setSelected] = useState<PublishedModel>();
-    useEffect(() => { let active = true; void Promise.all([hostedApi.models(), hostedApi.subscriptionPlans()]).then(([modelResult, planResult]) => { if (!active) return; setModels(modelResult.items); setPlans(planResult.items); }).catch((error) => { if (active) message.error(error instanceof Error ? error.message : i18n.t("modelPlaza.loadFailed")); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, [message]);
+    useEffect(() => {
+        const error = modelsQuery.error ?? plansQuery.error;
+        if (error) message.error(error instanceof Error ? error.message : i18n.t("modelPlaza.loadFailed"));
+    }, [message, modelsQuery.error, plansQuery.error]);
     const visibleModels = useMemo(() => { const normalized = query.trim().toLowerCase(); return models.filter((model) => (capability === "all" || model.capability === capability) && (!normalized || `${model.displayName} ${model.capability} ${modelDescription(model)}`.toLowerCase().includes(normalized))); }, [capability, models, query]);
     return <main className="h-full overflow-y-auto bg-[#f5f6f8] text-stone-950 dark:bg-[#11110f] dark:text-stone-100"><div className="mx-auto max-w-[1600px] px-5 pb-12 pt-5 sm:px-8"><div className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-2xl font-semibold tracking-[-.04em]">{i18n.t("modelPlaza.title")}</h1><p className="mt-1 text-sm text-stone-500">{i18n.t("modelPlaza.subtitle")}</p></div><div className="flex items-center gap-2"><div className="hidden items-center gap-1 text-xs text-stone-400 sm:flex"><CircleDollarSign className="size-4 text-emerald-500" />{i18n.t("modelPlaza.exchangeRate")}</div><Segmented size="small" value={priceMode} onChange={(value) => setPriceMode(value as "points" | "cny")} options={[{ label: i18n.t("modelPlaza.points"), value: "points" }, { label: i18n.t("modelPlaza.cny"), value: "cny" }]} /></div></div><div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]"><aside className="self-start rounded-2xl border border-stone-200/80 bg-white/75 p-3 backdrop-blur lg:sticky lg:top-4 dark:border-stone-800 dark:bg-stone-950/70"><div className="mb-2 flex items-center justify-between"><span className="text-sm font-semibold">{i18n.t("modelPlaza.filter")}</span><Button type="link" size="small" onClick={() => { setQuery(""); setCapability("all"); }}>{i18n.t("modelPlaza.reset")}</Button></div><div className="space-y-1">{(["all", "text", "image", "video", "audio"] as Capability[]).map((item) => <button key={item} type="button" onClick={() => setCapability(item)} className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${capability === item ? "bg-stone-950 font-medium text-white dark:bg-stone-100 dark:text-stone-950" : "text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-900"}`}><span>{item === "all" ? i18n.t("modelPlaza.allModels") : capabilityLabel(item)}</span><span className="text-xs opacity-60">{item === "all" ? models.length : models.filter((model) => model.capability === item).length}</span></button>)}</div></aside><section className="min-w-0"><div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-stone-200/80 bg-white/75 p-3 backdrop-blur dark:border-stone-800 dark:bg-stone-950/70"><Input allowClear prefix={<Search className="size-4 text-stone-400" />} value={query} onChange={(event) => setQuery(event.target.value)} placeholder={i18n.t("modelPlaza.searchPlaceholder")} className="min-w-[200px] flex-1 border-0 bg-transparent shadow-none" /><span className="text-xs text-stone-400">{i18n.t("modelPlaza.count", { count: visibleModels.length })}</span></div>{loading ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="rounded-2xl border border-stone-200 bg-white p-5 dark:border-stone-800 dark:bg-stone-950"><Skeleton active paragraph={{ rows: 5 }} /></div>)}</div> : visibleModels.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visibleModels.map((model) => <ModelCard key={model.id} model={model} plans={plans} priceMode={priceMode} onOpen={() => setSelected(model)} />)}</div> : <div className="rounded-2xl border border-dashed border-stone-300 bg-white/60 py-24 dark:border-stone-700 dark:bg-stone-950/60"><Empty description={i18n.t("modelPlaza.noMatch")} /></div>}</section></div></div><Drawer open={Boolean(selected)} onClose={() => setSelected(undefined)} width={460} title={i18n.t("modelPlaza.detailsTitle")} destroyOnHidden>{selected ? <ModelDetails model={selected} plans={plans} priceMode={priceMode} /> : null}</Drawer></main>;
 }
