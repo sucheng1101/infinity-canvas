@@ -2,6 +2,8 @@ import { requestJson as request } from "@/services/api/http";
 
 export type QuotaSummary = { balance: number; reserved: number; available: number };
 export type QuotaLedger = { id: number; delta: number; balanceAfter: number; source: string; businessType: string; reason?: string; createdAt: string };
+export type StorageOption = { id: string; name: string; driver: string };
+
 export type UserUsageLog = { id: number; taskId: string; project: string; capability: string; billingUnit: string; billedUnits: number; status: "running" | "succeeded" | "failed"; durationMs: number; totalTokens: number; chargedQuota: number; errorMessage?: string; startedAt: string; completedAt?: string };
 export type UserUsageResult = { items: UserUsageLog[]; total: number; page: number; pageSize: number; stats: { total: number; succeeded: number; failed: number; running: number; chargedQuota: number; totalTokens: number; averageDurationMs: number } };
 export type RechargeProduct = {
@@ -61,6 +63,8 @@ export type HostedGenerationTask = {
 
 export const hostedApi = {
     quota: () => request<QuotaSummary>("/account/quota"),
+    storageOptions: () => request<{ items: StorageOption[]; current: string; inherited: boolean }>("/account/storage-options"),
+    chooseStorage: (providerId: string) => request<{ ok: boolean }>("/account/storage", { method: "PUT", body: JSON.stringify({ providerId }) }),
     ledger: () => request<{ items: QuotaLedger[]; nextCursor: string }>("/account/ledger?limit=20"),
     usageLogs: (params: Record<string, string | number | undefined> = {}) => request<UserUsageResult>(`/account/usage-logs?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]))}`),
     products: () => request<{ items: RechargeProduct[] }>("/recharge/products"),

@@ -1,6 +1,8 @@
 # 项目运行链路（架构总览）
 
-> 依据当前代码核实（`server/main.go`、`server/internal/httpapi/router.go`、`server/internal/relay/service.go`、`web/src/main.tsx`、`web/src/pages/canvas/`）。Mermaid 图在支持的环境可直接渲染。
+![运行链路总览](/images/architecture.svg)
+
+> 依据当前代码核实（`server/main.go`、`server/internal/httpapi/router.go`、`server/internal/relay/service.go`、`web/src/main.tsx`、`web/src/pages/canvas/`）。Mermaid 图在支持的环境可直接渲染；上图源文件为 `docs/public/images/architecture.svg`。
 
 ## 1. 部署拓扑
 

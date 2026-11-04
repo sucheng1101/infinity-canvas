@@ -227,6 +227,42 @@ export type AdminFinanceSummary = { rechargeOrders: number; rechargeFen: number;
 
 const json = (body: unknown, method = "POST") => ({ method, body: JSON.stringify(body) });
 
+export type StorageProvider = {
+    id: string;
+    name: string;
+    driver: "local" | "s3";
+    enabled: boolean;
+    isDefault: boolean;
+    endpoint: string;
+    region: string;
+    bucket: string;
+    publicBase: string;
+    usePathStyle: boolean;
+    localDir: string;
+    sortOrder: number;
+    accessKeyMask: string;
+    secretKeyMask: string;
+    ready: boolean;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type StorageProviderInput = {
+    name: string;
+    driver: "local" | "s3";
+    enabled: boolean;
+    isDefault: boolean;
+    endpoint: string;
+    region: string;
+    bucket: string;
+    accessKey?: string;
+    secretKey?: string;
+    publicBase: string;
+    usePathStyle: boolean;
+    localDir: string;
+    sortOrder: number;
+};
+
 export const adminApi = {
     models: () => request<{ items: PublishedModel[] }>("/admin/models"),
     createModel: (body: Partial<PublishedModel>) => request<PublishedModel>("/admin/models", json(body)),
@@ -282,6 +318,11 @@ export const adminApi = {
     saveSubscriptionPlan: (body: Record<string, unknown>, id?: number) => request<AdminSubscriptionPlan>(id ? `/admin/subscription-plans/${id}` : "/admin/subscription-plans", json(body, id ? "PUT" : "POST")),
     channelUnlockPlans: () => request<{ items: AdminChannelUnlockPlan[] }>("/admin/channel-unlock-plans"),
     saveChannelUnlockPlan: (body: Record<string, unknown>, id?: number) => request<AdminChannelUnlockPlan>(id ? `/admin/channel-unlock-plans/${id}` : "/admin/channel-unlock-plans", json(body, id ? "PUT" : "POST")),
+    storageProviders: () => request<{ items: StorageProvider[] }>("/admin/storage-providers"),
+    createStorageProvider: (body: StorageProviderInput) => request<StorageProvider>("/admin/storage-providers", json(body)),
+    updateStorageProvider: (id: string, body: StorageProviderInput) => request<StorageProvider>(`/admin/storage-providers/${id}`, json(body, "PUT")),
+    deleteStorageProvider: (id: string) => request<{ ok: boolean }>(`/admin/storage-providers/${id}`, { method: "DELETE" }),
+    testStorageProvider: (id: string) => request<{ ok: boolean }>(`/admin/storage-providers/${id}/test`, json({})),
     modelCostPricing: () => request<{ items: AdminModelCostPricing[] }>("/admin/model-cost-pricing"),
     saveModelCostPricing: (body: Record<string, unknown>, id?: number) => request<AdminModelCostPricing>(id ? `/admin/model-cost-pricing/${id}` : "/admin/model-cost-pricing", json(body, id ? "PUT" : "POST")),
 };

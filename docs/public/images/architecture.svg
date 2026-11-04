@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 800" width="1240" height="800" font-family="'PingFang SC','Microsoft YaHei',system-ui,sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#78716c"/>
+    </marker>
+    <marker id="arrowAccent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ea580c"/>
+    </marker>
+    <style>
+      .box { fill: #ffffff; stroke: #d6d3d1; stroke-width: 1.5; }
+      .box-accent { fill: #fff7ed; stroke: #fdba74; stroke-width: 1.5; }
+      .group { fill: #fafaf9; stroke: #e7e5e4; stroke-width: 1.5; }
+      .title { font-size: 17px; font-weight: 600; fill: #1c1917; }
+      .sub { font-size: 13px; fill: #57534e; }
+      .label { font-size: 12px; fill: #78716c; }
+      .edge { stroke: #a8a29e; stroke-width: 1.5; fill: none; }
+      .edge-accent { stroke: #ea580c; stroke-width: 1.8; fill: none; stroke-dasharray: 6 4; }
+      .db { fill: #f5f5f4; stroke: #d6d3d1; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <text x="40" y="44" class="title" font-size="22">无限画布 · 运行链路总览</text>
+  <text x="40" y="68" class="label">浏览器 → 账户服务 → 数据与上游；橙色虚线为「仅托管模式」路径</text>
+
+  <!-- 浏览器 -->
+  <rect x="40" y="94" width="1160" height="150" rx="16" class="group"/>
+  <text x="64" y="122" class="title">浏览器（React SPA · :1010）</text>
+  <rect x="64" y="138" width="330" height="86" rx="12" class="box"/>
+  <text x="84" y="164" class="title" font-size="15">页面 / 画布 / 工作台</text>
+  <text x="84" y="186" class="sub">懒加载路由 · Suspense</text>
+  <text x="84" y="206" class="sub">useCanvasGeneration 生成编排</text>
+
+  <rect x="420" y="138" width="330" height="86" rx="12" class="box"/>
+  <text x="440" y="164" class="title" font-size="15">IndexedDB（localforage）</text>
+  <text x="440" y="186" class="sub">画布项目 · 画布图片 · 生成历史</text>
+  <text x="440" y="206" class="sub">目前不云同步</text>
+
+  <rect x="776" y="138" width="400" height="86" rx="12" class="box"/>
+  <text x="796" y="164" class="title" font-size="15">服务层 services/api</text>
+  <text x="796" y="186" class="sub">统一出口 · ApiError · requestJson</text>
+  <text x="796" y="206" class="sub">本地模式：直连 OpenAI 兼容接口（Key 在浏览器）</text>
+
+  <!-- 账户服务 -->
+  <rect x="40" y="284" width="1160" height="272" rx="16" class="group"/>
+  <text x="64" y="312" class="title">账户服务（Go / Gin · :1011）</text>
+
+  <rect x="64" y="328" width="250" height="96" rx="12" class="box"/>
+  <text x="84" y="354" class="title" font-size="15">HTTP API</text>
+  <text x="84" y="376" class="sub">requestID · requireAuth</text>
+  <text x="84" y="396" class="sub">allowGuard 限流（Redis）</text>
+  <text x="84" y="416" class="sub">统一 errorJSON / successJSON</text>
+
+  <rect x="340" y="328" width="250" height="96" rx="12" class="box"/>
+  <text x="360" y="354" class="title" font-size="15">Relay 生成编排</text>
+  <text x="360" y="376" class="sub">模型 → 路由 → 渠道 → 专用 Key</text>
+  <text x="360" y="396" class="sub">重试 1 次 · 响应 ≤32MB</text>
+  <text x="360" y="416" class="sub">registerRun 防重复执行</text>
+
+  <rect x="616" y="328" width="250" height="96" rx="12" class="box"/>
+  <text x="636" y="354" class="title" font-size="15">积分 / 订阅 / 计价</text>
+  <text x="636" y="376" class="sub">quote → reserve → settle</text>
+  <text x="636" y="396" class="sub">失败 / 取消 / 超时回退</text>
+  <text x="636" y="416" class="sub">用量写入 usage_logs</text>
+
+  <rect x="892" y="328" width="284" height="96" rx="12" class="box-accent"/>
+  <text x="912" y="354" class="title" font-size="15">存储注册表</text>
+  <text x="912" y="376" class="sub">用户自选 → 管理员默认 → 首个启用</text>
+  <text x="912" y="396" class="sub">local：写磁盘，/api/v1/files</text>
+  <text x="912" y="416" class="sub">s3：PutObject（S3 兼容）</text>
+
+  <rect x="64" y="444" width="1112" height="92" rx="12" class="box"/>
+  <text x="84" y="470" class="title" font-size="15">后台 worker（随主 ctx 退出）</text>
+  <text x="84" y="494" class="sub">reapStaleTasks：回收中断任务并退额度</text>
+  <text x="470" y="494" class="sub">expireOrders：每分钟过期未支付订单</text>
+  <text x="838" y="494" class="sub">maintainData：每小时清过期报价与旧日志</text>
+  <text x="84" y="518" class="sub">优雅退出：SIGINT / SIGTERM → Server.Shutdown(60s)</text>
+
+  <!-- 数据与上游 -->
+  <rect x="40" y="586" width="1160" height="150" rx="16" class="group"/>
+  <text x="64" y="614" class="title">数据与上游</text>
+
+  <rect x="64" y="630" width="250" height="80" rx="12" class="db"/>
+  <text x="84" y="658" class="title" font-size="15">MySQL 3306</text>
+  <text x="84" y="680" class="sub">账户 · 会话 · 积分 · 订单</text>
+  <text x="84" y="700" class="sub">生成任务 · 用量日志</text>
+
+  <rect x="340" y="630" width="250" height="80" rx="12" class="db"/>
+  <text x="360" y="658" class="title" font-size="15">Redis 6379</text>
+  <text x="360" y="680" class="sub">限流窗口</text>
+  <text x="360" y="700" class="sub">登录失败计数</text>
+
+  <rect x="616" y="630" width="250" height="80" rx="12" class="box-accent"/>
+  <text x="636" y="658" class="title" font-size="15">上游模型 API</text>
+  <text x="636" y="680" class="sub">OpenAI 兼容 · Gemini</text>
+  <text x="636" y="700" class="sub">视频 / 音频厂商</text>
+
+  <rect x="892" y="630" width="284" height="80" rx="12" class="db"/>
+  <text x="912" y="658" class="title" font-size="15">对象存储</text>
+  <text x="912" y="680" class="sub">本地磁盘 · MinIO</text>
+  <text x="912" y="700" class="sub">R2 · OSS · COS · B2 · AWS S3</text>
+
+  <!-- 连线：浏览器 → 服务 -->
+  <path class="edge" d="M 229 224 L 229 328" marker-end="url(#arrow)"/>
+  <text x="238" y="280" class="label">fetch /api/v1（dev 经 Vite 代理）</text>
+
+  <path class="edge-accent" d="M 1034 224 L 1034 328" marker-end="url(#arrowAccent)"/>
+  <text x="842" y="280" class="label">托管模式才经后台</text>
+
+  <!-- 连线：服务 → 数据/上游 -->
+  <path class="edge" d="M 189 424 L 189 630" marker-end="url(#arrow)"/>
+  <text x="198" y="580" class="label">GORM 读写 · 会话校验</text>
+
+  <path class="edge" d="M 250 424 L 430 630" marker-end="url(#arrow)"/>
+  <text x="286" y="580" class="label">INCR / EXPIRE</text>
+
+  <path class="edge" d="M 465 424 L 741 630" marker-end="url(#arrow)"/>
+  <text x="512" y="600" class="label">HTTP 调上游（重试 1 次）</text>
+
+  <path class="edge" d="M 1034 424 L 1034 630" marker-end="url(#arrow)"/>
+  <text x="1043" y="580" class="label">Put / Open / Delete</text>
+</svg>
