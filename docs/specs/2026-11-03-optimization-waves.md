@@ -83,14 +83,22 @@
 
 | WP | 波次 | 状态 | 负责人 | 提交 | 备注 |
 | --- | --- | --- | --- | --- | --- |
-| WP1 | 1 | 待启动 | — | — | — |
-| WP2 | 1 | 待启动 | — | — | — |
-| WP3 | 1 | 待启动 | — | — | — |
-| WP4 | 1 | 待启动 | — | — | — |
-| WP5 | 1 | 待启动 | — | — | — |
+| WP1 | 1 | 已验收 | 总控台（子智能体失败后接管） | `b6fdba5` | 删除确认、恢复兜底页、图片解码 onerror、导入失败提示；型检通过 |
+| WP2 | 1 | 已验收 | 总控台 | `03f16ee` | 20 个路由改懒加载、manualChunks 拆 codemirror/markdown/antd、ErrorBoundary、移除 ProConfigProvider、workbench 按 mode 懒加载；型检 + 构建通过 |
+| WP3 | 1 | 已验收 | 总控台 | `e45bd64` | 取消先校验归属、上游 32MB 上限、订单批量过期与迟到支付入账、优雅退出（默认 60s，`SHUTDOWN_TIMEOUT` 可覆盖）；`go build`/`go vet`/`go test` 通过，取消他人任务实测 404 |
+| WP4 | 1 | 已验收 | 总控台 | `3c964e4` | 新增 CI（typecheck + test + build）；删双 lockfile 与依赖清理因本地无 bun、无法同步 lock，暂缓 |
+| WP5 | 1 | 进行中 | 总控台 | — | 本文件看板、CHANGELOG 与 pending-test 同步 |
 | WP6–WP12 | 2–3 | 待启动 | — | — | 依赖 Wave 1 验收 |
 
 状态取值：`待启动` → `进行中` → `待验收` → `已验收` / `阻塞`。
+
+### 4.1 已确认的边界值
+
+| 项 | 取值 | 失败处理 |
+| --- | --- | --- |
+| 上游响应读取上限 | 32MB（`maxUpstreamResponseBytes`） | 返回 `UPSTREAM_RESPONSE_TOO_LARGE`，任务判失败并回退预占额度，不截断 |
+| 优雅退出等待 | 默认 60s，环境变量 `SHUTDOWN_TIMEOUT` 可覆盖 | 超时强退；未完成任务由 reaper 超时回收并返额度 |
+| 订单批量过期 | 复用现有 `PAYMENT_ORDER_TTL`（默认 30 分钟），每分钟扫描一次 | 过期后到账的合法回调仍入账，重复入账由订单状态与事件唯一键拦住 |
 
 ## 5. 风险
 

@@ -5,6 +5,18 @@ description: Implemented changes that still need manual verification
 
 # Pending Tests
 
+## 优化 Wave 1：画布健壮性、首屏、服务端与 CI
+
+- 画布右上角菜单点「删除当前画布」应先弹确认框，确认后才删除；文案说明节点与本地图片都会清除。
+- 用损坏或已失效的图片打开裁切/切分/放大对话框时，应提示「读取图片失败」而不是一直转圈；画布恢复失败时应看到错误页与「重试 / 返回项目列表」，不再永远停在加载壳。
+- 导入损坏的图片/视频/音频文件时应弹出失败提示，不再静默无反应。
+- 首屏：打开 `/login`、`/app`、`/workbench`、`/canvas/:id`、`/admin` 任一路由都应正常渲染，切换时短暂显示加载占位；`/workbench?mode=video` 不应加载图像工作台代码。
+- 托管模式下取消一个已存在的他人任务应返回 404，且对方正在生成的请求不受影响。
+- 上游返回超大响应（>32MB）时任务应判失败并回退预占额度，服务进程不崩溃。
+- 充值订单超过 30 分钟未支付应被后台自动置为过期；过期后实际付款成功时仍应到账，且不会重复加额度。
+- 账户服务收到 Ctrl+C / SIGTERM 时应打印关闭日志并在 60 秒内退出（可用 `SHUTDOWN_TIMEOUT` 调整）。
+- 新增的 `.github/workflows/ci.yml` 应在 PR 上跑通 web（typecheck / test / build）与 server（build / test）。
+
 ## 本地一键启动（MySQL + 账户服务 + 前端）
 
 - 双击根目录 `start-local.cmd`（或执行 `powershell -ExecutionPolicy Bypass -File .\start-local.ps1`）后，应先启动 MySQL、再启动账户服务、最后启动前端，并打印 `本地服务已就绪：http://localhost:1010`。
