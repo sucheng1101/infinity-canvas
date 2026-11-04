@@ -292,6 +292,10 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const connectingParamsRef = useRef(connectingParams);
     const connectionTargetNodeIdRef = useRef(connectionTargetNodeId);
     const selectionBoxRef = useRef(selectionBox);
+    // Marquee updates are coalesced into one frame, otherwise every pointermove
+    // walks all nodes and re-renders the whole canvas.
+    const marqueeFrameRef = useRef<number | null>(null);
+    const marqueePointRef = useRef<{ x: number; y: number } | null>(null);
     const pendingConnectionCreateRef = useRef(pendingConnectionCreate);
     const generationRequestsRef = useRef(new Map<string, CanvasGenerationRequest>());
     const videoPollIdsRef = useRef(new Set<string>());
@@ -1438,28 +1442,37 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
 
             if (event.buttons === 0) {
                 selectionBoxRef.current = null;
+                marqueePointRef.current = null;
                 setSelectionBox(null);
                 return;
             }
 
-            const world = screenToCanvas(event.clientX, event.clientY);
-            const rectX = Math.min(currentSelection.startWorldX, world.x);
-            const rectY = Math.min(currentSelection.startWorldY, world.y);
-            const rectW = Math.abs(world.x - currentSelection.startWorldX);
-            const rectH = Math.abs(world.y - currentSelection.startWorldY);
-            const nextSelected = new Set<string>(currentSelection.additive ? currentSelection.initialSelectedNodeIds : []);
+            marqueePointRef.current = { x: event.clientX, y: event.clientY };
+            if (marqueeFrameRef.current !== null) return;
+            marqueeFrameRef.current = requestAnimationFrame(() => {
+                marqueeFrameRef.current = null;
+                const point = marqueePointRef.current;
+                const selection = selectionBoxRef.current;
+                if (!point || !selection) return;
 
-            nodesRef.current
-                .forEach((node) => {
+                const world = screenToCanvas(point.x, point.y);
+                const rectX = Math.min(selection.startWorldX, world.x);
+                const rectY = Math.min(selection.startWorldY, world.y);
+                const rectW = Math.abs(world.x - selection.startWorldX);
+                const rectH = Math.abs(world.y - selection.startWorldY);
+                const nextSelected = new Set<string>(selection.additive ? selection.initialSelectedNodeIds : []);
+
+                nodesRef.current.forEach((node) => {
                     const intersects = rectX < node.position.x + node.width && rectX + rectW > node.position.x && rectY < node.position.y + node.height && rectY + rectH > node.position.y;
 
                     if (intersects) nextSelected.add(node.id);
                 });
 
-            const nextSelectionBox = { ...currentSelection, currentWorldX: world.x, currentWorldY: world.y };
-            selectionBoxRef.current = nextSelectionBox;
-            setSelectionBox(nextSelectionBox);
-            setSelectedNodeIds(nextSelected);
+                const nextSelectionBox = { ...selection, currentWorldX: world.x, currentWorldY: world.y };
+                selectionBoxRef.current = nextSelectionBox;
+                setSelectionBox(nextSelectionBox);
+                setSelectedNodeIds(nextSelected);
+            });
         },
         [screenToCanvas],
     );
@@ -1469,6 +1482,11 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
             finishNodeDrag(event.clientX, event.clientY);
 
             selectionBoxRef.current = null;
+            marqueePointRef.current = null;
+            if (marqueeFrameRef.current !== null) {
+                cancelAnimationFrame(marqueeFrameRef.current);
+                marqueeFrameRef.current = null;
+            }
             setSelectionBox(null);
 
             if (pendingConnectionCreateRef.current) return;

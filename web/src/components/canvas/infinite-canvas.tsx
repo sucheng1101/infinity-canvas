@@ -30,19 +30,25 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         startedOnBackground: false,
     });
     const scaleRef = useRef(viewport.k);
+    const viewportRef = useRef(viewport);
     const frameRef = useRef<number | null>(null);
     const nextViewportRef = useRef<ViewportTransform | null>(null);
+    // Wheel zoom is coalesced per frame; a trackpad fires many events per tick.
+    const zoomFrameRef = useRef<number | null>(null);
+    const wheelAccumRef = useRef<{ x: number; y: number; delta: number } | null>(null);
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [isControlPressed, setIsControlPressed] = useState(false);
     const [isPanning, setIsPanning] = useState(false);
 
     useEffect(() => {
         scaleRef.current = viewport.k;
-    }, [viewport.k]);
+        viewportRef.current = viewport;
+    }, [viewport]);
 
     useEffect(
         () => () => {
             if (frameRef.current) cancelAnimationFrame(frameRef.current);
+            if (zoomFrameRef.current) cancelAnimationFrame(zoomFrameRef.current);
         },
         [],
     );
@@ -88,21 +94,33 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest("[data-canvas-no-zoom],.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown")) return;
 
-        const delta = -event.deltaY;
-        const factor = Math.pow(1.1, delta / 100);
-        const newScale = Math.min(Math.max(viewport.k * factor, 0.05), 5);
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return;
 
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
-        const worldX = (mouseX - viewport.x) / viewport.k;
-        const worldY = (mouseY - viewport.y) / viewport.k;
+        const pending = wheelAccumRef.current;
+        wheelAccumRef.current = {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+            delta: (pending?.delta ?? 0) - event.deltaY,
+        };
+        if (zoomFrameRef.current !== null) return;
+        zoomFrameRef.current = requestAnimationFrame(() => {
+            zoomFrameRef.current = null;
+            const wheel = wheelAccumRef.current;
+            const current = viewportRef.current;
+            wheelAccumRef.current = null;
+            if (!wheel) return;
 
-        onViewportChange({
-            x: mouseX - worldX * newScale,
-            y: mouseY - worldY * newScale,
-            k: newScale,
+            const factor = Math.pow(1.1, wheel.delta / 100);
+            const newScale = Math.min(Math.max(current.k * factor, 0.05), 5);
+            const worldX = (wheel.x - current.x) / current.k;
+            const worldY = (wheel.y - current.y) / current.k;
+
+            onViewportChange({
+                x: wheel.x - worldX * newScale,
+                y: wheel.y - worldY * newScale,
+                k: newScale,
+            });
         });
     };
 

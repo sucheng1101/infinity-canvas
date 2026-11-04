@@ -76,7 +76,7 @@ const canvasStorage: PersistStorage<CanvasStore> = {
         saveTimer = setTimeout(() => {
             saveTimer = null;
             void localForageStorage.setItem(name, JSON.stringify(value));
-        }, 400);
+        }, 800);
     },
     removeItem: (name) => localForageStorage.removeItem(name),
 };
