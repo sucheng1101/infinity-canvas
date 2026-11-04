@@ -15,6 +15,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/generation"
 	"github.com/sucheng1101/infinity-canvas/server/internal/httpapi"
 	"github.com/sucheng1101/infinity-canvas/server/internal/mailer"
+	"github.com/sucheng1101/infinity-canvas/server/internal/modelcatalog"
 	"github.com/sucheng1101/infinity-canvas/server/internal/payment"
 	"github.com/sucheng1101/infinity-canvas/server/internal/quota"
 	"github.com/sucheng1101/infinity-canvas/server/internal/store"
@@ -38,6 +39,11 @@ func main() {
 	}
 	if err := auth.EnsureAdmin(db, cfg); err != nil {
 		log.Fatal(err)
+	}
+	// The public catalog used to sync on every /models read; keep it current at
+	// boot and on channel writes instead.
+	if err := (&modelcatalog.Service{DB: db}).SyncFromChannels(); err != nil {
+		log.Printf("sync model catalog failed: %v", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -1388,6 +1388,7 @@ func (a *Router) adminCreateChannel(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "CHANNEL_CREATE_FAILED", "渠道创建失败")
 		return
 	}
+	a.syncModelCatalog(c)
 	successJSON(c, http.StatusCreated, item)
 	_ = model.RecordAudit(a.DB, operatorID(c), "channel.create", "upstream_channel", item.ID)
 }
@@ -1416,6 +1417,7 @@ func (a *Router) adminUpdateChannel(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "CHANNEL_UPDATE_FAILED", "渠道更新失败")
 		return
 	}
+	a.syncModelCatalog(c)
 	successJSON(c, http.StatusOK, item)
 	_ = model.RecordAudit(a.DB, operatorID(c), "channel.update", "upstream_channel", item.ID)
 }
@@ -1434,8 +1436,17 @@ func (a *Router) adminDeleteChannel(c *gin.Context) {
 		errorJSON(c, http.StatusBadRequest, "CHANNEL_DELETE_FAILED", "渠道下线失败")
 		return
 	}
+	a.syncModelCatalog(c)
 	successJSON(c, http.StatusOK, gin.H{"ok": true})
 	_ = model.RecordAudit(a.DB, operatorID(c), "channel.hide", "upstream_channel", uint(id))
+}
+
+// syncModelCatalog keeps the public catalog aligned with channel changes. It is
+// called on writes only, so read endpoints stay read-only.
+func (a *Router) syncModelCatalog(c *gin.Context) {
+	if err := a.ModelCatalog.SyncFromChannels(); err != nil {
+		_ = c.Error(err)
+	}
 }
 
 func (a *Router) adminModelRoutes(c *gin.Context) {

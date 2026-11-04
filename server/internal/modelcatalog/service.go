@@ -83,9 +83,8 @@ func (s *Service) Performance(publishedModelID uint) map[string]any {
 }
 
 func (s *Service) List(capability string, includeHidden bool) ([]PublicModel, error) {
-	if err := s.SyncFromChannels(); err != nil {
-		return nil, err
-	}
+	// Reads stay read-only: the catalog is synced when channels change and at
+	// startup. Syncing here turned every anonymous /models call into writes.
 	query := s.DB.Order("sort_order ASC").Order("id ASC")
 	if !includeHidden {
 		query = query.Where("status = ?", model.PublishedModelActive)
