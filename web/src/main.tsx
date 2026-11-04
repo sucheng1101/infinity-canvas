@@ -6,6 +6,7 @@ import "./styles/globals.css";
 import { RouterProvider } from "react-router-dom";
 
 import { AppProviders } from "@/components/layout/app-providers";
+import { ErrorBoundary } from "@/components/layout/error-boundary";
 import "@/i18n";
 import { initAnalytics } from "@/lib/analytics";
 import { router } from "@/router";
@@ -16,8 +17,10 @@ document.body.style.fontFamily = '"SF Pro Display","SF Pro Text","PingFang SC","
 
 createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-        <AppProviders>
-            <RouterProvider router={router} />
-        </AppProviders>
+        <ErrorBoundary>
+            <AppProviders>
+                <RouterProvider router={router} />
+            </AppProviders>
+        </ErrorBoundary>
     </React.StrictMode>,
 );

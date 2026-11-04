@@ -55,4 +55,17 @@ export default defineConfig({
             "/api": "http://127.0.0.1:1011",
         },
     },
+    build: {
+        rollupOptions: {
+            output: {
+                // Keep the heavy, rarely-shared libraries in their own chunks so the entry stays small.
+                manualChunks(id: string) {
+                    if (!id.includes("node_modules")) return;
+                    if (id.includes("@codemirror") || id.includes("@uiw/react-codemirror") || id.includes("@lezer")) return "codemirror";
+                    if (id.includes("streamdown") || id.includes("shiki")) return "markdown";
+                    if (id.includes("@ant-design") || id.includes("/antd/")) return "antd";
+                },
+            },
+        },
+    },
 });

@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import ImagePage from "@/pages/image";
-import VideoPage from "@/pages/video";
+import { Spin } from "antd";
+
 import { type WorkbenchMode } from "@/components/workbench-mode-switcher";
+
+const ImagePage = lazy(() => import("@/pages/image"));
+const VideoPage = lazy(() => import("@/pages/video"));
 
 export default function WorkbenchPage() {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -13,7 +16,9 @@ export default function WorkbenchPage() {
     };
     return (
         <div className="relative h-full">
-            {mode === "image" ? <ImagePage workbenchMode={mode} onWorkbenchModeChange={changeMode} /> : <VideoPage workbenchMode={mode} onWorkbenchModeChange={changeMode} />}
+            <Suspense fallback={<div className="grid h-full place-items-center"><Spin /></div>}>
+                {mode === "image" ? <ImagePage workbenchMode={mode} onWorkbenchModeChange={changeMode} /> : <VideoPage workbenchMode={mode} onWorkbenchModeChange={changeMode} />}
+            </Suspense>
         </div>
     );
 }
