@@ -1,0 +1,42 @@
+[
+    {
+        "id": "mood-serene",
+        "category": "mood",
+        "zh": "宁静",
+        "en": "calm serene atmosphere, still air, gentle natural light, unhurried stillness",
+        "aliases": ["安静", "平和", "serene mood"],
+        "params": { "mood": "serene" }
+    },
+    {
+        "id": "mood-tense",
+        "category": "mood",
+        "zh": "紧张",
+        "en": "tense suspenseful atmosphere, tight framing, harsh contrast, held breath before action",
+        "aliases": ["悬疑", "压迫感", "tense atmosphere"],
+        "params": { "mood": "tense" }
+    },
+    {
+        "id": "mood-nostalgic",
+        "category": "mood",
+        "zh": "怀旧",
+        "en": "nostalgic melancholic mood, faded memory tones, warm haze, faint vignette",
+        "aliases": ["复古情绪", "追忆", "nostalgic mood"],
+        "params": { "mood": "nostalgic" }
+    },
+    {
+        "id": "mood-lonely",
+        "category": "mood",
+        "zh": "孤独",
+        "en": "isolated lonely mood, lone figure in an empty space, cold diffused light",
+        "aliases": ["寂寥", "孤单", "lonely mood"],
+        "params": { "mood": "lonely" }
+    },
+    {
+        "id": "mood-dreamy",
+        "category": "mood",
+        "zh": "梦幻",
+        "en": "dreamlike ethereal mood, soft bloom, floating particles, pastel haze",
+        "aliases": ["空灵", "梦境感", "dreamy atmosphere"],
+        "params": { "mood": "dreamy" }
+    }
+]

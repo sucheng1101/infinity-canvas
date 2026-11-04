@@ -1,0 +1,66 @@
+[
+    {
+        "id": "material-metal",
+        "category": "material",
+        "zh": "拉丝金属",
+        "en": "brushed aluminum surface, anisotropic highlights, fine machining marks, cool grey tone",
+        "aliases": ["金属材质", "拉丝不锈钢", "brushed metal"],
+        "params": { "material": "metal" }
+    },
+    {
+        "id": "material-glass",
+        "category": "material",
+        "zh": "玻璃",
+        "en": "thick clear glass with caustic refractions, subtle fingerprints, clean specular edges",
+        "aliases": ["透明玻璃", "玻璃材质", "clear glass"],
+        "params": { "material": "glass" }
+    },
+    {
+        "id": "material-frosted",
+        "category": "material",
+        "zh": "磨砂",
+        "en": "frosted translucent acrylic, diffused inner glow, soft surface grain, blurred edges",
+        "aliases": ["磨砂质感", "雾面", "frosted glass"],
+        "params": { "material": "frosted" }
+    },
+    {
+        "id": "material-silk",
+        "category": "material",
+        "zh": "丝绸",
+        "en": "flowing silk fabric, soft specular sheen, deep folds catching the light",
+        "aliases": ["丝缎", "绸缎质感", "silk texture"],
+        "params": { "material": "silk" }
+    },
+    {
+        "id": "material-ceramic",
+        "category": "material",
+        "zh": "陶瓷",
+        "en": "glazed ceramic, crackle glaze, semi-matte finish pooling in the recesses",
+        "aliases": ["瓷器", "釉面陶瓷", "glazed ceramic"],
+        "params": { "material": "ceramic" }
+    },
+    {
+        "id": "material-wood",
+        "category": "material",
+        "zh": "木质",
+        "en": "oak wood grain with visible growth rings, satin oil finish, tactile open pores",
+        "aliases": ["木纹", "原木质感", "wood grain"],
+        "params": { "material": "wood" }
+    },
+    {
+        "id": "material-concrete",
+        "category": "material",
+        "zh": "清水混凝土",
+        "en": "raw poured concrete, form-tie holes, chalky matte surface, subtle water staining",
+        "aliases": ["混凝土", "水泥质感", "raw concrete"],
+        "params": { "material": "concrete" }
+    },
+    {
+        "id": "material-liquid",
+        "category": "material",
+        "zh": "液态质感",
+        "en": "viscous liquid dripping, surface-tension blobs, mirror-like reflective droplets",
+        "aliases": ["液体", "流动质感", "liquid metal"],
+        "params": { "material": "liquid" }
+    }
+]

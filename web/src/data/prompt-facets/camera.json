@@ -1,0 +1,162 @@
+[
+    {
+        "id": "camera-static",
+        "category": "camera",
+        "zh": "固定镜头",
+        "en": "static locked-off camera on a tripod, no camera movement, perfectly stable frame",
+        "aliases": ["固定机位", "静止镜头", "static shot", "locked off"],
+        "params": { "camera": "static" }
+    },
+    {
+        "id": "camera-push-in",
+        "category": "camera",
+        "zh": "推镜",
+        "en": "slow push-in toward the subject, camera dollies forward, frame gradually tightening",
+        "aliases": ["推近", "前推", "push in", "dolly in"],
+        "params": { "camera": "push-in", "speed": "slow" }
+    },
+    {
+        "id": "camera-pull-out",
+        "category": "camera",
+        "zh": "拉镜",
+        "en": "pull-back dolly out from the subject, revealing the wider environment",
+        "aliases": ["拉远", "后拉", "pull out", "dolly out"],
+        "params": { "camera": "pull-out" }
+    },
+    {
+        "id": "camera-pan",
+        "category": "camera",
+        "zh": "摇镜",
+        "en": "smooth horizontal pan from left to right across the scene, fluid tripod head movement",
+        "aliases": ["横摇", "摇摄", "pan shot", "panning"],
+        "params": { "camera": "pan", "axis": "horizontal" }
+    },
+    {
+        "id": "camera-tilt",
+        "category": "camera",
+        "zh": "俯仰摇",
+        "en": "vertical tilt down from the sky to the subject, slow pivot on a fluid head",
+        "aliases": ["上下摇", "仰俯", "tilt shot", "tilt up"],
+        "params": { "camera": "tilt", "axis": "vertical" }
+    },
+    {
+        "id": "camera-truck",
+        "category": "camera",
+        "zh": "横移",
+        "en": "lateral trucking move parallel to the subject, camera slides sideways on a track",
+        "aliases": ["平移", "横移镜头", "truck shot", "lateral dolly"],
+        "params": { "camera": "truck" }
+    },
+    {
+        "id": "camera-orbit",
+        "category": "camera",
+        "zh": "环绕",
+        "en": "circular orbit around the subject, 180-degree arc, subject held in the center of frame",
+        "aliases": ["环绕运镜", "转圈", "orbit shot", "arc shot"],
+        "params": { "camera": "orbit", "degrees": 180 }
+    },
+    {
+        "id": "camera-follow",
+        "category": "camera",
+        "zh": "跟拍",
+        "en": "handheld follow shot tracking behind the subject as they walk forward",
+        "aliases": ["跟随", "跟镜头", "follow shot", "tracking shot"],
+        "params": { "camera": "follow" }
+    },
+    {
+        "id": "camera-crane-up",
+        "category": "camera",
+        "zh": "升镜",
+        "en": "crane rise, camera lifts vertically from ground level to a high wide vantage point",
+        "aliases": ["升起", "升降上", "crane up", "boom up"],
+        "params": { "camera": "crane-up" }
+    },
+    {
+        "id": "camera-crane-down",
+        "category": "camera",
+        "zh": "降镜",
+        "en": "crane descent, camera lowers smoothly from a high vantage to eye level",
+        "aliases": ["下降", "升降下", "crane down", "boom down"],
+        "params": { "camera": "crane-down" }
+    },
+    {
+        "id": "camera-handheld",
+        "category": "camera",
+        "zh": "手持",
+        "en": "raw handheld camera, subtle shake and breathing motion, documentary immediacy",
+        "aliases": ["手持镜头", "晃动", "handheld shot", "shaky cam"],
+        "params": { "camera": "handheld" }
+    },
+    {
+        "id": "camera-aerial",
+        "category": "camera",
+        "zh": "航拍",
+        "en": "aerial drone shot, high-altitude establishing view, slow forward flight over the landscape",
+        "aliases": ["无人机", "高空俯拍", "aerial shot", "drone shot"],
+        "params": { "camera": "aerial", "height": "high" }
+    },
+    {
+        "id": "camera-fpv-drone",
+        "category": "camera",
+        "zh": "穿越机",
+        "en": "FPV drone dive through the environment, fast banking turns, wide-angle distortion",
+        "aliases": ["穿越机航拍", "FPV", "fpv drone", "drone dive"],
+        "params": { "camera": "fpv", "speed": "fast" }
+    },
+    {
+        "id": "camera-zoom-in",
+        "category": "camera",
+        "zh": "变焦推近",
+        "en": "optical zoom-in, focal length tightens on the subject while the camera body stays still",
+        "aliases": ["变焦拉近", "zoom in", "optical zoom"],
+        "params": { "camera": "zoom-in" }
+    },
+    {
+        "id": "camera-zoom-out",
+        "category": "camera",
+        "zh": "变焦拉远",
+        "en": "optical zoom-out, the frame widens to reveal the surrounding context",
+        "aliases": ["变焦远离", "zoom out", "optical zoom out"],
+        "params": { "camera": "zoom-out" }
+    },
+    {
+        "id": "camera-dolly-zoom",
+        "category": "camera",
+        "zh": "希区柯克变焦",
+        "en": "dolly zoom vertigo effect, camera moves back while zooming in, background perspective warps",
+        "aliases": ["滑动变焦", "眩晕变焦", "dolly zoom", "vertigo effect"],
+        "params": { "camera": "dolly-zoom" }
+    },
+    {
+        "id": "camera-whip-pan",
+        "category": "camera",
+        "zh": "甩镜",
+        "en": "fast whip pan with heavy motion blur, snapping to a new subject at the end",
+        "aliases": ["甩镜头", "快速摇镜", "whip pan", "swish pan"],
+        "params": { "camera": "whip-pan", "speed": "fast" }
+    },
+    {
+        "id": "camera-long-take",
+        "category": "camera",
+        "zh": "一镜到底",
+        "en": "continuous single long take, camera follows the action from start to finish without cuts",
+        "aliases": ["长镜头", "一镜到底", "oner", "long take"],
+        "params": { "camera": "long-take" }
+    },
+    {
+        "id": "camera-side-tracking",
+        "category": "camera",
+        "zh": "侧跟",
+        "en": "side-tracking shot alongside a running subject, background streaking past in motion blur",
+        "aliases": ["侧面跟拍", "横向跟随", "side tracking", "profile tracking"],
+        "params": { "camera": "side-tracking" }
+    },
+    {
+        "id": "camera-micro-move",
+        "category": "camera",
+        "zh": "微动",
+        "en": "subtle micro push on a gimbal, barely perceptible drift, product perfectly centered",
+        "aliases": ["微推", "缓慢微动", "micro push", "subtle drift"],
+        "params": { "camera": "micro-move", "speed": "very slow" }
+    }
+]

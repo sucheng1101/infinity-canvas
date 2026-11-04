@@ -1,0 +1,82 @@
+[
+    {
+        "id": "color-teal-orange",
+        "category": "color",
+        "zh": "青橙色调",
+        "en": "teal and orange color grade, warm skin tones against cool shadows, blockbuster action look",
+        "aliases": ["橙青色调", "电影调色", "teal and orange"],
+        "params": { "palette": "teal-orange" }
+    },
+    {
+        "id": "color-monochrome",
+        "category": "color",
+        "zh": "黑白",
+        "en": "black and white monochrome, rich tonal range, deep blacks and clean specular whites",
+        "aliases": ["单色", "黑白照片", "black and white"],
+        "params": { "palette": "monochrome" }
+    },
+    {
+        "id": "color-complementary",
+        "category": "color",
+        "zh": "互补色",
+        "en": "complementary palette, saturated blue and amber in direct contrast, strong color separation",
+        "aliases": ["对比色", "撞色", "complementary colors"],
+        "params": { "palette": "complementary" }
+    },
+    {
+        "id": "color-desaturated",
+        "category": "color",
+        "zh": "低饱和度",
+        "en": "desaturated muted palette, chalky low-contrast tones, restrained editorial grading",
+        "aliases": ["淡色", "低饱和色调", "desaturated"],
+        "params": { "palette": "desaturated" }
+    },
+    {
+        "id": "color-vivid",
+        "category": "color",
+        "zh": "高饱和度",
+        "en": "hyper-saturated vivid colors, punchy contrast, poster-bright primary colors",
+        "aliases": ["鲜艳色彩", "高饱和色调", "vivid colors"],
+        "params": { "palette": "vivid" }
+    },
+    {
+        "id": "color-warm",
+        "category": "color",
+        "zh": "暖色调",
+        "en": "warm color cast, amber and honey tones, cozy inviting atmosphere",
+        "aliases": ["暖色", "暖色系", "warm tones"],
+        "params": { "palette": "warm" }
+    },
+    {
+        "id": "color-cool",
+        "category": "color",
+        "zh": "冷色调",
+        "en": "cool color cast, steel blue and slate tones, clinical quiet mood",
+        "aliases": ["冷色", "冷色系", "cool tones"],
+        "params": { "palette": "cool" }
+    },
+    {
+        "id": "color-pastel",
+        "category": "color",
+        "zh": "马卡龙粉彩",
+        "en": "soft pastel palette, mint blush and butter yellow, low contrast airy feel",
+        "aliases": ["粉彩色", "糖果色", "pastel colors"],
+        "params": { "palette": "pastel" }
+    },
+    {
+        "id": "color-neon-cyber",
+        "category": "color",
+        "zh": "赛博霓虹色",
+        "en": "neon cyber palette, electric magenta, cyan and acid green glowing against near-black surfaces",
+        "aliases": ["霓虹配色", "赛博配色", "neon palette"],
+        "params": { "palette": "neon" }
+    },
+    {
+        "id": "color-earth-morandi",
+        "category": "color",
+        "zh": "莫兰迪大地色",
+        "en": "Morandi muted palette, dusty earth tones, greyed terracotta and olive, matte finish",
+        "aliases": ["大地色", "莫兰迪色", "earthy palette"],
+        "params": { "palette": "earth-morandi" }
+    }
+]

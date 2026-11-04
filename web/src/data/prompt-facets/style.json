@@ -1,0 +1,212 @@
+[
+    {
+        "id": "style-cinematic",
+        "category": "style",
+        "zh": "电影感",
+        "en": "cinematic film still, anamorphic lens, shallow depth of field, subtle film grain, 2.39:1 widescreen framing",
+        "aliases": ["电影剧照", "cinematic", "film still"]
+    },
+    {
+        "id": "style-photorealistic",
+        "category": "style",
+        "zh": "照片级写实",
+        "en": "photorealistic photograph, natural skin texture, realistic subsurface scattering, 50mm lens, tack-sharp focus on the subject",
+        "aliases": ["真实照片", "写实摄影", "photoreal", "hyperrealistic"]
+    },
+    {
+        "id": "style-anime",
+        "category": "style",
+        "zh": "日系二次元",
+        "en": "Japanese anime key visual, clean cel-shaded lineart, vibrant flat colors, expressive large eyes, crisp highlights",
+        "aliases": ["动漫风", "二次元", "anime style", "cel shading"]
+    },
+    {
+        "id": "style-ghibli",
+        "category": "style",
+        "zh": "吉卜力风",
+        "en": "Studio Ghibli inspired animation still, hand-painted watercolor backgrounds, soft warm sunlight, whimsical everyday details",
+        "aliases": ["宫崎骏", "吉卜力", "ghibli style"]
+    },
+    {
+        "id": "style-pixar-3d",
+        "category": "style",
+        "zh": "皮克斯三维",
+        "en": "Pixar-style 3D animation render, stylized rounded character design, soft global illumination, glossy toy-like surfaces",
+        "aliases": ["3D动画", "皮克斯", "pixar style", "disney 3d"]
+    },
+    {
+        "id": "style-claymation",
+        "category": "style",
+        "zh": "黏土定格",
+        "en": "stop-motion claymation look, visible fingerprints in plasticine, miniature tabletop set, practical warm lighting",
+        "aliases": ["黏土动画", "泥塑", "claymation", "stop motion"]
+    },
+    {
+        "id": "style-oil-painting",
+        "category": "style",
+        "zh": "古典油画",
+        "en": "traditional oil painting, thick impasto brushstrokes, visible canvas weave, rich layered glazing",
+        "aliases": ["油画", "oil paint", "classical painting"]
+    },
+    {
+        "id": "style-watercolor",
+        "category": "style",
+        "zh": "水彩",
+        "en": "loose watercolor illustration, wet-on-wet bleeding edges, textured cold-press paper, visible pigment granulation",
+        "aliases": ["水彩画", "watercolour", "watercolor wash"]
+    },
+    {
+        "id": "style-ink-wash",
+        "category": "style",
+        "zh": "水墨",
+        "en": "Chinese ink wash painting, sumi-e brush economy, gradients of diluted black ink on rice paper, generous negative space",
+        "aliases": ["国画", "水墨画", "sumi-e", "ink painting"]
+    },
+    {
+        "id": "style-cyberpunk",
+        "category": "style",
+        "zh": "赛博朋克",
+        "en": "cyberpunk cityscape, wet reflective asphalt, holographic signage, dense volumetric fog, magenta and cyan neon",
+        "aliases": ["赛博朋克风", "cyber punk", "cyberpunk city"]
+    },
+    {
+        "id": "style-steampunk",
+        "category": "style",
+        "zh": "蒸汽朋克",
+        "en": "steampunk design, brass gears and copper pipes, riveted iron plating, Victorian industrial details, warm soot haze",
+        "aliases": ["蒸汽朋克风", "steampunk design"]
+    },
+    {
+        "id": "style-y2k-chrome",
+        "category": "style",
+        "zh": "千禧铬金属",
+        "en": "Y2K liquid chrome aesthetic, mirror-polished metal typography, iridescent reflections, studio HDRI lighting",
+        "aliases": ["液态铬", "Y2K金属", "chrome type", "y2k"]
+    },
+    {
+        "id": "style-retro-film",
+        "category": "style",
+        "zh": "复古胶片",
+        "en": "1970s analog film photograph, Kodak Portra grain, faded highlights, gentle halation, warm vintage color cast",
+        "aliases": ["胶片感", "复古照片", "film look", "analog photo"]
+    },
+    {
+        "id": "style-vaporwave",
+        "category": "style",
+        "zh": "蒸汽波",
+        "en": "vaporwave aesthetic, pastel pink and teal gradient grid, Greek bust statue, VHS scanlines and chromatic aberration",
+        "aliases": ["蒸汽波风", "vapor wave", "vhs aesthetic"]
+    },
+    {
+        "id": "style-brutalist-graphic",
+        "category": "style",
+        "zh": "粗野主义海报",
+        "en": "brutalist graphic poster, oversized black type, harsh direct flash photography, torn paper collage, extreme contrast",
+        "aliases": ["粗野主义", "brutalist design", "brutalist poster"]
+    },
+    {
+        "id": "style-bauhaus",
+        "category": "style",
+        "zh": "包豪斯",
+        "en": "Bauhaus poster design, geometric primary-color shapes, strict modular grid, bold sans-serif type, flat print texture",
+        "aliases": ["包豪斯风", "bauhaus poster", "bauhaus design"]
+    },
+    {
+        "id": "style-swiss-minimal",
+        "category": "style",
+        "zh": "瑞士极简排版",
+        "en": "Swiss international style layout, generous white space, Helvetica type hierarchy, restrained two-color palette",
+        "aliases": ["极简排版", "swiss design", "minimal typography"]
+    },
+    {
+        "id": "style-ukiyo-e",
+        "category": "style",
+        "zh": "浮世绘",
+        "en": "ukiyo-e woodblock print, bold outlines, flat color planes, stylized wave patterns, visible wood grain and paper fibers",
+        "aliases": ["日本浮世绘", "ukiyoe", "woodblock print"]
+    },
+    {
+        "id": "style-art-nouveau",
+        "category": "style",
+        "zh": "新艺术运动",
+        "en": "Art Nouveau illustration, flowing whiplash linework, botanical ornament borders, muted gold and sage palette",
+        "aliases": ["新艺术", "art nouveau", "muchas"]
+    },
+    {
+        "id": "style-low-poly",
+        "category": "style",
+        "zh": "低多边形",
+        "en": "low-poly 3D render, faceted flat-shaded geometry, limited palette, soft ambient occlusion, clean isometric staging",
+        "aliases": ["低模", "lowpoly", "faceted 3d"]
+    },
+    {
+        "id": "style-isometric",
+        "category": "style",
+        "zh": "等距视角",
+        "en": "isometric illustration, 30-degree axonometric projection, clean vector shapes, soft drop shadows, pastel palette",
+        "aliases": ["等轴测", "2.5D", "isometric art"]
+    },
+    {
+        "id": "style-line-art",
+        "category": "style",
+        "zh": "线稿",
+        "en": "clean single-weight line art, black ink on pure white background, no shading, coloring-book clarity",
+        "aliases": ["线条画", "线描", "lineart", "line drawing"]
+    },
+    {
+        "id": "style-pencil-sketch",
+        "category": "style",
+        "zh": "铅笔素描",
+        "en": "graphite pencil sketch, visible hatching and smudging, rough tooth paper, loose construction lines",
+        "aliases": ["素描", "铅笔画", "pencil drawing", "graphite"]
+    },
+    {
+        "id": "style-3d-render",
+        "category": "style",
+        "zh": "三维渲染",
+        "en": "high-end 3D render, physically based materials, ray-traced reflections, sharp caustics, 8k surface detail",
+        "aliases": ["C4D渲染", "三维渲染", "3d render", "octane render"]
+    },
+    {
+        "id": "style-double-exposure",
+        "category": "style",
+        "zh": "双重曝光",
+        "en": "double exposure composite, human silhouette filled with a forest landscape, softly blended edges, high-key background",
+        "aliases": ["多重曝光", "double exposure", "multiple exposure"]
+    },
+    {
+        "id": "style-graffiti",
+        "category": "style",
+        "zh": "涂鸦",
+        "en": "spray-paint graffiti mural, dripping paint and overspray, bold outlined bubble letters, raw concrete wall texture",
+        "aliases": ["街头涂鸦", "graffiti art", "street art"]
+    },
+    {
+        "id": "style-risograph",
+        "category": "style",
+        "zh": "孔版印刷",
+        "en": "risograph print, two-color overprint with deliberate misregistration, visible ink grain on rough paper",
+        "aliases": ["孔版印刷风", "riso print", "risograph poster"]
+    },
+    {
+        "id": "style-paper-cut",
+        "category": "style",
+        "zh": "剪纸拼贴",
+        "en": "layered paper-cut collage, torn edges with subtle cast shadows, matte cardstock in limited colors, top-down flat lay",
+        "aliases": ["剪纸风", "paper collage", "paper cut art"]
+    },
+    {
+        "id": "style-fashion-editorial",
+        "category": "style",
+        "zh": "时尚大片",
+        "en": "high-fashion editorial photograph, dramatic studio strobe, couture styling, magazine cover composition",
+        "aliases": ["杂志大片", "时尚摄影", "editorial", "fashion shoot"]
+    },
+    {
+        "id": "style-documentary",
+        "category": "style",
+        "zh": "纪实摄影",
+        "en": "candid documentary photograph, available light, slightly imperfect framing, 35mm reportage feel",
+        "aliases": ["纪实", "抓拍", "documentary photo", "reportage"]
+    }
+]

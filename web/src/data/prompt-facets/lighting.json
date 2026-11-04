@@ -1,0 +1,122 @@
+[
+    {
+        "id": "lighting-three-point",
+        "category": "lighting",
+        "zh": "三点布光",
+        "en": "classic three-point lighting, key light at 45 degrees, soft fill light, rim light separating subject from background",
+        "aliases": ["三点光", "基础布光", "three point lighting", "studio lighting"],
+        "params": { "light": "three-point" }
+    },
+    {
+        "id": "lighting-rembrandt",
+        "category": "lighting",
+        "zh": "伦勃朗光",
+        "en": "Rembrandt lighting, single soft key from camera left, small triangle of light on the shadowed cheek",
+        "aliases": ["三角光", "伦勃朗布光", "rembrandt light"],
+        "params": { "light": "rembrandt" }
+    },
+    {
+        "id": "lighting-butterfly",
+        "category": "lighting",
+        "zh": "蝴蝶光",
+        "en": "butterfly lighting from directly above the lens axis, small shadow under the nose, polished beauty retouch",
+        "aliases": ["派拉蒙光", "蝶形光", "butterfly light", "paramount lighting"],
+        "params": { "light": "butterfly" }
+    },
+    {
+        "id": "lighting-split",
+        "category": "lighting",
+        "zh": "分割光",
+        "en": "hard split lighting, half the face in bright light and half in deep shadow",
+        "aliases": ["侧分割光", "阴阳脸", "split lighting"],
+        "params": { "light": "split" }
+    },
+    {
+        "id": "lighting-backlight",
+        "category": "lighting",
+        "zh": "逆光",
+        "en": "strong backlight behind the subject, glowing rim outline, lens flare, highlights just starting to blow out",
+        "aliases": ["背光", "反光轮廓", "backlight", "backlit"],
+        "params": { "light": "backlight" }
+    },
+    {
+        "id": "lighting-rim",
+        "category": "lighting",
+        "zh": "轮廓光",
+        "en": "crisp rim light tracing the silhouette, subject cleanly separated from a dark background",
+        "aliases": ["边缘光", "发丝光", "rim light", "hair light"],
+        "params": { "light": "rim" }
+    },
+    {
+        "id": "lighting-side",
+        "category": "lighting",
+        "zh": "侧光",
+        "en": "raking side light across the surface, emphasizing texture and three-dimensional form",
+        "aliases": ["侧面光", "侧射光", "side lighting"],
+        "params": { "light": "side" }
+    },
+    {
+        "id": "lighting-top",
+        "category": "lighting",
+        "zh": "顶光",
+        "en": "hard overhead light, deep shadows in the eye sockets, sculptural downward shading",
+        "aliases": ["顶部光", "头顶光", "top light", "overhead light"],
+        "params": { "light": "top" }
+    },
+    {
+        "id": "lighting-under",
+        "category": "lighting",
+        "zh": "底光",
+        "en": "underlighting from below the face, eerie upward shadows, unsettling horror atmosphere",
+        "aliases": ["底部光", "脚光", "underlight", "uplight"],
+        "params": { "light": "under" }
+    },
+    {
+        "id": "lighting-golden-hour",
+        "category": "lighting",
+        "zh": "黄金时刻",
+        "en": "golden hour sunlight, low warm sun raking across the scene, long soft shadows, gentle sun flare",
+        "aliases": ["黄金时段", "日落光", "golden hour", "sunset light"],
+        "params": { "light": "golden-hour" }
+    },
+    {
+        "id": "lighting-blue-hour",
+        "category": "lighting",
+        "zh": "蓝调时刻",
+        "en": "blue hour twilight, cool ambient sky light, warm practical lights glowing in the windows",
+        "aliases": ["蓝色时刻", "暮光", "blue hour", "twilight"],
+        "params": { "light": "blue-hour" }
+    },
+    {
+        "id": "lighting-volumetric",
+        "category": "lighting",
+        "zh": "体积光",
+        "en": "volumetric god rays streaming through atmospheric haze, visible light shafts, floating dust motes",
+        "aliases": ["丁达尔效应", "光束", "god rays", "volumetric light"],
+        "params": { "light": "volumetric" }
+    },
+    {
+        "id": "lighting-neon",
+        "category": "lighting",
+        "zh": "霓虹光",
+        "en": "neon practical lighting, magenta and cyan spill across skin and wet surfaces, colored reflections on the ground",
+        "aliases": ["霓虹灯", "彩色霓虹", "neon light", "neon glow"],
+        "params": { "light": "neon" }
+    },
+    {
+        "id": "lighting-candle",
+        "category": "lighting",
+        "zh": "烛光",
+        "en": "warm flickering candlelight, rapid falloff into deep darkness, soft highlight roll-off on skin",
+        "aliases": ["蜡烛光", "火光", "candlelight", "firelight"],
+        "params": { "light": "candle" }
+    },
+    {
+        "id": "lighting-high-key",
+        "category": "lighting",
+        "zh": "高调光",
+        "en": "high-key lighting, bright even illumination, minimal shadows, clean white seamless background",
+        "aliases": ["高调照明", "明亮布光", "high key", "bright lighting"],
+        "params": { "light": "high-key" }
+    }
+]

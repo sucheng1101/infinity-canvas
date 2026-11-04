@@ -1,0 +1,98 @@
+[
+    {
+        "id": "composition-rule-of-thirds",
+        "category": "composition",
+        "zh": "三分法",
+        "en": "rule of thirds, subject on the left third line with balanced negative space on the right",
+        "aliases": ["九宫格构图", "三分构图", "rule of thirds"],
+        "params": { "composition": "rule-of-thirds" }
+    },
+    {
+        "id": "composition-centered",
+        "category": "composition",
+        "zh": "中心构图",
+        "en": "perfectly centered symmetrical subject, formal frontal framing, dead-center placement",
+        "aliases": ["居中构图", "中心对称", "centered composition"],
+        "params": { "composition": "centered" }
+    },
+    {
+        "id": "composition-symmetry",
+        "category": "composition",
+        "zh": "对称构图",
+        "en": "mirrored symmetry across the vertical axis, architectural balance, exact left-right correspondence",
+        "aliases": ["镜像对称", "中轴构图", "symmetrical composition"],
+        "params": { "composition": "symmetry" }
+    },
+    {
+        "id": "composition-leading-lines",
+        "category": "composition",
+        "zh": "引导线",
+        "en": "strong leading lines converging on the subject, perspective rails pulling the eye inward",
+        "aliases": ["引导线条", "透视线", "leading lines"],
+        "params": { "composition": "leading-lines" }
+    },
+    {
+        "id": "composition-frame-within-frame",
+        "category": "composition",
+        "zh": "框架构图",
+        "en": "frame within a frame, shooting through a doorway or window that brackets the subject",
+        "aliases": ["画中画", "框式构图", "framing"],
+        "params": { "composition": "frame-within-frame" }
+    },
+    {
+        "id": "composition-diagonal",
+        "category": "composition",
+        "zh": "对角线构图",
+        "en": "dynamic diagonal composition, subject arranged along a strong corner-to-corner axis",
+        "aliases": ["斜线构图", "对角构图", "diagonal composition"],
+        "params": { "composition": "diagonal" }
+    },
+    {
+        "id": "composition-negative-space",
+        "category": "composition",
+        "zh": "留白",
+        "en": "generous negative space, small subject lost in a vast empty field, quiet minimalist balance",
+        "aliases": ["空白构图", "极简留白", "negative space"],
+        "params": { "composition": "negative-space" }
+    },
+    {
+        "id": "composition-foreground",
+        "category": "composition",
+        "zh": "前景遮挡",
+        "en": "out-of-focus foreground elements, layered depth, bokeh leaves softly framing the subject",
+        "aliases": ["前景虚化", "层次构图", "foreground blur"],
+        "params": { "composition": "foreground" }
+    },
+    {
+        "id": "composition-low-angle",
+        "category": "composition",
+        "zh": "低角度仰拍",
+        "en": "low-angle hero shot, camera near the ground looking up, towering imposing perspective",
+        "aliases": ["仰拍", "低机位", "low angle shot"],
+        "params": { "composition": "low-angle" }
+    },
+    {
+        "id": "composition-top-down",
+        "category": "composition",
+        "zh": "俯拍平铺",
+        "en": "top-down flat lay, camera directly overhead, graphic arrangement on a plain surface",
+        "aliases": ["俯视", "平铺构图", "flat lay", "overhead shot"],
+        "params": { "composition": "top-down" }
+    },
+    {
+        "id": "composition-close-up",
+        "category": "composition",
+        "zh": "特写",
+        "en": "tight close-up on the eyes, minimal context, shallow depth of field, extreme detail",
+        "aliases": ["大特写", "面部特写", "close up"],
+        "params": { "composition": "close-up" }
+    },
+    {
+        "id": "composition-silhouette",
+        "category": "composition",
+        "zh": "剪影",
+        "en": "full-body silhouette against a bright background, clean readable outline, no interior detail",
+        "aliases": ["剪影构图", "逆光剪影", "silhouette"],
+        "params": { "composition": "silhouette" }
+    }
+]
