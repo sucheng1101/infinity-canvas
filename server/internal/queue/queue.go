@@ -88,8 +88,8 @@ func (q *Queue) worker() {
 }
 
 func (q *Queue) run(item job) {
-	// The worker outlives the HTTP request, so it cannot reuse the request context.
-	task, err := q.Relay.Execute(context.Background(), item.userID, item.taskID, relay.ExecuteMeta{RequestType: "generation"})
+	// 用队列自己的 ctx：优雅退出时取消在跑的任务，重启后由 Recover / reaper 接续处理。
+	task, err := q.Relay.Execute(q.ctx, item.userID, item.taskID, relay.ExecuteMeta{RequestType: "generation"})
 	if err != nil {
 		log.Printf("queue: task %s finished with error: %v (status=%s)", item.taskID, err, task.Status)
 	}
