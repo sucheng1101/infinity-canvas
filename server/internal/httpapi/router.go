@@ -836,7 +836,8 @@ func (a *Router) adminUsageLog(c *gin.Context) {
 }
 
 func (a *Router) adminOrders(c *gin.Context) {
-	page, pageSize := pageParams(c)
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
 	from, to := parseTimeRange(c.Query("from"), c.Query("to"))
 	result, err := a.Admin.ListOrders(adminservice.OrderFilter{Type: c.Query("type"), Status: c.Query("status"), Query: c.Query("query"), From: from, To: to, Page: page, PageSize: pageSize})
 	if err != nil {
@@ -847,7 +848,8 @@ func (a *Router) adminOrders(c *gin.Context) {
 }
 
 func (a *Router) adminGenerations(c *gin.Context) {
-	page, pageSize := pageParams(c)
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
 	result, err := a.Admin.ListGenerations(adminservice.GenerationFilter{Query: c.Query("query"), Status: c.Query("status"), Capability: c.Query("capability"), Page: page, PageSize: pageSize})
 	if err != nil {
 		errorJSON(c, http.StatusInternalServerError, "ADMIN_GENERATIONS_READ_FAILED", "生成任务读取失败")
@@ -857,7 +859,8 @@ func (a *Router) adminGenerations(c *gin.Context) {
 }
 
 func (a *Router) adminAuditLogs(c *gin.Context) {
-	page, pageSize := pageParams(c)
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
 	result, err := a.Admin.ListAuditLogs(adminservice.AuditFilter{Query: c.Query("query"), Action: c.Query("action"), Resource: c.Query("resource"), Page: page, PageSize: pageSize})
 	if err != nil {
 		errorJSON(c, http.StatusInternalServerError, "ADMIN_AUDIT_READ_FAILED", "审计日志读取失败")

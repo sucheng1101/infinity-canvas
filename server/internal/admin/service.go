@@ -472,88 +472,157 @@ type FinanceDailyPoint struct {
 	ProfitQuota  int64  `json:"profitQuota"`
 }
 
+type orderPageKey struct {
+	Kind      string
+	ID        uint
+	CreatedAt time.Time
+}
+
+// orderFilterSQL builds the shared WHERE clause for both order tables. The
+// admin filters are identical for recharges and operations.
+func orderFilterSQL(filter OrderFilter) (string, []any) {
+	clauses := make([]string, 0, 4)
+	args := make([]any, 0, 5)
+	if filter.Status != "" {
+		clauses = append(clauses, "status = ?")
+		args = append(args, filter.Status)
+	}
+	if !filter.From.IsZero() {
+		clauses = append(clauses, "created_at >= ?")
+		args = append(args, filter.From)
+	}
+	if !filter.To.IsZero() {
+		clauses = append(clauses, "created_at < ?")
+		args = append(args, filter.To)
+	}
+	if filter.Query != "" {
+		like := "%" + filter.Query + "%"
+		clauses = append(clauses, "(order_no LIKE ? OR user_id IN (SELECT id FROM users WHERE username LIKE ? OR email LIKE ?))")
+		args = append(args, like, like, like)
+	}
+	if len(clauses) == 0 {
+		return "", args
+	}
+	return " WHERE " + strings.Join(clauses, " AND "), args
+}
+
 func (s *Service) ListOrders(filter OrderFilter) (OrderListResult, error) {
 	page, pageSize := normalizePage(filter.Page, filter.PageSize)
-	var topups []model.TopupOrder
-	query := s.DB.Model(&model.TopupOrder{})
+
+	// Both order tables are paged together through one UNION, so the page and the
+	// total are computed by the database instead of by loading every row.
+	where, args := orderFilterSQL(filter)
+	branches := make([]string, 0, 2)
+	countParts := make([]string, 0, 2)
+	unionArgs := make([]any, 0, len(args)*2)
 	if filter.Type == "" || filter.Type == "recharge" {
-		if filter.Status != "" {
-			query = query.Where("status = ?", filter.Status)
-		}
-		if !filter.From.IsZero() {
-			query = query.Where("created_at >= ?", filter.From)
-		}
-		if !filter.To.IsZero() {
-			query = query.Where("created_at < ?", filter.To)
-		}
-		if filter.Query != "" {
-			query = query.Where("order_no LIKE ? OR user_id IN (?)", "%"+filter.Query+"%", s.DB.Model(&model.User{}).Select("id").Where("username LIKE ? OR email LIKE ?", "%"+filter.Query+"%", "%"+filter.Query+"%"))
-		}
-		if err := query.Order("created_at DESC").Find(&topups).Error; err != nil {
-			return OrderListResult{}, err
-		}
+		branches = append(branches, "SELECT 'recharge' AS kind, id, created_at FROM topup_orders"+where)
+		countParts = append(countParts, "(SELECT COUNT(*) FROM topup_orders"+where+")")
+		unionArgs = append(unionArgs, args...)
 	}
-	var operations []model.OperationOrder
-	query = s.DB.Model(&model.OperationOrder{})
 	if filter.Type == "" || filter.Type == "operation" {
-		if filter.Status != "" {
-			query = query.Where("status = ?", filter.Status)
-		}
-		if !filter.From.IsZero() {
-			query = query.Where("created_at >= ?", filter.From)
-		}
-		if !filter.To.IsZero() {
-			query = query.Where("created_at < ?", filter.To)
-		}
-		if filter.Query != "" {
-			query = query.Where("order_no LIKE ? OR user_id IN (?)", "%"+filter.Query+"%", s.DB.Model(&model.User{}).Select("id").Where("username LIKE ? OR email LIKE ?", "%"+filter.Query+"%", "%"+filter.Query+"%"))
-		}
-		if err := query.Order("created_at DESC").Find(&operations).Error; err != nil {
+		branches = append(branches, "SELECT 'operation' AS kind, id, created_at FROM operation_orders"+where)
+		countParts = append(countParts, "(SELECT COUNT(*) FROM operation_orders"+where+")")
+		unionArgs = append(unionArgs, args...)
+	}
+
+	var total int64
+	if len(countParts) > 0 {
+		if err := s.DB.Raw("SELECT "+strings.Join(countParts, " + "), unionArgs...).Scan(&total).Error; err != nil {
 			return OrderListResult{}, err
 		}
 	}
-	items := make([]OrderView, 0, len(topups)+len(operations))
-	for _, order := range topups {
-		var product model.TopupProduct
-		_ = s.DB.First(&product, order.ProductID).Error
-		items = append(items, OrderView{ID: order.ID, Kind: "recharge", OrderNo: order.OrderNo, UserID: order.UserID, ProductID: order.ProductID, ProductName: product.Name, Amount: order.QuotaAmount + order.GiftQuota, PayAmountFen: order.PayAmountFen, QuotaAmount: order.QuotaAmount, GiftQuota: order.GiftQuota, PaymentProvider: order.PaymentProvider, PaymentMethod: order.PaymentMethod, Status: order.Status, CreatedAt: order.CreatedAt, PaidAt: order.PaidAt, CreditedAt: order.CreditedAt, ExpiresAt: &order.ExpiresAt})
-	}
-	for _, order := range operations {
-		name := "订阅购买"
-		if order.Type == model.OperationOrderChannelUnlock {
-			name = "自定义渠道解锁"
+
+	keys := make([]orderPageKey, 0, pageSize)
+	if len(branches) > 0 {
+		sql := "SELECT kind, id, created_at FROM (" + strings.Join(branches, " UNION ALL ") + ") AS merged ORDER BY created_at DESC LIMIT ? OFFSET ?"
+		pageArgs := append(append([]any{}, unionArgs...), pageSize, (page-1)*pageSize)
+		if err := s.DB.Raw(sql, pageArgs...).Scan(&keys).Error; err != nil {
+			return OrderListResult{}, err
 		}
-		items = append(items, OrderView{ID: order.ID, Kind: "operation", OrderNo: order.OrderNo, UserID: order.UserID, ProductID: order.ProductID, ProductName: name, Amount: order.Amount, Status: order.Status, CreatedAt: order.CreatedAt})
 	}
-	for index := 1; index < len(items); index++ {
-		current := items[index]
-		cursor := index - 1
-		for cursor >= 0 && items[cursor].CreatedAt.Before(current.CreatedAt) {
-			items[cursor+1] = items[cursor]
-			cursor--
+
+	rechargeIDs := make([]uint, 0, len(keys))
+	operationIDs := make([]uint, 0, len(keys))
+	for _, key := range keys {
+		if key.Kind == "recharge" {
+			rechargeIDs = append(rechargeIDs, key.ID)
+		} else {
+			operationIDs = append(operationIDs, key.ID)
 		}
-		items[cursor+1] = current
 	}
-	total := int64(len(items))
-	start := (page - 1) * pageSize
-	if start >= len(items) {
-		items = []OrderView{}
-	} else {
-		end := start + pageSize
-		if end > len(items) {
-			end = len(items)
+
+	topupByID := make(map[uint]model.TopupOrder, len(rechargeIDs))
+	if len(rechargeIDs) > 0 {
+		var orders []model.TopupOrder
+		if err := s.DB.Where("id IN ?", rechargeIDs).Find(&orders).Error; err != nil {
+			return OrderListResult{}, err
 		}
-		items = items[start:end]
+		for _, order := range orders {
+			topupByID[order.ID] = order
+		}
 	}
-	users := map[uint]string{}
-	for index := range items {
-		if _, ok := users[items[index].UserID]; !ok {
-			var user model.User
-			if s.DB.First(&user, items[index].UserID).Error == nil {
-				users[user.ID] = user.Username
+	operationByID := make(map[uint]model.OperationOrder, len(operationIDs))
+	if len(operationIDs) > 0 {
+		var orders []model.OperationOrder
+		if err := s.DB.Where("id IN ?", operationIDs).Find(&orders).Error; err != nil {
+			return OrderListResult{}, err
+		}
+		for _, order := range orders {
+			operationByID[order.ID] = order
+		}
+	}
+
+	productIDs := make([]uint, 0, len(keys))
+	for _, order := range topupByID {
+		productIDs = append(productIDs, order.ProductID)
+	}
+	productNames := make(map[uint]string, len(productIDs))
+	if len(productIDs) > 0 {
+		var products []model.TopupProduct
+		if err := s.DB.Where("id IN ?", productIDs).Find(&products).Error; err != nil {
+			return OrderListResult{}, err
+		}
+		for _, product := range products {
+			productNames[product.ID] = product.Name
+		}
+	}
+
+	userIDs := make([]uint, 0, len(keys))
+	for _, key := range keys {
+		if order, ok := topupByID[key.ID]; ok {
+			userIDs = append(userIDs, order.UserID)
+			continue
+		}
+		if order, ok := operationByID[key.ID]; ok {
+			userIDs = append(userIDs, order.UserID)
+		}
+	}
+	usernames := make(map[uint]string, len(userIDs))
+	if len(userIDs) > 0 {
+		var users []model.User
+		if err := s.DB.Where("id IN ?", userIDs).Find(&users).Error; err != nil {
+			return OrderListResult{}, err
+		}
+		for _, user := range users {
+			usernames[user.ID] = user.Username
+		}
+	}
+
+	items := make([]OrderView, 0, len(keys))
+	for _, key := range keys {
+		if order, ok := topupByID[key.ID]; ok {
+			expiresAt := order.ExpiresAt
+			items = append(items, OrderView{ID: order.ID, Kind: "recharge", OrderNo: order.OrderNo, UserID: order.UserID, Username: usernames[order.UserID], ProductID: order.ProductID, ProductName: productNames[order.ProductID], Amount: order.QuotaAmount + order.GiftQuota, PayAmountFen: order.PayAmountFen, QuotaAmount: order.QuotaAmount, GiftQuota: order.GiftQuota, PaymentProvider: order.PaymentProvider, PaymentMethod: order.PaymentMethod, Status: order.Status, CreatedAt: order.CreatedAt, PaidAt: order.PaidAt, CreditedAt: order.CreditedAt, ExpiresAt: &expiresAt})
+			continue
+		}
+		if order, ok := operationByID[key.ID]; ok {
+			name := "订阅购买"
+			if order.Type == model.OperationOrderChannelUnlock {
+				name = "自定义渠道解锁"
 			}
+			items = append(items, OrderView{ID: order.ID, Kind: "operation", OrderNo: order.OrderNo, UserID: order.UserID, Username: usernames[order.UserID], ProductID: order.ProductID, ProductName: name, Amount: order.Amount, Status: order.Status, CreatedAt: order.CreatedAt})
 		}
-		items[index].Username = users[items[index].UserID]
 	}
 	return OrderListResult{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
 }
