@@ -9,6 +9,7 @@ import { requestEdit, requestGeneration, requestImageQuestion } from "@/services
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { cancelHostedVideoTask, createVideoGenerationTask, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
+import { assetsApi } from "@/services/api/assets";
 import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { nanoid } from "nanoid";
@@ -206,6 +207,24 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const params = useParams<{ id: string }>();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    // 把选中的画布节点存成资产：描述取节点提示词，有图就把首图一并上传。
+    const saveNodeAsAsset = async () => {
+        const node = contextMenuNode ?? nodes.find((item) => item.id === activeNodeId) ?? nodes.find((item) => selectedNodeIds.has(item.id));
+        if (!node) return;
+        const prompt = (node.metadata?.prompt || node.metadata?.content || "").trim();
+        try {
+            const asset = await assetsApi.create({ kind: "scene", name: (prompt || `画布节点 ${node.id.slice(0, 6)}`).slice(0, 40), prompt, tags: [], license: "own" });
+            const image = node.metadata?.images?.[0];
+            if (image) {
+                const url = await resolveImageUrl(image.storageKey, image.content);
+                const blob = await (await fetch(url)).blob();
+                await assetsApi.uploadImage(asset.id, new File([blob], "asset.png", { type: blob.type || "image/png" }));
+            }
+            message.success("已存为资产");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "存为资产失败");
+        }
+    };
     // 分镜导出时按节点 id 取媒体地址：图片走 resolveImageUrl，视频直接用节点 content。
     const resolveStoryboardMedia = async (shot: StoryboardShot) => {
         const imageNode = shot.imageNodeId ? nodes.find((node) => node.id === shot.imageNodeId) : undefined;
@@ -3146,7 +3165,8 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                         canCaptureVideoFrame={contextMenuNode?.type === CanvasNodeType.Video && Boolean(contextMenuNode.metadata?.content)}
                         canGroup={contextMenu.type === "node" && canGroupSelection}
                         canUngroup={contextMenu.type === "node" && canUngroupSelection}
-                        onClose={() => setContextMenu(null)}
+                        onSaveAsAsset={() => void saveNodeAsAsset()}
+            onClose={() => setContextMenu(null)}
                         onCaptureVideoFrame={(position) => {
                             if (contextMenu.type !== "node") return;
                             void captureVideoNodeFrame(contextMenu.nodeId, position);
