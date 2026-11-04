@@ -95,14 +95,40 @@
 
 状态取值：`待启动` → `进行中` → `待验收` → `已验收` / `阻塞`。
 
-### 4.2 仍未完成（按建议顺序）
+### 4.2 剩余执行计划（全部可执行项）
 
-1. WP7 剩余：后台订单列表全表加载 + 内存排序分页，需改成 UNION ALL + COUNT。
-2. WP9：电商工具栏/选择栏/配置面板三份副本合并（约 640 行重复）。
-3. WP10：`project.tsx` 拆分，完成后才能落地 mention 缓存、memo 命中与侧栏虚拟化。
-4. WP8：`services/api/http.ts` 合并三份 `request`、react-query 接管 11 个页面。
-5. WP11/WP12：i18n 覆盖、死代码清理、服务端测试补齐。
-6. 被环境阻塞：依赖清理与双 lockfile（需 bun）、`tests/` 纳入 typecheck（需 `@types/bun`）。
+按顺序推进，每项独立提交并过门禁。`WP9` 已于 `6039023` 完成（三份电商副本合并，-692 行）。
+
+| # | 项 | 关键改动 | 门禁 |
+| --- | --- | --- | --- |
+| 1 | WP10-A 生成链路抽离 | `project.tsx` 的 `handleGenerateNode`（约 440 行）拆到 `pages/canvas/hooks/use-canvas-generation.ts`，四个 capability 分支各自成函数 | tsc + 手动回归生成/重试/取消 |
+| 2 | WP10-B 派生计算缓存 | mention 引用按内容签名缓存、`renderNodePanel` 去掉多余依赖恢复 `React.memo` 命中 | tsc + 200 节点画布拖拽体感 |
+| 3 | WP10-C 列表与小地图 | 侧栏元素列表虚拟化、缩略图按 `storageKey` 粒度订阅、小地图改 canvas 位图 | tsc + 大画布滚动 |
+| 4 | WP7b 订单分页 | 充值单 + 运营单 `UNION ALL` + `COUNT(*)`，商品名与用户名批量预取 | go build/vet/test |
+| 5 | WP8-A http 收敛 | 新增 `services/api/http.ts`，合并 auth/hosted/admin 三份 `request` 与错误映射 | tsc |
+| 6 | WP8-B react-query 接管 | billing / model-plaza / channels / assets / admin 改 `useQuery`，积分统一 `queryKey: ["quota"]` | tsc + 页面手测 |
+| 7 | WP12-A 计费单位统一 | 抽出 `internal/billing` 单一 `units()`，relay/generation/subscription/migrate 复用之 | go test |
+| 8 | WP12-B 关键测试 | quota 幂等与 payment 回调重放（sqlmock 或接口级）、`units()` 表驱动测试 | go test |
+| 9 | 服务端清理任务 | 过期 quote 置 expired；审计与用量日志按保留期分批删除 | go build/vet |
+| 10 | 上游重试 | 同优先级渠道 429/5xx 重试 1 次（退避 500ms），仍失败才判失败 | go test |
+| 11 | 批量生成队列 | 并发上限 3，其余排队，带进度与「停止全部」 | tsc + 手测 20 张套图 |
+| 12 | 画布体验补全 | 上传中占位节点、保存状态提示（保存中/已保存/失败重试）、失败项批量重试、画布空状态引导 | tsc + 手测 |
+| 13 | WP11 收尾 | auth/billing/channels/model-plaza i18n、删除死代码（`dia-text-reveal`、`version-release-modal` 等）、日期格式化统一、图片 `alt`/`loading` | tsc + 切英文检查 |
+| 14 | 依赖与类型检查 | 尝试安装 `@types/bun` 让 `tests/` 进入 typecheck；评估依赖清理与双 lockfile（需 bun） | tsc / bun |
+
+### 4.3 本计划采用的行为边界值
+
+| 项 | 取值 | 失败处理 |
+| --- | --- | --- |
+| 批量生成并发 | 3（其余排队，队列长度不设上限） | 单张失败不影响队列，失败项可一键重试 |
+| 上游重试 | 429 / 5xx 重试 1 次，退避 500ms | 仍失败则按现有逻辑判失败并回退预占额度 |
+| 审计与用量日志保留 | 180 天，每天清理一次，分批删除 | 清理失败只记日志，不影响请求 |
+| 过期报价 | 复用 `QUOTE_TTL`（默认 5 分钟），每分钟批量置 expired | 仅影响状态标记，不删行 |
+
+### 4.4 被环境阻塞
+
+- 依赖清理与双 lockfile 合并：本机只有 npm、没有 bun，无法同步 `bun.lock`。需要一次 `bun install` 才能安全删除 `package-lock.json` 与未使用依赖。
+- `tests/` 纳入 typecheck：需要 `@types/bun`；若加依赖需同步 lockfile，同样受上一条阻塞。
 
 ### 4.1 已确认的边界值
 
