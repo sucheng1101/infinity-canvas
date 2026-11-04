@@ -96,6 +96,8 @@
 | 体验补全 | 4 | 部分完成 | 总控台 | `8623519`、`0b26126`、`462d375`、`dead181` | 批量并发 3 + 进度 + 取消、导入中提示、保存提示、空状态引导、失败项一键重试 |
 | WP11 | 4 | 部分完成 | 总控台 | `2e8c59f` | 删除 4 个无引用组件（-480 行）；页面级 i18n 覆盖未做 |
 | WP10-A | 5 | 已验收 | 总控台 | `a2939f6` | 生成链路（`handleGenerateNode` + `handleRetryNode`，共 614 行）抽到 `useCanvasGeneration`，页面从 3800 行降到 2977 行，节点状态常量抽到 `lib/canvas/node-status.ts`；`tsc` + 生产构建 + 热更新通过 |
+| WP12 | 6 | 已验收 | 总控台 | `3f6b6cd`、`97f5654` | 计费单位收敛到 `internal/billing`（三份 `billingUnit` + 两份 `billingUnits` 合并，语义与回退值保持不变），新增 `billing` 单测；测试目录纳入 typecheck（用本地 `bun:test` 类型声明替代 `@types/bun`，避免动 lockfile） |
+| WP6 收尾 | 6 | 已验收 | 总控台 | `b5f8b05` | 小地图按 100ms 节流重绘，拖拽时不再每帧重建全部方块 |
 
 状态取值：`待启动` → `进行中` → `待验收` → `已验收` / `阻塞`。
 
