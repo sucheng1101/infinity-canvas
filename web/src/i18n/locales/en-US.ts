@@ -5,6 +5,21 @@ export default {
     },
     theme: { toggle: "Toggle theme" },
     authPage: {
+    modelPlaza: {
+        title: "Model plaza", subtitle: "Per-call pricing, subscription benefits, quality tiers and performance for published models",
+        allModels: "All models", filter: "Filter", reset: "Reset", searchPlaceholder: "Search by model name or capability", count: "{{count}} models", noMatch: "No matching models",
+        detailsTitle: "Model details", loadFailed: "Failed to load the model catalog",
+        image: "Image", video: "Video", text: "Text", audio: "Audio",
+        points: "Credits", cny: "CNY", pointsUnit: "credits", exchangeRate: "1 CNY = 100 credits",
+        billingPerUnit: "Per image / call", billingPerSecond: "Per second", billingPerToken: "Per token", billingPerCall: "Per call",
+        unitImage: "img", unitSecond: "s", unitToken: "Token",
+        fallbackDescription: "A hosted model tuned for creative workflows, with transparent pricing and stable calls.",
+        notPriced: "Not priced yet", pricingPending: "The administrator is still setting prices",
+        perCallPrice: "Per-call price", subscriptionPlans: "Subscription plans", notInAnyPlan: "Not in any plan", notInAnyPlanLong: "Not included in any plan yet",
+        subscriptionPricing: "Subscription price and quota", qualityStandard: "Quality tiers", schemeResolution: "Resolution", schemeTier: "Low / Medium / High", schemeUniform: "Single tier",
+        upscale: "Upscale", opened: "Available", qualityAndOutput: "Quality and output", qualityOptions: "Quality options", outputModes: "Output modes",
+        eightKOpen: "8K available (depends on the channel)", eightKClosed: "8K not available", priceVariants: "Price variants", noVariantPrice: "No separate quality price",
+    },
     channelsPage: {
         title: "My channels", subtitle: "Connect your own OpenAI-compatible service. The key only applies to this account.", add: "Add channel",
         entitlementTitle: "Custom channel entitlement", used: "{{used}} / {{limit}} channels used", unlockHint: "Unlock monthly to add your own channels",

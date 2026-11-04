@@ -5,6 +5,21 @@ export default {
     },
     theme: { toggle: "切换主题" },
     authPage: {
+    modelPlaza: {
+        title: "模型广场", subtitle: "已开放模型的按次价格、订阅权益、质量标准和性能概览",
+        allModels: "全部模型", filter: "筛选", reset: "重置", searchPlaceholder: "搜索模型名称或能力", count: "共 {{count}} 个模型", noMatch: "没有匹配的模型",
+        detailsTitle: "模型详情", loadFailed: "模型目录读取失败",
+        image: "生图", video: "视频", text: "文本", audio: "音频",
+        points: "积分", cny: "人民币", pointsUnit: "积分", exchangeRate: "1 元 = 100 积分",
+        billingPerUnit: "按张 / 次", billingPerSecond: "按秒", billingPerToken: "按 Token", billingPerCall: "按次",
+        unitImage: "图", unitSecond: "秒", unitToken: "Token",
+        fallbackDescription: "面向创作工作流的托管模型，价格透明，调用稳定。",
+        notPriced: "暂未定价", pricingPending: "管理员正在完善价格",
+        perCallPrice: "按次售价", subscriptionPlans: "订阅方案", notInAnyPlan: "暂未加入订阅", notInAnyPlanLong: "暂未加入订阅方案",
+        subscriptionPricing: "订阅售价与额度", qualityStandard: "质量标准", schemeResolution: "分辨率", schemeTier: "低 / 中 / 高", schemeUniform: "统一规格",
+        upscale: "超分", opened: "已开放", qualityAndOutput: "质量与输出能力", qualityOptions: "质量选项", outputModes: "输出方式",
+        eightKOpen: "已开放 8K（按渠道能力提供）", eightKClosed: "8K 暂未开放", priceVariants: "价格变体", noVariantPrice: "暂无独立质量价格",
+    },
     channelsPage: {
         title: "我的渠道", subtitle: "连接你自己的 OpenAI 兼容服务，密钥只对当前账号生效。", add: "添加渠道",
         entitlementTitle: "自定义渠道权益", used: "已使用 {{used}} / {{limit}} 个渠道", unlockHint: "按月解锁后即可添加自己的渠道",
