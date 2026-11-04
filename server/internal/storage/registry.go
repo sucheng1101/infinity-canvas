@@ -5,9 +5,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/sucheng1101/infinity-canvas/server/internal/cipherbox"
 	"github.com/sucheng1101/infinity-canvas/server/internal/config"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
-	"github.com/sucheng1101/infinity-canvas/server/internal/secret"
 	"gorm.io/gorm"
 )
 
@@ -92,11 +92,11 @@ func (r *Registry) build(provider model.StorageProvider) (Store, error) {
 		}
 		return newLocal(dir, base)
 	case "s3":
-		accessKey, err := secret.Decrypt(r.Cfg.ChannelEncryptionKey, provider.AccessKeyCipher)
+		accessKey, err := cipherbox.Decrypt(r.Cfg.ChannelEncryptionKey, provider.AccessKeyCipher)
 		if err != nil {
 			return nil, err
 		}
-		secretKey, err := secret.Decrypt(r.Cfg.ChannelEncryptionKey, provider.SecretKeyCipher)
+		secretKey, err := cipherbox.Decrypt(r.Cfg.ChannelEncryptionKey, provider.SecretKeyCipher)
 		if err != nil {
 			return nil, err
 		}

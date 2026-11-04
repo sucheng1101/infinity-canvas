@@ -1,5 +1,5 @@
 // Package secret wraps the AES-GCM encryption used for credentials at rest.
-package secret
+package cipherbox
 
 import (
 	"crypto/aes"

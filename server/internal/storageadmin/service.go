@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sucheng1101/infinity-canvas/server/internal/cipherbox"
 	"github.com/sucheng1101/infinity-canvas/server/internal/config"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
-	"github.com/sucheng1101/infinity-canvas/server/internal/secret"
 	"github.com/sucheng1101/infinity-canvas/server/internal/storage"
 	"gorm.io/gorm"
 )
@@ -90,8 +90,8 @@ func toView(provider model.StorageProvider, accessKey, secretKey string) View {
 		UsePathStyle:  provider.UsePathStyle,
 		LocalDir:      provider.LocalDir,
 		SortOrder:     provider.SortOrder,
-		AccessKeyMask: secret.Mask(accessKey),
-		SecretKeyMask: secret.Mask(secretKey),
+		AccessKeyMask: cipherbox.Mask(accessKey),
+		SecretKeyMask: cipherbox.Mask(secretKey),
 		Ready:         provider.Driver == "local" || (provider.Endpoint != "" && provider.Bucket != "" && secretKey != ""),
 		CreatedAt:     provider.CreatedAt,
 		UpdatedAt:     provider.UpdatedAt,
@@ -99,8 +99,8 @@ func toView(provider model.StorageProvider, accessKey, secretKey string) View {
 }
 
 func (s *Service) masks(provider model.StorageProvider) (string, string) {
-	accessKey, _ := secret.Decrypt(s.Cfg.ChannelEncryptionKey, provider.AccessKeyCipher)
-	secretKey, _ := secret.Decrypt(s.Cfg.ChannelEncryptionKey, provider.SecretKeyCipher)
+	accessKey, _ := cipherbox.Decrypt(s.Cfg.ChannelEncryptionKey, provider.AccessKeyCipher)
+	secretKey, _ := cipherbox.Decrypt(s.Cfg.ChannelEncryptionKey, provider.SecretKeyCipher)
 	return accessKey, secretKey
 }
 
@@ -313,14 +313,14 @@ func (s *Service) prepare(existing *model.StorageProvider, input Input) (model.S
 			return model.StorageProvider{}, fmt.Errorf("%w: S3 需要填写 Endpoint 和 Bucket", ErrInvalid)
 		}
 		if accessKey := strings.TrimSpace(input.AccessKey); accessKey != "" {
-			encrypted, err := secret.Encrypt(s.Cfg.ChannelEncryptionKey, accessKey)
+			encrypted, err := cipherbox.Encrypt(s.Cfg.ChannelEncryptionKey, accessKey)
 			if err != nil {
 				return model.StorageProvider{}, err
 			}
 			row.AccessKeyCipher = encrypted
 		}
 		if secretKey := strings.TrimSpace(input.SecretKey); secretKey != "" {
-			encrypted, err := secret.Encrypt(s.Cfg.ChannelEncryptionKey, secretKey)
+			encrypted, err := cipherbox.Encrypt(s.Cfg.ChannelEncryptionKey, secretKey)
 			if err != nil {
 				return model.StorageProvider{}, err
 			}

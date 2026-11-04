@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sucheng1101/infinity-canvas/server/internal/cipherbox"
 	"github.com/sucheng1101/infinity-canvas/server/internal/config"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
-	"github.com/sucheng1101/infinity-canvas/server/internal/secret"
 )
 
 func modelProvider(driver, endpoint, bucket string, withSecret bool) model.StorageProvider {
@@ -60,7 +60,7 @@ func TestPrepareS3EncryptsCredentials(t *testing.T) {
 	if strings.Contains(row.AccessKeyCipher, "AKIAEXAMPLE") || strings.Contains(row.SecretKeyCipher, "super-secret-value") {
 		t.Fatal("ciphertext must not contain the plaintext")
 	}
-	plain, err := secret.Decrypt(service.Cfg.ChannelEncryptionKey, row.SecretKeyCipher)
+	plain, err := cipherbox.Decrypt(service.Cfg.ChannelEncryptionKey, row.SecretKeyCipher)
 	if err != nil || plain != "super-secret-value" {
 		t.Fatalf("decrypt failed: %q %v", plain, err)
 	}
