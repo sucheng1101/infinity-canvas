@@ -5,6 +5,18 @@ export default {
     },
     theme: { toggle: "切换主题" },
     authPage: {
+        register: {
+            eyebrow: "创建账号", title: "开始你的创作空间", description: "注册后即可使用平台提供的模型，无需配置 API Key。",
+            usernameLabel: "用户名", usernameRequired: "请输入用户名", usernameMin: "用户名至少 3 位", usernameMax: "用户名最多 32 位", usernamePlaceholder: "请输入用户名",
+            emailLabel: "邮箱", emailRequired: "请输入邮箱", emailInvalid: "请输入有效邮箱", emailRequiredFirst: "请先输入邮箱",
+            codeLabel: "邮箱验证码", codeExtra: "管理员关闭邮箱验证时，此项可留空", codePlaceholder: "请输入验证码",
+            retryIn: "{{count}}s 后重试", requestCode: "获取验证码",
+            passwordLabel: "密码", passwordRequired: "请输入密码", passwordMin: "密码至少 8 位", passwordMax: "密码最多 72 位", passwordPlaceholder: "至少 8 位",
+            confirmLabel: "确认密码", confirmRequired: "请再次输入密码", confirmPlaceholder: "再次输入密码", mismatch: "两次输入的密码不一致",
+            submit: "注册账号", haveAccount: "已有账号？", login: "直接登录",
+            verifiedEyebrow: "完成验证", verifiedTitle: "检查你的邮箱", verifiedDescription: "验证码已发送至 {{email}}，输入验证码后即可激活账号。",
+            verifiedHint: "验证码有效期有限，请及时完成验证。", back: "返回登录",
+        },
         forgot: {
             eyebrow: "账户安全", title: "找回密码", titleSent: "请求已受理",
             description: "输入注册邮箱，我们会发送密码重置链接。",

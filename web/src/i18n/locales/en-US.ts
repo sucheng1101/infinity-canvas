@@ -5,6 +5,18 @@ export default {
     },
     theme: { toggle: "Toggle theme" },
     authPage: {
+        register: {
+            eyebrow: "Create account", title: "Start your workspace", description: "Registered accounts use the platform models directly, no API key needed.",
+            usernameLabel: "Username", usernameRequired: "Enter a username", usernameMin: "Use at least 3 characters", usernameMax: "Use at most 32 characters", usernamePlaceholder: "Enter a username",
+            emailLabel: "Email", emailRequired: "Enter your email", emailInvalid: "Enter a valid email", emailRequiredFirst: "Enter your email first",
+            codeLabel: "Verification code", codeExtra: "You can leave this empty when email verification is disabled", codePlaceholder: "Enter the code",
+            retryIn: "Retry in {{count}}s", requestCode: "Get code",
+            passwordLabel: "Password", passwordRequired: "Enter a password", passwordMin: "Use at least 8 characters", passwordMax: "Use at most 72 characters", passwordPlaceholder: "At least 8 characters",
+            confirmLabel: "Confirm password", confirmRequired: "Enter the password again", confirmPlaceholder: "Enter the password again", mismatch: "The two passwords do not match",
+            submit: "Create account", haveAccount: "Already registered?", login: "Sign in",
+            verifiedEyebrow: "Verify your account", verifiedTitle: "Check your inbox", verifiedDescription: "A code was sent to {{email}}. Enter it to activate your account.",
+            verifiedHint: "The code expires soon, so verify promptly.", back: "Back to sign in",
+        },
         forgot: {
             eyebrow: "Account security", title: "Reset your password", titleSent: "Request received",
             description: "Enter your account email and we will send a reset link.",
