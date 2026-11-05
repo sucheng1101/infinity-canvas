@@ -533,6 +533,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     useEffect(() => {
         if (!hydrated) return;
         setProjectLoaded(false);
+        setRestoreFailed(false);
         const project = openProject(projectId);
         if (!project) {
             navigate("/canvas", { replace: true });
@@ -1305,7 +1306,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
 
     const deleteCurrentProject = useCallback(() => {
         modal.confirm({
-            title: t("canvas.deleteCurrent"),
+            title: t("canvas.projectPage.deleteTitle"),
             content: t("canvas.projectPage.deleteDescription"),
             okText: t("common.delete"),
             cancelText: t("common.cancel"),
@@ -2893,7 +2894,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                 <div className="flex gap-3">
                     <Button onClick={() => window.location.reload()}>{t("common.retry")}</Button>
                     <Button type="primary" onClick={() => navigate("/canvas")}>
-                        {t("canvas.projects")}
+                        {t("canvas.projectPage.backToProjects")}
                     </Button>
                 </div>
             </main>
