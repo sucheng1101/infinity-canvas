@@ -27,6 +27,9 @@ const (
 	VerifyValid     = "valid"
 	VerifyDuplicate = "duplicate"
 	VerifyRejected  = "rejected"
+	// VerifyLatePaid marks a verified payment that arrived after the order
+	// deadline, so finance can still find it after the credit is applied.
+	VerifyLatePaid = "late_paid"
 )
 
 var (
@@ -295,7 +298,9 @@ func (s *Service) HandleEpayWebhook(values url.Values) error {
 		// A late notification for an expired order is still a real payment: the
 		// buyer's money arrived, so credit it instead of rejecting the callback.
 		// Double crediting is prevented by the order status transition below and
-		// the per-provider event ID, not by the deadline.
+		// the per-provider event ID, not by the deadline. The event keeps a
+		// distinct verify state so late payments stay traceable.
+		latePaid := order.Status == model.TopupOrderExpired || !now.Before(order.ExpiresAt)
 		if !isSuccessStatus(params["trade_status"]) {
 			event.ProcessedAt = &now
 			return tx.Create(&event).Error
@@ -303,6 +308,9 @@ func (s *Service) HandleEpayWebhook(values url.Values) error {
 		if !sameMoney(params["money"], order.PayAmountFen) {
 			event.VerifyState = VerifyRejected
 			return tx.Create(&event).Error
+		}
+		if latePaid {
+			event.VerifyState = VerifyLatePaid
 		}
 		paidAt := now
 		order.Status = model.TopupOrderPaid
