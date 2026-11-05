@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { CircleDot, Eraser, Grid2x2, Group, Hand, Image as ImageIcon, Info, LayoutGrid, LocateFixed, MessageSquare, Clapperboard, Images, Moon, MousePointer2, Music2, Palette, Play, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
+import { CircleDot, Eraser, Grid2x2, Group, Hand, Image as ImageIcon, Info, LayoutGrid, LocateFixed, MessageSquare, Clapperboard, Images, Mic, Moon, MousePointer2, Music2, Palette, Play, Puzzle, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
 import { getNodePluginId, listNodeDefinitions, useNodeRegistryVersion } from "@/lib/canvas/node-registry";
@@ -27,6 +27,7 @@ export function CanvasToolbar({
     onGenerateSet,
     onOpenStoryboard,
     onOpenAssetPicker,
+    onOpenAudioGenerate,
     onPromptChat,
     onAddExtensionNode,
     onUndo,
@@ -56,6 +57,7 @@ export function CanvasToolbar({
     onGenerateSet?: () => void;
     onOpenStoryboard?: () => void;
     onOpenAssetPicker?: () => void;
+    onOpenAudioGenerate?: () => void;
     onPromptChat?: () => void;
     onAddExtensionNode: (type: string) => void;
     onUndo: () => void;
@@ -145,6 +147,11 @@ export function CanvasToolbar({
                 {onGenerateSet ? (
                     <ToolbarButton id="tool-generate-set" label={t("canvas.toolbar.generateSet")} hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onGenerateSet}>
                         <Play className="size-4.5" />
+                    </ToolbarButton>
+                ) : null}
+                {onOpenAudioGenerate ? (
+                    <ToolbarButton id="tool-audio-generate" label="配音" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenAudioGenerate}>
+                        <Mic className="size-4.5" />
                     </ToolbarButton>
                 ) : null}
                 {onOpenAssetPicker ? (

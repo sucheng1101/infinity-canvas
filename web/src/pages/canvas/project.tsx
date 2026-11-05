@@ -48,6 +48,7 @@ import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@/componen
 import { CanvasToolbar } from "@/components/canvas/canvas-toolbar";
 import type { StoryboardShot } from "@/services/api/storyboard";
 import { AssetPickerDrawer } from "@/components/canvas/asset-picker-drawer";
+import { AudioGenerateDialog } from "@/components/canvas/audio-generate-dialog";
 import { StoryboardPanel } from "@/components/canvas/storyboard-panel";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
@@ -244,6 +245,14 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         setSelectedNodeIds(new Set([node.id]));
         message.success(`${layout} 宫格提示词已加入画布`);
     };
+    // 配音结果落成音频节点，后续可以和镜头/字幕对齐。
+    const insertAudioNode = (url: string) => {
+        const right = nodes.length ? Math.max(...nodes.map((node) => node.position.x + 320)) : 0;
+        const node = createCanvasNode(CanvasNodeType.Audio, { x: right + 80, y: 420 }, { content: url, status: "success", mimeType: "audio/wav" });
+        setNodes((prev) => [...prev, node]);
+        setSelectedNodeIds(new Set([node.id]));
+        message.success("配音已生成并放入画布");
+    };
     // 资产库选中的资产落成图片节点；拖放则按落点换算画布坐标。
     const createNodeFromAsset = (payload: { name: string; imageUrl?: string; prompt?: string }, point?: { x: number; y: number }) => {
         if (!payload.imageUrl) {
@@ -356,6 +365,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
     const [storyboardOpen, setStoryboardOpen] = useState(false);
     const [assetDrawerOpen, setAssetDrawerOpen] = useState(false);
+    const [audioDialogOpen, setAudioDialogOpen] = useState(false);
     const [backgroundMode, setBackgroundMode] = useState<CanvasBackgroundMode>("lines");
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
@@ -3197,7 +3207,8 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     onShowImageInfoChange={setShowImageInfo}
                 />
 
-                <AssetPickerDrawer open={assetDrawerOpen} onClose={() => setAssetDrawerOpen(false)} onPick={(asset) => { createNodeFromAsset({ name: asset.name, imageUrl: asset.images[0]?.url, prompt: asset.prompt }); setAssetDrawerOpen(false); }} />
+                <AudioGenerateDialog open={audioDialogOpen} onClose={() => setAudioDialogOpen(false)} onGenerated={insertAudioNode} />
+            <AssetPickerDrawer open={assetDrawerOpen} onClose={() => setAssetDrawerOpen(false)} onPick={(asset) => { createNodeFromAsset({ name: asset.name, imageUrl: asset.images[0]?.url, prompt: asset.prompt }); setAssetDrawerOpen(false); }} />
             {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} resolveMedia={resolveStoryboardMedia} onGenerateFromScript={generateStoryboardFromScript} onGenerateGrid={createGridNode} /> : null}
             {isMiniMapOpen ? <Minimap nodes={nodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
 
