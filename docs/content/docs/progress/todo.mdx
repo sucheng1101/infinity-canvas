@@ -5,7 +5,9 @@ description: Planned follow-up work
 
 # TODO
 
-- 短剧后续：多宫格分镜（一次生成 6/9 格再切成子节点）未实现；资产库目前只能「画布节点 → 存为资产」，反向「把资产拖入画布」还没做。
+- 定价临时方案：gpt-image 系列按 **0.1 元/张**（`per_unit`, unitAmount=10, CNY）上线，先跑通链路；后续要按质量档位/分辨率做分级定价，并补渠道成本价（避免售价低于成本）。
+- 通道已接通 codex.helpapis（4 个图片模型），但当前账号额度为 0，`创建生成任务` 返回 `QUOTA_INSUFFICIENT`；需要先给账号充值/调额度才能验证 `execute 202 → 轮询 succeeded`。
+- 该上游只有图片模型，没有文本/TTS，剧本拆镜与配音仍需另配渠道。- 短剧后续：多宫格分镜（一次生成 6/9 格再切成子节点）未实现；资产库目前只能「画布节点 → 存为资产」，反向「把资产拖入画布」还没做。
 - 托管生成的异步链路需要接上真实模型渠道后验证：本机 `/api/v1/models` 为空，`execute → 202 → worker → 轮询终态`、剧本拆镜、剪映草稿导入都还没在真机跑通过。
 - 剪映草稿 `draft_content.json` 是按公开可观察结构生成的最小骨架，导入真实剪映是否能识别未经验证；失败时以工程包（manifest + srt）为准。- Hosted commercial platform follow-up: hosted video generation still executes upstream synchronously, so cancelling only marks the task and releases quota without interrupting the upstream call; move to a task-keyed cancellable execution context. Cleanup of completed tasks, expired quotes, and expired orders is still missing.
 - Replace the Claude Code CLI adapter with a Claude Agent SDK adapter and improve the tool queue, following the [Local Agent Integration Plan](/docs/progress/local-agent-integration-plan).
