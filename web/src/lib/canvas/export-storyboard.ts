@@ -9,6 +9,7 @@ export type ExportShot = {
     prompt?: string;
     imageUrl?: string;
     videoUrl?: string;
+    audioUrl?: string;
     assetRefs?: string[];
 };
 
@@ -16,7 +17,7 @@ export type ExportManifest = {
     project: string;
     exportedAt: string;
     totalDurationSec: number;
-    shots: Array<{ index: number; scene: string; startSec: number; durationSec: number; dialogue: string; prompt: string; image: string | null; video: string | null; assetRefs: string[] }>;
+    shots: Array<{ index: number; scene: string; startSec: number; durationSec: number; dialogue: string; prompt: string; image: string | null; video: string | null; audio: string | null; assetRefs: string[] }>;
 };
 
 const pad = (value: number, size = 2) => String(Math.max(0, Math.floor(value))).padStart(size, "0");
@@ -59,6 +60,7 @@ export function buildManifest(project: string, shots: ExportShot[], exportedAt =
             prompt: (shot.prompt || "").trim(),
             image: shot.imageUrl || null,
             video: shot.videoUrl || null,
+            audio: shot.audioUrl || null,
             assetRefs: shot.assetRefs || [],
         };
     });
@@ -90,6 +92,13 @@ export async function exportStoryboardPackage(project: string, shots: ExportShot
                 files.push({ name: `images/${prefix}.${extensionOf(shot.imageUrl, "png")}`, data: await fetchBlob(shot.imageUrl) });
             } catch {
                 // 单张素材拿不到不影响整个工程包，清单里仍保留地址。
+            }
+        }
+        if (shot.audioUrl) {
+            try {
+                files.push({ name: `audio/${prefix}.${extensionOf(shot.audioUrl, "wav")}`, data: await fetchBlob(shot.audioUrl) });
+            } catch {
+                // 音频取不到同样不阻断整包导出。
             }
         }
         if (shot.videoUrl) {

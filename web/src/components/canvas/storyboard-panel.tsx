@@ -23,7 +23,7 @@ type Props = {
     open?: boolean;
     onClose?: () => void;
     // 由调用方按 imageNodeId / videoNodeId 找到画布节点上的媒体地址。
-    resolveMedia?: (shot: StoryboardShot) => { imageUrl?: string; videoUrl?: string } | Promise<{ imageUrl?: string; videoUrl?: string }>;
+    resolveMedia?: (shot: StoryboardShot) => { imageUrl?: string; videoUrl?: string; audioUrl?: string } | Promise<{ imageUrl?: string; videoUrl?: string; audioUrl?: string }>;
     // 由调用方接文本模型，把剧本拆成分镜后回给面板落库。
     onGenerateFromScript?: (script: string) => Promise<ParsedScene[]>;
     // 多宫格：把拼好的宫格提示词交给调用方去出图。
@@ -161,6 +161,7 @@ export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolv
                     prompt: shot.prompt,
                     imageUrl: media?.imageUrl,
                     videoUrl: media?.videoUrl,
+                    audioUrl: media?.audioUrl,
                     assetRefs: shot.assetRefs,
                 });
             }

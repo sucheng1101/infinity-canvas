@@ -293,6 +293,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         return {
             imageUrl: image ? await resolveImageUrl(image.storageKey, image.content) : undefined,
             videoUrl: videoNode?.type === CanvasNodeType.Video ? videoNode.metadata?.content : undefined,
+            audioUrl: shot.audioUrl,
         };
     };
     // 分镜「落到画布」：生成一个配置节点，提示词用该镜头的提示词。

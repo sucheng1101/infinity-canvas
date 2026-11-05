@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased
+- [新增] 分镜工程包纳入配音音频：zip 里新增 udio/ 目录，manifest.json 每个镜头带 udio 字段，字幕时间轴与镜头时长对齐。
 - [新增] 分镜每个镜头可单独「配音」：用该镜头台词调用语音模型，音频地址存回镜头（新增 shots.audio_url）。
 - [新增] 画布工具栏新增「配音」：填台词调用语音模型，生成的 WAV 直接落成音频节点。
 - [新增] 语音合成适配：gemini-* 音频模型自动走 Gemini :generateContent，把返回的内联 PCM 套上 WAV 头后存进对象存储并返回可播放地址。
