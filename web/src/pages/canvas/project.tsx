@@ -377,6 +377,10 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const [storyboardOpen, setStoryboardOpen] = useState(false);
     const [assetDrawerOpen, setAssetDrawerOpen] = useState(false);
     const [audioDialogOpen, setAudioDialogOpen] = useState(false);
+    useEffect(() => {
+        // 从短剧入口进来时自动打开分镜抽屉。
+        if (searchParams.get("storyboard") === "1") setStoryboardOpen(true);
+    }, [searchParams]);
     const [backgroundMode, setBackgroundMode] = useState<CanvasBackgroundMode>("lines");
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);

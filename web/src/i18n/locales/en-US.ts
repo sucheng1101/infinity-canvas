@@ -436,6 +436,7 @@ export default {
         config: "Settings",
         "model-plaza": "Model plaza",
         account: "Account",
+        drama: "Drama",
     },
     topNav: {
         account: {

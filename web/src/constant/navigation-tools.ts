@@ -1,9 +1,10 @@
-import { FileText, Images, Maximize2, ScrollText, Settings2, ShieldCheck, Sparkles, Store, Wallet } from "lucide-react";
+import { Clapperboard, FileText, Images, Maximize2, ScrollText, Settings2, ShieldCheck, Sparkles, Store, Wallet } from "lucide-react";
 
 // Top-level creative entries, ordered as the user journey: create → canvases → materials → inspiration.
 export const navigationTools = [
     { slug: "workbench", icon: Sparkles },
     { slug: "canvas", icon: Maximize2 },
+    { slug: "drama", icon: Clapperboard },
     { slug: "assets", icon: Images },
     { slug: "prompts", icon: FileText },
 ] as const;

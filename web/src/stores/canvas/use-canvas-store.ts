@@ -7,7 +7,7 @@ import { localForageStorage, reportCanvasStorageError } from "@/lib/localforage-
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
 
-export type CanvasProjectKind = "general" | "ecommerce";
+export type CanvasProjectKind = "general" | "ecommerce" | "drama";
 
 export type EcommerceProductBrief = {
     productName: string;

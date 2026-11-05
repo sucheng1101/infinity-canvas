@@ -21,9 +21,9 @@ export type JianyingDraft = {
     materials: {
         videos: Array<{ id: string; path: string; material_name: string; type: string }>;
         texts: Array<{ id: string; content: string; type: string }>;
-        audios: [];
+        audios: Array<{ id: string; path: string; material_name: string; type: string }>;
     };
-    tracks: Array<{ id: string; type: "video" | "text"; segments: Segment[] }>;
+    tracks: Array<{ id: string; type: "video" | "audio" | "text"; segments: Segment[] }>;
     version: number;
     new_version: string;
 };
@@ -36,8 +36,10 @@ export function buildJianyingDraft(shots: ExportShot[], options?: { width?: numb
     const height = options?.height ?? 1920;
     const videos: JianyingDraft["materials"]["videos"] = [];
     const texts: JianyingDraft["materials"]["texts"] = [];
+    const audios: JianyingDraft["materials"]["audios"] = [];
     const videoSegments: Segment[] = [];
     const textSegments: Segment[] = [];
+    const audioSegments: Segment[] = [];
     let cursor = 0;
 
     for (const shot of shots) {
@@ -47,6 +49,11 @@ export function buildJianyingDraft(shots: ExportShot[], options?: { width?: numb
             const id = nextId();
             videos.push({ id, path: shot.videoUrl, material_name: shot.videoUrl.split("/").pop() || id, type: "video" });
             videoSegments.push({ id: nextId(), material_id: id, target_timerange: timeRange, source_timerange: { start: 0, duration }, speed: 1, volume: 1, extra_material_refs: [] });
+        }
+        if (shot.audioUrl) {
+            const id = nextId();
+            audios.push({ id, path: shot.audioUrl, material_name: shot.audioUrl.split("/").pop() || id, type: "audio" });
+            audioSegments.push({ id: nextId(), material_id: id, target_timerange: timeRange, source_timerange: { start: 0, duration }, speed: 1, volume: 1, extra_material_refs: [] });
         }
         const dialogue = (shot.dialogue || "").trim();
         if (dialogue) {
@@ -59,12 +66,13 @@ export function buildJianyingDraft(shots: ExportShot[], options?: { width?: numb
 
     const tracks: JianyingDraft["tracks"] = [];
     if (videoSegments.length) tracks.push({ id: nextId(), type: "video", segments: videoSegments });
+    if (audioSegments.length) tracks.push({ id: nextId(), type: "audio", segments: audioSegments });
     if (textSegments.length) tracks.push({ id: nextId(), type: "text", segments: textSegments });
 
     return {
         canvas_config: { width, height, ratio: height > width ? "9:16" : "16:9" },
         duration: cursor,
-        materials: { videos, texts, audios: [] },
+        materials: { videos, texts, audios },
         tracks,
         version: 360000,
         new_version: "110.0.0",

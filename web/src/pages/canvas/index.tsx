@@ -26,7 +26,7 @@ export default function CanvasPage() {
     const hydrated = useCanvasStore((state) => state.hydrated);
     const allProjects = useCanvasStore((state) => state.projects);
     // 我的画布只管理普通画布；电商项目归「项目管理」（/projects）。
-    const projects = allProjects.filter((project) => project.kind !== "ecommerce");
+    const projects = allProjects.filter((project) => project.kind !== "ecommerce" && project.kind !== "drama");
     const createProject = useCanvasStore((state) => state.createProject);
     const importProject = useCanvasStore((state) => state.importProject);
     const selectedIds = useCanvasUiStore((state) => state.selectedProjectIds);

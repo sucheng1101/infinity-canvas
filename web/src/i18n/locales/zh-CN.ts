@@ -436,6 +436,7 @@ export default {
         config: "配置",
         "model-plaza": "模型广场",
         account: "我的",
+        drama: "短剧",
     },
     topNav: {
         account: {
