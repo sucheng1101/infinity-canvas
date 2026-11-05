@@ -18,6 +18,7 @@ import (
 	"github.com/sucheng1101/infinity-canvas/server/internal/costpricing"
 	"github.com/sucheng1101/infinity-canvas/server/internal/generation"
 	"github.com/sucheng1101/infinity-canvas/server/internal/model"
+	"github.com/sucheng1101/infinity-canvas/server/internal/storage"
 	"github.com/sucheng1101/infinity-canvas/server/internal/userchannel"
 	"gorm.io/gorm"
 )
@@ -49,6 +50,7 @@ type Service struct {
 	Generation   *generation.Service
 	Client       *http.Client
 	UserChannels *userchannel.Service
+	Registry     *storage.Registry
 	runsMu       sync.Mutex
 	runs         map[string]context.CancelFunc
 }
@@ -192,6 +194,11 @@ func (s *Service) Execute(ctx context.Context, userID uint, taskID string, metad
 	output, err := decodeResponse(data, response.Header.Get("Content-Type"))
 	if err != nil {
 		return failWithLog("UPSTREAM_RESPONSE_INVALID", err)
+	}
+	if strings.EqualFold(strings.TrimSpace(task.Capability), "audio") {
+		if audioOutput, audioErr := s.decodeAudioOutput(runCtx, task.UserID, output); audioErr == nil {
+			output = audioOutput
+		}
 	}
 	inputTokens, outputTokens, cachedTokens, totalTokens := usageTokens(output)
 	view, err := s.Generation.Complete(task.ID, output, task.ReservedAmount)
@@ -565,6 +572,13 @@ func buildRequestBody(task model.GenerationTask, selected model.ModelRoute) (str
 	if _, exists := payload["model"]; !exists || strings.TrimSpace(fmt.Sprint(payload["model"])) == "" {
 		payload["model"] = selected.UpstreamModel
 	}
+	if isGeminiAudio(task.Capability, selected.UpstreamModel) {
+		encoded, err := json.Marshal(geminiAudioRequest(payload))
+		if err != nil {
+			return "", err
+		}
+		return string(encoded), nil
+	}
 	// 语音合成请求体与 chat 不同：必须带 response_format，voice 缺省 alloy，input 可由 content 兜底。
 	if strings.EqualFold(strings.TrimSpace(task.Capability), "audio") {
 		if _, exists := payload["response_format"]; !exists {
@@ -597,6 +611,9 @@ func endpointPath(capability string, route model.ModelRoute, channel model.Upstr
 		if value, ok := settings["path"].(string); ok && strings.TrimSpace(value) != "" {
 			return value, nil
 		}
+	}
+	if isGeminiAudio(capability, route.UpstreamModel) {
+		return "/v1beta/models/" + strings.TrimSpace(route.UpstreamModel) + ":generateContent", nil
 	}
 	switch strings.ToLower(strings.TrimSpace(capability)) {
 	case "text":

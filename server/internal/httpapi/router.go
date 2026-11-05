@@ -83,6 +83,7 @@ func NewRouter(cfg config.Config, db *gorm.DB, redisClient *redis.Client, outbou
 	userChannelService := &userchannel.Service{DB: db, Cfg: cfg, Client: &http.Client{Timeout: cfg.RelayTimeout}}
 	costPricingService := &costpricing.Service{DB: db}
 	relayService.UserChannels = userChannelService
+	relayService.Registry = storageRegistry
 	generationQueue := queue.New(db, relayService, cfg.RelayWorkers, cfg.QueueMaxPending)
 	storyboardService := &storyboard.Service{DB: db}
 	app := &Router{Queue: generationQueue, Storyboard: storyboardService, Cfg: cfg, DB: db, Auth: service, Quota: quotaService, Invitation: invitationService, Payment: paymentService, Pricing: pricingService, Generation: generationService, Relay: relayService, ModelCatalog: modelCatalogService, ChannelCatalog: channelCatalogService, Admin: adminService, Version: versionService, UserChannels: userChannelService, Subscriptions: subscriptionService, CostPricing: costPricingService, Storage: &storageadmin.Service{DB: db, Cfg: cfg, Registry: storageRegistry}, Assets: &assets.Service{DB: db, Registry: storageRegistry}, Registry: storageRegistry, Redis: redisClient, Mailer: outbound}
