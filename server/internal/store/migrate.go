@@ -199,6 +199,12 @@ func migrate(db *gorm.DB) error {
 			},
 		},
 		{
+			version: "20261107_m19_shot_audio",
+			apply: func(tx *gorm.DB) error {
+				return tx.AutoMigrate(&model.Shot{})
+			},
+		},
+		{
 			version: "20261106_m18_storyboard",
 			apply: func(tx *gorm.DB) error {
 				return tx.AutoMigrate(&model.Scene{}, &model.Shot{})

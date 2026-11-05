@@ -11,6 +11,7 @@ import { cancelHostedVideoTask, createVideoGenerationTask, isVideoTaskFailed, st
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { buildStoryboardPrompt, parseStoryboard } from "@/lib/canvas/storyboard-parse";
 import { readAssetDragData, ASSET_DRAG_MIME } from "@/lib/canvas/asset-drag";
+import { executeHostedGeneration } from "@/services/api/hosted-generation";
 import { assetsApi } from "@/services/api/assets";
 import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
@@ -244,6 +245,15 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
         setNodes((prev) => [...prev, node]);
         setSelectedNodeIds(new Set([node.id]));
         message.success(`${layout} 宫格提示词已加入画布`);
+    };
+    // 按镜头配音：用该镜头的台词走语音模型，返回音频地址交给分镜保存。
+    const generateShotVoice = async (shot: StoryboardShot) => {
+        const input = (shot.dialogue || shot.prompt || "").trim();
+        if (!input) throw new Error("该镜头还没有台词或提示词");
+        const output = await executeHostedGeneration({ capability: "audio", payload: { input } });
+        const url = typeof output.url === "string" ? output.url : "";
+        if (!url) throw new Error("语音模型没有返回音频地址");
+        return url;
     };
     // 配音结果落成音频节点，后续可以和镜头/字幕对齐。
     const insertAudioNode = (url: string) => {
@@ -3209,7 +3219,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
 
                 <AudioGenerateDialog open={audioDialogOpen} onClose={() => setAudioDialogOpen(false)} onGenerated={insertAudioNode} />
             <AssetPickerDrawer open={assetDrawerOpen} onClose={() => setAssetDrawerOpen(false)} onPick={(asset) => { createNodeFromAsset({ name: asset.name, imageUrl: asset.images[0]?.url, prompt: asset.prompt }); setAssetDrawerOpen(false); }} />
-            {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} resolveMedia={resolveStoryboardMedia} onGenerateFromScript={generateStoryboardFromScript} onGenerateGrid={createGridNode} /> : null}
+            {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} resolveMedia={resolveStoryboardMedia} onGenerateFromScript={generateStoryboardFromScript} onGenerateGrid={createGridNode} onGenerateVoice={generateShotVoice} /> : null}
             {isMiniMapOpen ? <Minimap nodes={nodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />

@@ -1,6 +1,7 @@
 # CHANGELOG
 
 ## Unreleased
+- [新增] 分镜每个镜头可单独「配音」：用该镜头台词调用语音模型，音频地址存回镜头（新增 shots.audio_url）。
 - [新增] 画布工具栏新增「配音」：填台词调用语音模型，生成的 WAV 直接落成音频节点。
 - [新增] 语音合成适配：gemini-* 音频模型自动走 Gemini :generateContent，把返回的内联 PCM 套上 WAV 头后存进对象存储并返回可播放地址。
 - [修复] 渠道、充值、模型广场三个页面的文案键被错误嵌进 uthPage，导致界面直接显示 channelsPage.title 这类原始键名；已提升为顶层命名空间。

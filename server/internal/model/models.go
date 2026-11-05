@@ -694,6 +694,7 @@ type Shot struct {
 	AssetRefsJSON string    `gorm:"type:text" json:"-"`
 	ImageNodeID   string    `gorm:"size:64" json:"imageNodeId"`
 	VideoNodeID   string    `gorm:"size:64" json:"videoNodeId"`
+	AudioURL      string    `gorm:"size:1024" json:"audioUrl"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
 }

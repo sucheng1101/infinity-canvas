@@ -12,6 +12,7 @@ export type StoryboardShot = {
     prompt: string;
     imageNodeId: string | null;
     videoNodeId: string | null;
+    audioUrl?: string;
     createdAt: string;
     updatedAt: string;
     assetRefs: string[];
@@ -43,6 +44,7 @@ export type ShotInput = {
     assetRefs?: string[];
     imageNodeId?: string | null;
     videoNodeId?: string | null;
+    audioUrl?: string | null;
 };
 
 // 分镜按场次分组返回，镜头随场次一起下发，不再单独请求。

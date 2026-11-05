@@ -28,6 +28,8 @@ type Props = {
     onGenerateFromScript?: (script: string) => Promise<ParsedScene[]>;
     // 多宫格：把拼好的宫格提示词交给调用方去出图。
     onGenerateGrid?: (prompt: string, layout: 4 | 6 | 9) => void;
+    // 按镜头配音：调用方负责调语音模型并返回音频地址。
+    onGenerateVoice?: (shot: StoryboardShot) => Promise<string>;
 };
 
 const selectOptions = (values: string[]) => values.map((value) => ({ value, label: value }));
@@ -35,7 +37,7 @@ const selectOptions = (values: string[]) => values.map((value) => ({ value, labe
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
 // 分镜抽屉：场次分组展示镜头，增删改直接落库，镜头落画布交给调用方。
-export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolveMedia, onGenerateFromScript, onGenerateGrid }: Props) {
+export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolveMedia, onGenerateFromScript, onGenerateGrid, onGenerateVoice }: Props) {
     const { message } = App.useApp();
     const [scenes, setScenes] = useState<StoryboardScene[]>([]);
     const [loading, setLoading] = useState(false);
@@ -180,6 +182,29 @@ export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolv
     };
     const [scriptOpen, setScriptOpen] = useState(false);
     const [gridOpen, setGridOpen] = useState(false);
+    const [voicing, setVoicing] = useState<string | null>(null);
+    const voiceShot = async (shot: StoryboardShot) => {
+        if (!onGenerateVoice) return;
+        setVoicing(shot.id);
+        try {
+            const url = await onGenerateVoice(shot);
+            await storyboardApi.updateShot(shot.id, {
+                durationSec: shot.durationSec,
+                shotSize: shot.shotSize ?? "",
+                camera: shot.camera ?? "",
+                dialogue: shot.dialogue,
+                prompt: shot.prompt,
+                assetRefs: shot.assetRefs,
+                audioUrl: url,
+            });
+            await load();
+            message.success("配音已生成");
+        } catch (error) {
+            message.error(errorText(error, "配音失败"));
+        } finally {
+            setVoicing(null);
+        }
+    };
     const [scriptText, setScriptText] = useState("");
     const [generating, setGenerating] = useState(false);
     const generateFromScript = async () => {
@@ -282,7 +307,11 @@ export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolv
                                                             删除
                                                         </Button>
                                                     </Popconfirm>
-                                                    <Button size="small" type="text" onClick={() => onInsertShot(shot)}>
+                                                    {onGenerateVoice ? (
+                                                        <Button size="small" type="text" loading={voicing === shot.id} onClick={() => void voiceShot(shot)}>
+                                                            配音
+                                                        </Button>
+                                                    ) : null}                                                    <Button size="small" type="text" onClick={() => onInsertShot(shot)}>
                                                         落到画布
                                                     </Button>
                                                 </div>

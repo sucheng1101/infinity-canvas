@@ -34,6 +34,7 @@ type ShotInput struct {
 	AssetRefs   []string `json:"assetRefs"`
 	ImageNodeID string   `json:"imageNodeId"`
 	VideoNodeID string   `json:"videoNodeId"`
+	AudioURL    string   `json:"audioUrl"`
 }
 
 type ShotView struct {
@@ -207,6 +208,7 @@ func buildShot(userID uint, sceneID string, order int, input ShotInput) (model.S
 		AssetRefsJSON: string(refs),
 		ImageNodeID:   strings.TrimSpace(input.ImageNodeID),
 		VideoNodeID:   strings.TrimSpace(input.VideoNodeID),
+		AudioURL:      strings.TrimSpace(input.AudioURL),
 	}, nil
 }
 
