@@ -1,0 +1,15 @@
+{
+    "name": "magpie-drama-plugin",
+    "version": "0.1.0",
+    "description": "无限画布短剧插件：出图 / 出视频 / 配音 / 建短剧 / 剧本拆分镜",
+    "type": "module",
+    "main": "index.js",
+    "license": "MIT",
+    "magpie": {
+        "kind": "provider",
+        "displayName": "无限画布 · 短剧",
+        "capabilities": ["image", "video", "audio", "drama"],
+        "env": [{ "key": "INFINITE_CANVAS_API", "required": true, "description": "账户服务地址，例如 http://127.0.0.1:1011" }]
+    },
+    "keywords": ["magpie-plugin", "infinite-canvas", "short-drama", "tts"]
+}
