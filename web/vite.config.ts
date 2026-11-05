@@ -58,12 +58,15 @@ export default defineConfig({
     build: {
         rollupOptions: {
             output: {
-                // Keep the heavy, rarely-shared libraries in their own chunks so the entry stays small.
+                // Split stable, heavy dependencies into their own chunks so route chunks stay small.
+                // mermaid / shiki are only reached through streamdown's dynamic import and must stay lazy here.
                 manualChunks(id: string) {
                     if (!id.includes("node_modules")) return;
-                    if (id.includes("@codemirror") || id.includes("@uiw/react-codemirror") || id.includes("@lezer")) return "codemirror";
-                    if (id.includes("streamdown") || id.includes("shiki")) return "markdown";
-                    if (id.includes("@ant-design") || id.includes("/antd/")) return "antd";
+                    const path = id.replace(/\\/g, "/");
+                    if (/\/(react|react-dom|scheduler|react-router|react-router-dom)\//.test(path)) return "react";
+                    if (/\/(antd|@ant-design|@rc-component|rc-[a-z-]+)\//.test(path)) return "antd";
+                    if (/\/(@codemirror|@lezer|@uiw)\//.test(path)) return "codemirror";
+                    if (/\/(streamdown|marked|unified|remark-[a-z-]+|rehype-[a-z-]+|hast-[a-z-]+|micromark[a-z-]*|mdast-[a-z-]+|unist-[a-z-]+|remend|html-url-attributes)\//.test(path)) return "agent";
                 },
             },
         },

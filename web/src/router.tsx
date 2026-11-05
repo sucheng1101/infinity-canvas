@@ -88,7 +88,7 @@ export const router = createBrowserRouter([
                             { path: "usage", element: <UserUsagePage /> },
                             { path: "wallet", element: <BillingPage /> },
                             { path: "library", element: <AssetLibraryPage /> },
-                { path: "settings", element: <AssetSettingsPage /> },
+                            { path: "settings", element: <AssetSettingsPage /> },
                         ],
                     },
                     { path: "/model-plaza", element: <ModelPlazaPage /> },
