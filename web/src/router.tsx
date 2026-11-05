@@ -13,7 +13,8 @@ const AssetDashboardPage = lazy(() => import("@/pages/assets/dashboard"));
 const UserUsagePage = lazy(() => import("@/pages/assets/user-usage"));
 const AssetSettingsPage = lazy(() => import("@/pages/assets/settings"));
 const AssetLibraryPage = lazy(() => import("@/pages/assets/library"));
-const DramaPage = lazy(() => import("@/pages/drama"));
+const DramaListPage = lazy(() => import("@/pages/drama/list"));
+const DramaWorkbenchPage = lazy(() => import("@/pages/drama/workbench"));
 const BillingPage = lazy(() => import("@/pages/billing"));
 const CanvasPage = lazy(() => import("@/pages/canvas"));
 const CanvasProjectPage = lazy(() => import("@/pages/canvas/project"));
@@ -79,7 +80,8 @@ export const router = createBrowserRouter([
                     { path: "/video", element: <Navigate to="/workbench?mode=video" replace /> },
                     { path: "/workbench", element: <WorkbenchPage /> },
                     { path: "/projects", element: <ProjectsPage /> },
-            { path: "/drama", element: <Page><DramaPage /></Page> },
+            { path: "/drama", element: <Page><DramaListPage /></Page> },
+            { path: "/drama/:id", element: <Page><DramaWorkbenchPage /></Page> },
                     { path: "/projects/:id", element: <EcommerceCanvasProjectPage /> },
                     {
                         path: "/assets",
