@@ -4,7 +4,6 @@ export default {
         description: "一个无限画布创作工具",
     },
     theme: { toggle: "切换主题" },
-    authPage: {
     billingPage: {
         title: "积分与充值", subtitle: "只关心可用积分，模型与渠道由平台统一维护。", refresh: "刷新账户",
         platformCredits: "平台积分", availableReserved: "可用积分 · 已预留 {{reserved}}", usageRate: "当前可用率",
@@ -52,6 +51,7 @@ export default {
         confirmDeactivateTitle: "停用这个渠道？", deactivate: "停用", cancel: "取消", deactivated: "渠道已停用",
         testOk: "渠道连接正常", testFailed: "渠道测试失败", unlockOk: "自定义渠道已按月解锁", unlockFailed: "渠道解锁失败",
     },
+    authPage: {
         register: {
             eyebrow: "创建账号", title: "开始你的创作空间", description: "注册后即可使用平台提供的模型，无需配置 API Key。",
             usernameLabel: "用户名", usernameRequired: "请输入用户名", usernameMin: "用户名至少 3 位", usernameMax: "用户名最多 32 位", usernamePlaceholder: "请输入用户名",

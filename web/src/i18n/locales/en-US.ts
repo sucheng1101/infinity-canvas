@@ -4,7 +4,6 @@ export default {
         description: "An infinite canvas creation tool",
     },
     theme: { toggle: "Toggle theme" },
-    authPage: {
     billingPage: {
         title: "Credits and top-up", subtitle: "Only the available credits matter. Models and channels are managed by the platform.", refresh: "Refresh account",
         platformCredits: "Platform credits", availableReserved: "Available · {{reserved}} reserved", usageRate: "Available ratio",
@@ -52,6 +51,7 @@ export default {
         confirmDeactivateTitle: "Disable this channel?", deactivate: "Disable", cancel: "Cancel", deactivated: "Channel disabled",
         testOk: "Channel connection works", testFailed: "Channel test failed", unlockOk: "Custom channels unlocked for this month", unlockFailed: "Failed to unlock channels",
     },
+    authPage: {
         register: {
             eyebrow: "Create account", title: "Start your workspace", description: "Registered accounts use the platform models directly, no API key needed.",
             usernameLabel: "Username", usernameRequired: "Enter a username", usernameMin: "Use at least 3 characters", usernameMax: "Use at most 32 characters", usernamePlaceholder: "Enter a username",

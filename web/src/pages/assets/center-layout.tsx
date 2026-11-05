@@ -1,14 +1,12 @@
-import { BarChart3, Boxes, Images, Settings2, WalletCards, ScrollText } from "lucide-react";
+import { BarChart3, Boxes, Images } from "lucide-react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useConfigStore } from "@/stores/use-config-store";
 
+// 账户类入口（额度、用量、设置）统一收在顶部「我的」下拉里，这里只放素材相关内容。
 const items = [
     { key: "/assets", label: "媒体库", icon: Images, end: true },
     { key: "/assets/library", label: "资产库", icon: Boxes },
     { key: "/assets/dashboard", label: "数据看板", icon: BarChart3 },
-    { key: "/assets/usage", label: "使用日志", icon: ScrollText },
-    { key: "/assets/wallet", label: "钱包管理", icon: WalletCards },
-    { key: "/assets/settings", label: "个人设置", icon: Settings2 },
 ];
 
 export default function AssetCenterLayout() {
