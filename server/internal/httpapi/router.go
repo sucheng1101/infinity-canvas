@@ -1529,7 +1529,7 @@ func (a *Router) adminCreateModelRoute(c *gin.Context) {
 		return
 	}
 	if err != nil {
-		errorJSON(c, http.StatusBadRequest, "MODEL_ROUTE_CREATE_FAILED", "模型路由创建失败")
+		errorJSON(c, http.StatusBadRequest, "MODEL_ROUTE_CREATE_FAILED", "模型路由创建失败："+err.Error())
 		return
 	}
 	successJSON(c, http.StatusCreated, item)
