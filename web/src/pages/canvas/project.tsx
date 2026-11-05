@@ -10,6 +10,7 @@ import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audi
 import { cancelHostedVideoTask, createVideoGenerationTask, isVideoTaskFailed, storeGeneratedVideo, waitForVideoGenerationTask } from "@/services/api/video";
 import { defaultConfig, useConfigStore, useEffectiveConfig } from "@/stores/use-config-store";
 import { buildStoryboardPrompt, parseStoryboard } from "@/lib/canvas/storyboard-parse";
+import { readAssetDragData, ASSET_DRAG_MIME } from "@/lib/canvas/asset-drag";
 import { assetsApi } from "@/services/api/assets";
 import { ensureImagePreview, resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
@@ -46,6 +47,7 @@ import { CanvasNode } from "@/components/canvas/canvas-node";
 import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@/components/canvas/canvas-node-prompt-panel";
 import { CanvasToolbar } from "@/components/canvas/canvas-toolbar";
 import type { StoryboardShot } from "@/services/api/storyboard";
+import { AssetPickerDrawer } from "@/components/canvas/asset-picker-drawer";
 import { StoryboardPanel } from "@/components/canvas/storyboard-panel";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
@@ -234,6 +236,36 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
             message.error(error instanceof Error ? error.message : "存为资产失败");
         }
     };
+    // 多宫格：把宫格提示词落成配置节点，用户点生成即可出图，再用切图功能拆分。
+    const createGridNode = (prompt: string, layout: 4 | 6 | 9) => {
+        const right = nodes.length ? Math.max(...nodes.map((node) => node.position.x + 320)) : 0;
+        const node = createCanvasNode(CanvasNodeType.Config, { x: right + 80, y: 240 }, { prompt });
+        setNodes((prev) => [...prev, node]);
+        setSelectedNodeIds(new Set([node.id]));
+        message.success(`${layout} 宫格提示词已加入画布`);
+    };
+    // 资产库选中的资产落成图片节点；拖放则按落点换算画布坐标。
+    const createNodeFromAsset = (payload: { name: string; imageUrl?: string; prompt?: string }, point?: { x: number; y: number }) => {
+        if (!payload.imageUrl) {
+            message.warning("该资产还没有参考图，先去资产库上传一张");
+            return;
+        }
+        const center = viewportRef.current;
+        const position = point || { x: (window.innerWidth / 2 - center.x) / center.k, y: (window.innerHeight / 2 - center.y) / center.k };
+        const node = createCanvasNode(CanvasNodeType.Image, position, { images: [{ id: crypto.randomUUID(), status: "success", content: payload.imageUrl, naturalWidth: 0, naturalHeight: 0, bytes: 0, mimeType: "image/png" }] });
+        setNodes((prev) => [...prev, node]);
+        setSelectedNodeIds(new Set([node.id]));
+        message.success(`${payload.name} 已放入画布`);
+    };
+
+    const handleAssetDrop = (event: React.DragEvent<HTMLElement>) => {
+        if (!event.dataTransfer.types.includes(ASSET_DRAG_MIME)) return;
+        event.preventDefault();
+        const payload = readAssetDragData(event.dataTransfer);
+        if (!payload) return;
+        const point = screenToCanvas(event.clientX, event.clientY);
+        createNodeFromAsset(payload, point);
+    };
     // 分镜导出时按节点 id 取媒体地址：图片走 resolveImageUrl，视频直接用节点 content。
     const resolveStoryboardMedia = async (shot: StoryboardShot) => {
         const imageNode = shot.imageNodeId ? nodes.find((node) => node.id === shot.imageNodeId) : undefined;
@@ -323,6 +355,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     const [runningNodeId, setRunningNodeId] = useState<string | null>(null);
     const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
     const [storyboardOpen, setStoryboardOpen] = useState(false);
+    const [assetDrawerOpen, setAssetDrawerOpen] = useState(false);
     const [backgroundMode, setBackgroundMode] = useState<CanvasBackgroundMode>("lines");
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
@@ -2904,7 +2937,7 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
             <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={focusNode} onPreviewNode={setPreviewNodeId} onHoverNode={setHoverPreviewNodeId} onInsertAsset={handleAssetInsert} />
-            <section className="relative min-w-0 flex-1 overflow-hidden">
+            <section className="relative min-w-0 flex-1 overflow-hidden" onDragOver={(event) => { if (event.dataTransfer.types.includes(ASSET_DRAG_MIME)) { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; } }} onDrop={handleAssetDrop}>
                 <CanvasTopBar
                     title={currentProject?.title || t("canvas.projectPage.untitledCanvas")}
                     titleDraft={titleDraft}
@@ -3164,7 +3197,8 @@ function InfiniteCanvasPage({ canvasKind }: { canvasKind?: "general" | "ecommerc
                     onShowImageInfoChange={setShowImageInfo}
                 />
 
-                {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} resolveMedia={resolveStoryboardMedia} onGenerateFromScript={generateStoryboardFromScript} /> : null}
+                <AssetPickerDrawer open={assetDrawerOpen} onClose={() => setAssetDrawerOpen(false)} onPick={(asset) => { createNodeFromAsset({ name: asset.name, imageUrl: asset.images[0]?.url, prompt: asset.prompt }); setAssetDrawerOpen(false); }} />
+            {projectId ? <StoryboardPanel open={storyboardOpen} onClose={() => setStoryboardOpen(false)} projectId={projectId} onInsertShot={insertStoryboardShot} resolveMedia={resolveStoryboardMedia} onGenerateFromScript={generateStoryboardFromScript} onGenerateGrid={createGridNode} /> : null}
             {isMiniMapOpen ? <Minimap nodes={nodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
 
                 <CanvasZoomControls scale={viewport.k} onScaleChange={setZoomScale} onReset={resetViewport} isMiniMapOpen={isMiniMapOpen} onToggleMiniMap={() => setIsMiniMapOpen((value) => !value)} />

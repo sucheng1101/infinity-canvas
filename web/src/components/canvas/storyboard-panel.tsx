@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { saveAs } from "file-saver";
 import { exportJianyingDraft, exportStoryboardPackage, type ExportShot } from "@/lib/canvas/export-storyboard";
+import { StoryboardGridDialog } from "@/components/canvas/storyboard-grid-dialog";
 import type { ParsedScene } from "@/lib/canvas/storyboard-parse";
 import { storyboardApi, type SceneInput, type ShotInput, type StoryboardScene, type StoryboardShot } from "@/services/api/storyboard";
 
@@ -25,6 +26,8 @@ type Props = {
     resolveMedia?: (shot: StoryboardShot) => { imageUrl?: string; videoUrl?: string } | Promise<{ imageUrl?: string; videoUrl?: string }>;
     // 由调用方接文本模型，把剧本拆成分镜后回给面板落库。
     onGenerateFromScript?: (script: string) => Promise<ParsedScene[]>;
+    // 多宫格：把拼好的宫格提示词交给调用方去出图。
+    onGenerateGrid?: (prompt: string, layout: 4 | 6 | 9) => void;
 };
 
 const selectOptions = (values: string[]) => values.map((value) => ({ value, label: value }));
@@ -32,7 +35,7 @@ const selectOptions = (values: string[]) => values.map((value) => ({ value, labe
 const errorText = (error: unknown, fallback: string) => (error instanceof Error ? error.message : fallback);
 
 // 分镜抽屉：场次分组展示镜头，增删改直接落库，镜头落画布交给调用方。
-export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolveMedia, onGenerateFromScript }: Props) {
+export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolveMedia, onGenerateFromScript, onGenerateGrid }: Props) {
     const { message } = App.useApp();
     const [scenes, setScenes] = useState<StoryboardScene[]>([]);
     const [loading, setLoading] = useState(false);
@@ -176,6 +179,7 @@ export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolv
         }
     };
     const [scriptOpen, setScriptOpen] = useState(false);
+    const [gridOpen, setGridOpen] = useState(false);
     const [scriptText, setScriptText] = useState("");
     const [generating, setGenerating] = useState(false);
     const generateFromScript = async () => {
@@ -326,6 +330,7 @@ export function StoryboardPanel({ projectId, onInsertShot, open, onClose, resolv
                     </Form.Item>
                 </Form>
             </Modal>
+            <StoryboardGridDialog open={gridOpen} onClose={() => setGridOpen(false)} shots={scenes.flatMap((scene) => scene.shots).map((shot) => ({ prompt: shot.prompt, dialogue: shot.dialogue }))} onGenerate={(prompt, layout) => { setGridOpen(false); onGenerateGrid?.(prompt, layout); }} />
             <Modal title="从剧本生成分镜" open={scriptOpen} onCancel={() => setScriptOpen(false)} onOk={() => void generateFromScript()} confirmLoading={generating} okText="生成并保存" width={640}>
                 <p className="mb-2 text-xs text-stone-500">会调用当前文本模型把剧本拆成场次与镜头，结果直接写入分镜；生成后可以逐条修改。</p>
                 <Input.TextArea autoSize={{ minRows: 8, maxRows: 16 }} value={scriptText} onChange={(event) => setScriptText(event.target.value)} placeholder="把剧本、分场或故事梗概贴进来" />
