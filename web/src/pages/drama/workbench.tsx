@@ -64,6 +64,8 @@ export default function DramaWorkbenchPage() {
             message.success(`镜 ${shot.index} 已出图`);
         } catch (error) {
             message.error(error instanceof Error ? error.message : `镜 ${shot.index} 出图失败`);
+            // 继续抛给 ShootPanel：批量出图要靠它标注失败镜头并给出重试，不能静默吞掉。
+            throw error;
         }
     };
 
@@ -182,56 +184,47 @@ export default function DramaWorkbenchPage() {
                         {step === "cast" ? <CastPanel project={project} /> : null}
                         {step === "shots" ? <ShotTable project={project} /> : null}
                         {step === "script" ? (
-                    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
-                        <p className="text-sm text-muted-foreground">先写剧本（也可以粘一段小说）。下一步 AI 会按它拆出场次与镜头。</p>
-                        <Input.TextArea
-                            className="min-h-0 flex-1"
-                            value={scriptDraft}
-                            onChange={(event) => setScriptDraft(event.target.value)}
-                            onBlur={() => updateProject(project.id, { script: scriptDraft })}
-                            placeholder="例如：雨夜，女主在长街尽头等人。远处车灯扫过，她抬头，看见熟悉的身影。"
-                        />
-                        <div className="flex items-center justify-between">
-                            <span className="text-xs text-muted-foreground">已自动保存到本地，换电脑时随备份一起带走。</span>
-                            <Button type="primary" icon={<Sparkles className="size-4" />} loading={splitting} onClick={() => void handleSplit()}>
-                                AI 拆分镜
-                            </Button>
-                        </div>
-                    </div>
-                ) : null}                {step === "shoot" ? <ShootPanel project={project} onGenerate={handleGenerate} /> : null}
-                        {step === "preview" ? (
-                    <div className="flex h-full min-h-0 flex-col gap-2 p-3">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs text-muted-foreground">镜头</span>
-                            <Select
-                                size="small"
-                                className="w-64"
-                                value={previsShot?.id}
-                                onChange={setPrevisShotId}
-                                options={project.shots.map((item) => ({ value: item.id, label: `镜 ${item.index} · ${item.shotSize} · ${item.durationSec}s` }))}
-                            />
-                        </div>
-                        {previsShot ? (
-                            <div className="min-h-0 flex-1">
-                                <PrevisCanvas
-                                    project={project}
-                                    shot={previsShot}
-                                    onCameraChange={(keys) => updateShot(project.id, previsShot.id, { camera: { ...previsShot.camera, keys }, status: "已预演" })}
+                            <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+                                <p className="text-sm text-muted-foreground">先写剧本（也可以粘一段小说）。下一步 AI 会按它拆出场次与镜头。</p>
+                                <Input.TextArea
+                                    className="min-h-0 flex-1"
+                                    value={scriptDraft}
+                                    onChange={(event) => setScriptDraft(event.target.value)}
+                                    onBlur={() => updateProject(project.id, { script: scriptDraft })}
+                                    placeholder="例如：雨夜，女主在长街尽头等人。远处车灯扫过，她抬头，看见熟悉的身影。"
                                 />
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs text-muted-foreground">已自动保存到本地，换电脑时随备份一起带走。</span>
+                                    <Button type="primary" icon={<Sparkles className="size-4" />} loading={splitting} onClick={() => void handleSplit()}>
+                                        AI 拆分镜
+                                    </Button>
+                                </div>
                             </div>
-                        ) : (
-                            <Empty className="py-16" image={Empty.PRESENTED_IMAGE_SIMPLE} description="先到「分镜」建一个镜头" />
-                        )}
-                    </div>
-                ) : null}
+                        ) : null}{" "}
+                        {step === "shoot" ? <ShootPanel project={project} onGenerate={handleGenerate} /> : null}
+                        {step === "preview" ? (
+                            <div className="flex h-full min-h-0 flex-col gap-2 p-3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">镜头</span>
+                                    <Select size="small" className="w-64" value={previsShot?.id} onChange={setPrevisShotId} options={project.shots.map((item) => ({ value: item.id, label: `镜 ${item.index} · ${item.shotSize} · ${item.durationSec}s` }))} />
+                                </div>
+                                {previsShot ? (
+                                    <div className="min-h-0 flex-1">
+                                        <PrevisCanvas project={project} shot={previsShot} onCameraChange={(keys) => updateShot(project.id, previsShot.id, { camera: { ...previsShot.camera, keys }, status: "已预演" })} />
+                                    </div>
+                                ) : (
+                                    <Empty className="py-16" image={Empty.PRESENTED_IMAGE_SIMPLE} description="先到「分镜」建一个镜头" />
+                                )}
+                            </div>
+                        ) : null}
                         {step === "final" ? (
-                    <div className="flex flex-col items-center gap-4 py-16">
-                        <p className="text-sm text-muted-foreground">导出的是整部短剧的工程备份：场景布局、角色、镜头与机位，不含生成的图片和视频。</p>
-                        <Button type="primary" loading={backuping} onClick={() => void handleBackup()}>
-                            导出备份（.icdrama.zip）
-                        </Button>
-                    </div>
-                ) : null}
+                            <div className="flex flex-col items-center gap-4 py-16">
+                                <p className="text-sm text-muted-foreground">导出的是整部短剧的工程备份：场景布局、角色、镜头与机位，不含生成的图片和视频。</p>
+                                <Button type="primary" loading={backuping} onClick={() => void handleBackup()}>
+                                    导出备份（.icdrama.zip）
+                                </Button>
+                            </div>
+                        ) : null}
                     </div>
                 </main>
             </div>

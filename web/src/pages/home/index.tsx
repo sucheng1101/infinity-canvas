@@ -1,5 +1,5 @@
 import { ArrowRight } from "lucide-react";
-import { Film, LayoutGrid, Sparkles } from "lucide-react";
+import { Clapperboard, Film, LayoutGrid, Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { App, Button, Image, Tag } from "antd";
 import { useNavigate } from "react-router-dom";
@@ -58,10 +58,11 @@ export default function IndexPage() {
                         </Button>
                     </div>
 
-                    <div className="mt-12 grid w-full max-w-4xl gap-3 sm:grid-cols-3">
+                    <div className="mt-12 grid w-full max-w-4xl gap-3 sm:grid-cols-2">
                         {[
                             { key: "product", path: "/projects?create=1", icon: <Sparkles className="size-4 text-orange-500" /> },
                             { key: "video", path: "/workbench?mode=video", icon: <Film className="size-4 text-violet-500" /> },
+                            { key: "drama", path: "/drama", icon: <Clapperboard className="size-4 text-sky-500" /> },
                             { key: "canvas", path: "/canvas", icon: <LayoutGrid className="size-4 text-stone-500" /> },
                         ].map((card) => (
                             <button
