@@ -1,4 +1,9 @@
-import { App, Button, Empty, Input, Tag } from "antd";
+import { FileText } from "lucide-react";
+import { App, Button, Empty, Input, Select, Tag } from "antd";
+import { saveAs } from "file-saver";
+import { PrevisCanvas } from "@/components/drama/previs/previs-canvas";
+import { exportDramaBackup } from "@/lib/drama/backup";
+import { generateShotImage } from "@/lib/drama/render/shoot";
 import { Box, Camera, ChevronLeft, Clapperboard, Film, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -11,6 +16,7 @@ import { ShootPanel } from "./components/shoot-panel";
 import { ShotTable } from "./components/shot-table";
 
 const STEPS = [
+    { key: "script", label: "剧本", icon: FileText },
     { key: "cast", label: "定妆", icon: UserRound },
     { key: "shots", label: "分镜", icon: Clapperboard },
     { key: "preview", label: "预演", icon: Box },
@@ -24,9 +30,9 @@ export default function DramaWorkbenchPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { message } = App.useApp();
-    const { projects, updateProject } = useDramaStore();
+    const { projects, updateProject, updateShot } = useDramaStore();
     const project = projects.find((item) => item.id === id);
-    const [step, setStep] = useState<StepKey>("shots");
+    const [step, setStep] = useState<StepKey>("script");
     const [editingTitle, setEditingTitle] = useState(false);
     const [titleDraft, setTitleDraft] = useState("");
 
@@ -47,9 +53,34 @@ export default function DramaWorkbenchPage() {
         setEditingTitle(false);
     };
 
-    // 出图逻辑由外层接入，这里只做入口占位。
+    // 单镜出图：走托管图片模型，成功后把状态与结果写回镜头。
     const handleGenerate = async (shot: DramaShot) => {
-        message.info(`镜 ${shot.index} 的出图流程待接入`);
+        try {
+            const scene = project.scenes.find((item) => item.id === shot.sceneId);
+            const imageUrl = await generateShotImage({ shot, characters: project.characters, scene });
+            updateShot(project.id, shot.id, { status: "已出图", output: { ...shot.output, imageUrl } });
+            message.success(`镜 ${shot.index} 已出图`);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : `镜 ${shot.index} 出图失败`);
+        }
+    };
+
+    const [previsShotId, setPrevisShotId] = useState<string>("");
+    const [scriptDraft, setScriptDraft] = useState(project?.script ?? "");
+    const [backuping, setBackuping] = useState(false);
+    const previsShot = project.shots.find((item) => item.id === previsShotId) ?? project.shots[0];
+
+    const handleBackup = async () => {
+        setBackuping(true);
+        try {
+            const blob = await exportDramaBackup(project);
+            saveAs(blob, `${project.title || "drama"}.icdrama.zip`);
+            message.success("备份已导出（只含场景与镜头，不含生成结果）");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "备份导出失败");
+        } finally {
+            setBackuping(false);
+        }
     };
 
     return (
@@ -108,9 +139,52 @@ export default function DramaWorkbenchPage() {
                     <div className="mx-auto w-full max-w-6xl p-4 sm:p-6">
                         {step === "cast" ? <CastPanel project={project} /> : null}
                         {step === "shots" ? <ShotTable project={project} /> : null}
-                        {step === "shoot" ? <ShootPanel project={project} onGenerate={handleGenerate} /> : null}
-                        {step === "preview" ? <Empty className="py-16" image={Empty.PRESENTED_IMAGE_SIMPLE} description="预演引擎（白模 + 运镜）待接入" /> : null}
-                        {step === "final" ? <Empty className="py-16" image={Empty.PRESENTED_IMAGE_SIMPLE} description="成片合成与导出待接入" /> : null}
+                        {step === "script" ? (
+                    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+                        <p className="text-sm text-muted-foreground">先写剧本（也可以粘一段小说）。下一步 AI 会按它拆出场次与镜头。</p>
+                        <Input.TextArea
+                            className="min-h-0 flex-1"
+                            value={scriptDraft}
+                            onChange={(event) => setScriptDraft(event.target.value)}
+                            onBlur={() => updateProject(project.id, { script: scriptDraft })}
+                            placeholder="例如：雨夜，女主在长街尽头等人。远处车灯扫过，她抬头，看见熟悉的身影。"
+                        />
+                        <div className="text-xs text-muted-foreground">已自动保存到本地，换电脑时随备份一起带走。</div>
+                    </div>
+                ) : null}                {step === "shoot" ? <ShootPanel project={project} onGenerate={handleGenerate} /> : null}
+                        {step === "preview" ? (
+                    <div className="flex h-full min-h-0 flex-col gap-2 p-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">镜头</span>
+                            <Select
+                                size="small"
+                                className="w-64"
+                                value={previsShot?.id}
+                                onChange={setPrevisShotId}
+                                options={project.shots.map((item) => ({ value: item.id, label: `镜 ${item.index} · ${item.shotSize} · ${item.durationSec}s` }))}
+                            />
+                        </div>
+                        {previsShot ? (
+                            <div className="min-h-0 flex-1">
+                                <PrevisCanvas
+                                    project={project}
+                                    shot={previsShot}
+                                    onCameraChange={(keys) => updateShot(project.id, previsShot.id, { camera: { ...previsShot.camera, keys }, status: "已预演" })}
+                                />
+                            </div>
+                        ) : (
+                            <Empty className="py-16" image={Empty.PRESENTED_IMAGE_SIMPLE} description="先到「分镜」建一个镜头" />
+                        )}
+                    </div>
+                ) : null}
+                        {step === "final" ? (
+                    <div className="flex flex-col items-center gap-4 py-16">
+                        <p className="text-sm text-muted-foreground">导出的是整部短剧的工程备份：场景布局、角色、镜头与机位，不含生成的图片和视频。</p>
+                        <Button type="primary" loading={backuping} onClick={() => void handleBackup()}>
+                            导出备份（.icdrama.zip）
+                        </Button>
+                    </div>
+                ) : null}
                     </div>
                 </main>
             </div>

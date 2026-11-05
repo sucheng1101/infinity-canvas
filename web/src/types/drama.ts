@@ -88,6 +88,8 @@ export type DramaProject = {
     /** 与画布项目共用同一个 id 空间，一个项目两种工作区 */
     canvasProjectId?: string;
     world: DramaWorld;
+    /** 原始剧本，拆分镜的输入 */
+    script?: string;
     createdAt: number;
     updatedAt: number;
     characters: CharacterCard[];
