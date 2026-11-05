@@ -565,6 +565,20 @@ func buildRequestBody(task model.GenerationTask, selected model.ModelRoute) (str
 	if _, exists := payload["model"]; !exists || strings.TrimSpace(fmt.Sprint(payload["model"])) == "" {
 		payload["model"] = selected.UpstreamModel
 	}
+	// 语音合成请求体与 chat 不同：必须带 response_format，voice 缺省 alloy，input 可由 content 兜底。
+	if strings.EqualFold(strings.TrimSpace(task.Capability), "audio") {
+		if _, exists := payload["response_format"]; !exists {
+			payload["response_format"] = "mp3"
+		}
+		if text, ok := payload["voice"].(string); !ok || strings.TrimSpace(text) == "" {
+			payload["voice"] = "alloy"
+		}
+		if _, exists := payload["input"]; !exists {
+			if text, ok := payload["content"].(string); ok {
+				payload["input"] = text
+			}
+		}
+	}
 	encoded, err := json.Marshal(payload)
 	if err != nil {
 		return "", err
